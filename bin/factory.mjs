@@ -337,7 +337,7 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
 async function update(opts) {
   const roots = opts.all
     ? Object.keys(readJson(join(toolkitHome(), 'installs.json'), { repos: {} }).repos)
-    : [target(opts).git.mainRoot];
+    : [(() => { const t = target(opts); return existsSync(join(t.git.toplevel, LOCK)) ? t.git.toplevel : t.git.mainRoot; })()];
   let failed = 0;
   for (const r of roots) {
     const lock = existsSync(join(r, LOCK)) ? lockOf(r) : lockOf(target({ to: r }).root);

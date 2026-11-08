@@ -24,7 +24,7 @@ Data, not a skill. See `toolkit-pr-comment/references/github-pr-comments.md` §1
 
 ## envProfile
 
-`adapters.envProfile` names an environment profile for `toolkit-dev-slot`: extra environment variables, CA certificates or proxy settings a company network needs. An adapter skill ships it as `profiles/<name>.json`. See `toolkit-dev-slot`'s SKILL.md for the shape.
+`adapters.envProfile` names an environment profile for `toolkit-dev-slot`: mounts, env vars, a CA bundle and proxy rewrites a company network needs inside a dev container. An adapter skill ships it as `.agents/skills/<skill>/profiles/<name>.json` (shape: `toolkit-dev-slot/schemas/profile.schema.json`). `slot up` loads it by name and applies it. Unset means no profile; a name that isn't installed is an error, never a silent skip.
 
 ## personas
 

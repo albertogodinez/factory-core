@@ -1,0 +1,11 @@
+{
+  "name": "my-astro-site",
+  "image": "node:24",
+  "command": "corepack enable && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile && pnpm dev --host 0.0.0.0 --port 4321",
+  "scheme": "http",
+  "containerPort": 4321,
+  "healthPath": "/",
+  "portRange": [14321, 14399],
+  "memoryGiB": 2,
+  "idleMinutes": 60
+}

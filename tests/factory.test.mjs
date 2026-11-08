@@ -172,3 +172,13 @@ test('--dry-run changes nothing', () => {
   assert.equal(porcelain(d), '');
   assert.ok(!existsSync(join(d, '.ai-toolkit')));
 });
+
+test('update from a linked worktree finds a committed install made in that worktree', () => {
+  const d = personalRepo('p7');
+  git(d, 'worktree', 'add', '-q', join(t.root, 'p7-wt'), '-b', 'chore/x');
+  const wt = join(t.root, 'p7-wt');
+  assert.equal(factory(['install', 'core', '--commit'], wt).status, 0);
+  const r = factory(['update'], wt);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, new RegExp(`update core → ${wt}`));
+});
