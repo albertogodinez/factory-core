@@ -4,5 +4,5 @@ set -e
 node tests/run.mjs
 # Resolver guardrails (timing, spawns, output size) run when the resolver changes.
 if git diff --cached --name-only | grep -q '^bundles/core/toolkit-context/'; then
-  node --test tests/guardrails/resolver.guard.mjs
+  node --test --test-reporter=dot tests/guardrails/resolver.guard.mjs
 fi

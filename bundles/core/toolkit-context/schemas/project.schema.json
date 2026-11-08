@@ -90,8 +90,18 @@
           "required": ["mode"],
           "properties": {
             "mode": { "enum": ["off", "text", "banner"] },
-            "text": { "type": "string", "description": "Hidden marker appended to the body (text and banner modes)." },
-            "banner": { "type": "string", "description": "Visible line prepended to the body (banner mode)." }
+            "text": { "type": "string", "description": "The marker tag. The script writes <!-- <text> {metadata json} --> as the body's first line (text and banner modes)." },
+            "banner": {
+              "description": "Visible line prepended to the body (banner mode): one string, or one per kind.",
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": { "reply": { "type": "string" }, "annotation": { "type": "string" }, "review": { "type": "string" } }
+                }
+              ]
+            }
           }
         }
       ]

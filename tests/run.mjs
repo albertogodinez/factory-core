@@ -16,5 +16,5 @@ function* walk(dir) {
   }
 }
 const files = [...walk(join(ROOT, 'tests')), ...walk(join(ROOT, 'bundles')), ...process.argv.slice(2)];
-const r = spawnSync(process.execPath, ['--test', ...files], { cwd: ROOT, stdio: 'inherit' });
+const r = spawnSync(process.execPath, ['--test', ...(process.env.CI || process.argv.includes('--tap') ? [] : ['--test-reporter=dot']), ...files.filter((f) => f !== '--tap')], { cwd: ROOT, stdio: 'inherit' });
 process.exit(r.status ?? 1);
