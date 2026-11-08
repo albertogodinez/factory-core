@@ -437,6 +437,12 @@ export function cachedResolve(opts = {}) {
   return { out, cached: false };
 }
 
+export function elide(out) {
+  const m = out.adapters?.commentMarker;
+  if (!m || !m.banner) return out;
+  return { ...out, adapters: { ...out.adapters, commentMarker: { ...m, banner: '(elided; --full shows it)' } } };
+}
+
 export function getField(obj, path) {
   return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
 }
@@ -453,8 +459,9 @@ function parseArgs(argv) {
     else if (a === '--field') o.field = val();
     else if (a === '--no-cache') o.noCache = true;
     else if (a === '--pretty') o.pretty = true;
+    else if (a === '--full') o.full = true;
     else if (a === '-h' || a === '--help') {
-      process.stdout.write('usage: resolve.mjs [--cwd dir] [--config file] [--repo name] [--field a.b] [--no-cache] [--pretty]\n');
+      process.stdout.write('usage: resolve.mjs [--cwd dir] [--config file] [--repo name] [--field a.b] [--full] [--no-cache] [--pretty]\n');
       process.exit(0);
     } else fail(`unknown argument: ${a}`);
   }
@@ -469,6 +476,8 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.met
     if (v === undefined) process.exit(1);
     process.stdout.write((typeof v === 'string' ? v : JSON.stringify(v)) + '\n');
   } else {
-    process.stdout.write(JSON.stringify(out, null, opts.pretty ? 2 : 0) + '\n');
+    // Default output stays under 1 KB: long banner text is elided unless --full asks for it.
+    const shown = opts.full ? out : elide(out);
+    process.stdout.write(JSON.stringify(shown, null, opts.pretty ? 2 : 0) + '\n');
   }
 }

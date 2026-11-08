@@ -54,7 +54,7 @@ a.model ??= process.env.AI_TOOLKIT_MODEL || process.env.CC_AUTOREPLY_MODEL || pr
 
 // ---------- project context ----------
 function resolveCtx(extra = []) {
-  const r = spawnSync(process.execPath, [RESOLVE, ...extra], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [RESOLVE, '--full', ...extra], { encoding: 'utf8' });
   if (r.status !== 0) return { error: (r.stderr || '').trim() || `resolver exited ${r.status}` };
   return JSON.parse(r.stdout);
 }

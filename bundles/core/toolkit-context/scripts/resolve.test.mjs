@@ -206,3 +206,16 @@ test('--repo by slug: this project, a neighbor (read-only unless access is write
   assert.throws(() => run(d, ['--repo', 'acme/other']), (e) => e.status === 2 && /not this project/.test(e.stderr));
   assert.equal(run(join(fx.root, 'hub'), ['--repo', 'acme/lib', '--field', 'project.name']), 'lib');
 });
+
+test('a long comment-marker banner is elided by default and shown with --full', () => {
+  const p = join(fx.root, 'project/.ai-toolkit/project.json');
+  const good = readFileSync(p, 'utf8');
+  const banner = { reply: 'r'.repeat(300), annotation: 'a'.repeat(300), review: 'v'.repeat(300) };
+  write(p, { ...JSON.parse(good), pr: { commentMarker: { mode: 'banner', text: 'm', banner } } });
+  try {
+    const raw = execFileSync(process.execPath, [RESOLVE, '--no-cache'], { cwd: join(fx.root, 'project'), encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: fx.home, AI_TOOLKIT_CONFIG: '' } });
+    assert.ok(Buffer.byteLength(raw) <= 1024, `${Buffer.byteLength(raw)} B`);
+    assert.equal(JSON.parse(raw).adapters.commentMarker.mode, 'banner');
+    assert.deepEqual(run(join(fx.root, 'project'), ['--full']).adapters.commentMarker.banner, banner);
+  } finally { write(p, good); }
+});

@@ -500,8 +500,14 @@ async function doctor(opts) {
       if (!h.present) { results.push({ name: `harness ${h.name}`, status: 'skip', detail: `${h.bin} not installed` }); continue; }
       for (const [where, dir] of [['main checkout', root], ['new worktree', wtDir]]) {
         if (!existsSync(dir)) { check(`harness ${h.name} (${where})`, false, 'could not create a worktree', 'warn'); continue; }
-        const seen = names.filter((n) => existsSync(join(dir, h.dir, n, 'SKILL.md')));
+        let seen = names.filter((n) => existsSync(join(dir, h.dir, n, 'SKILL.md')));
         let detail = `${seen.length}/${names.length} skills on disk under ${posix(h.dir)}`;
+        // A local-only install is untracked, so a new worktree starts without it: link and look again.
+        if (where === 'new worktree' && lock.mode === 'local' && seen.length < names.length && wtMade) {
+          const l = spawnSync(process.execPath, [import.meta.filename, 'link', '--to', dir], { encoding: 'utf8' });
+          seen = names.filter((n) => existsSync(join(dir, h.dir, n, 'SKILL.md')));
+          detail += l.status === 0 ? `; after factory link: ${seen.length}/${names.length}` : `; factory link failed: ${(l.stderr || '').trim()}`;
+        }
         let ok = seen.length === names.length;
         if (opts.live) {
           // Skills marked disable-model-invocation are user-only: harnesses keep them out of the

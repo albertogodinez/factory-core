@@ -13,7 +13,7 @@ node .agents/skills/toolkit-context/scripts/resolve.mjs --field project.trunk
 node .agents/skills/toolkit-context/scripts/resolve.mjs --pretty        # for a person
 ```
 
-`factory install` puts skills in `.agents/skills` (with `.claude/skills` linking to it). Other flags: `--cwd <dir>`, `--config <file>`, `--no-cache`, and `--repo <name|owner/name>`, which resolves one registered repo (workspace mode) or this project's neighbor (project mode) instead of the cwd. A neighbor reached this way has `writeAllowed: false` unless its `access` is `write`.
+`factory install` puts skills in `.agents/skills` (with `.claude/skills` linking to it). Other flags: `--cwd <dir>`, `--config <file>`, `--full` (don't elide long values), `--no-cache`, and `--repo <name|owner/name>`, which resolves one registered repo (workspace mode) or this project's neighbor (project mode) instead of the cwd. A neighbor reached this way has `writeAllowed: false` unless its `access` is `write`.
 
 ## Sources, first match wins
 
@@ -36,7 +36,7 @@ A sibling checkout or worktree of a registered repo resolves to that repo, match
  "stateRoot":"","writeAllowed":true}
 ```
 
-- Empty and null fields are left out. Read a missing field as "not configured".
+- Empty and null fields are left out. A comment marker's banner text is elided (`--full` prints it). Read a missing field as "not configured".
 - A neighbor's `root` is left out when it is `<project.root>/../<name>`, and its `access` when it is `read`.
 - `stateRoot` is where a skill writes scratch state (recordings, handoffs, lessons). It's per worktree. The resolver doesn't create it, so `mkdir -p` it before writing.
 - **`writeAllowed: false` (always, in zero-config mode): don't post, push, merge or move a ticket without the user confirming that action first.**
