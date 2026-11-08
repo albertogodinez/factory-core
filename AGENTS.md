@@ -14,7 +14,7 @@ agent-factory holds the `core` skill bundle and the `factory` CLI that installs 
 
 - `bin/factory.mjs`: the CLI (install, update, remove, link, doctor, list).
 - `bundles/core/<skill>/`: one directory per skill, self-contained: `SKILL.md`, `scripts/`, `schemas/`, `references/`.
-- `tests/`: unit and guardrail tests (`node --test`). `tests/fixtures/` holds throwaway git repos built at test time.
+- `tests/`: unit tests (`*.test.mjs`, run by `npm test`) and `tests/guardrails/` (timing and size limits, run when the code they guard changes). `tests/fixtures/make.mjs` builds throwaway git repos at test time.
 
 ## Checks
 

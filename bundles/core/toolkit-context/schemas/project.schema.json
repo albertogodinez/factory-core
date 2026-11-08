@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agent-factory/toolkit-context/project.schema.json",
+  "title": "Project config (.ai-toolkit/project.json)",
+  "description": "One repo's settings for agent-factory skills. Every field is optional: what's missing is detected from git and the working tree.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "trunk": { "type": "string", "minLength": 1, "description": "The canonical trunk branch. Detected from origin/HEAD when absent." },
+    "packageManager": { "type": "string", "minLength": 1, "description": "Free-form: pnpm, npm, yarn, bun, uv, cargo, go, maven, gradle, none, …" },
+    "prTemplate": { "type": ["string", "null"], "description": "Repo-relative PR template path, or null for none." },
+    "remote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "slug"],
+      "properties": {
+        "host": { "type": "string", "minLength": 1, "description": "Free-form git host, e.g. github.com or a GitHub Enterprise host." },
+        "slug": { "type": "string", "pattern": "^[^/]+/[^/]+$" },
+        "sshAlias": { "type": "string" },
+        "upstream": { "type": "string", "pattern": "^[^/]+/[^/]+$", "description": "Canonical owner/repo when origin is a fork." }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "null"] },
+      "properties": {
+        "install": { "type": ["string", "null"] },
+        "build": { "type": ["string", "null"] },
+        "test": { "type": ["string", "null"] },
+        "lint": { "type": ["string", "null"] },
+        "format": { "type": ["string", "null"] }
+      }
+    },
+    "worktreeConvention": { "enum": ["dot-worktrees", "sibling-directory", "none"] },
+    "planHome": { "type": "string", "description": "Repo-relative directory for plans. Default: plans" },
+    "writeAllowed": { "type": "boolean", "description": "false makes every posting, pushing or ticket-moving skill ask first. Default: true" },
+    "neighbors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "root": { "type": "string", "description": "Path relative to this repo's root. Default: ../<name>" },
+          "trunk": { "type": "string" },
+          "access": { "enum": ["read", "write"], "description": "read needs no permission; write lets a skill change the neighbor without asking. Default: read" }
+        }
+      }
+    },
+    "pr": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commentMarker": { "$ref": "#/$defs/commentMarker" }
+      }
+    },
+    "adapters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tracker": { "type": ["string", "null"], "description": "Name of an installed tracker adapter skill, or null for none." },
+        "personas": { "type": "array", "items": { "type": "string" } },
+        "commentMarker": { "$ref": "#/$defs/commentMarker" },
+        "envProfile": { "type": ["string", "null"] }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "personas": { "type": "array", "items": { "type": "string" } } }
+    },
+    "mining": {
+      "type": "object",
+      "description": "toolkit-pr-mining settings for this repo: reviewer cohort, bots, path scope.",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "commentMarker": {
+      "description": "What toolkit-pr-comment adds to every comment it posts. null or {\"mode\":\"off\"} adds nothing.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "enum": ["off", "text", "banner"] },
+            "text": { "type": "string", "description": "Hidden marker appended to the body (text and banner modes)." },
+            "banner": { "type": "string", "description": "Visible line prepended to the body (banner mode)." }
+          }
+        }
+      ]
+    }
+  }
+}
