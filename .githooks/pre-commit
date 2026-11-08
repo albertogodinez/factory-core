@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+# Unit tests and the context and internal-data checks run on every commit.
+node --test tests/ bundles/
+# Resolver guardrails (timing, spawns, output size) run when the resolver changes.
+if git diff --cached --name-only | grep -q '^bundles/core/toolkit-context/'; then
+  node --test tests/resolver-guardrails.test.mjs
+fi

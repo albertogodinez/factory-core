@@ -1,0 +1,14 @@
+{
+  "name": "agent-factory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Portable agent skills and a dependency-free installer.",
+  "bin": { "factory": "bin/factory.mjs" },
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
+    "test": "node --test tests/ bundles/",
+    "test:guardrails": "node --test tests/resolver-guardrails.test.mjs"
+  },
+  "engines": { "node": ">=20" }
+}
