@@ -1,0 +1,5 @@
+interface:
+  display_name: "Show me your work"
+  short_description: "Keep a local decision log for long or multi-phase work"
+policy:
+  allow_implicit_invocation: false

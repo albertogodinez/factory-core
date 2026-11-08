@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agent-factory/toolkit-feature-map/inventory.schema.json",
+  "title": "Feature Map Inventory Output",
+  "description": "stdout of a map's scripts/inventory.mjs. check-map.mjs rejects any other shape. Authoring types: ../scripts/inventory.d.ts",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "source"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Stable id a feature lists in covers"
+              },
+              "kind": {
+                "type": "string",
+                "pattern": "^[a-z]+(-[a-z]+)*$",
+                "description": "Map-defined surface kind, e.g. route, registered-component"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Repo-relative path the item was read from"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "skipped"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "skipped": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  ]
+}

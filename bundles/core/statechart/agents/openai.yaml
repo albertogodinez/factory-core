@@ -1,0 +1,5 @@
+interface:
+  display_name: "Statechart"
+  short_description: "Model-check a state flow and draw it as a statechart"
+policy:
+  allow_implicit_invocation: false

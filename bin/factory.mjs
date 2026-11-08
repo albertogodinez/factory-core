@@ -20,7 +20,7 @@ import { join, dirname, resolve, relative, basename, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { findGit, toolkitHome } from '../bundles/core/toolkit-context/scripts/resolve.mjs';
+import { findGit, toolkitHome, parseRemote } from '../bundles/core/toolkit-context/scripts/resolve.mjs';
 
 const FACTORY = dirname(dirname(realpathSync(import.meta.filename)));
 const RESOLVE = join(FACTORY, 'bundles', 'core', 'toolkit-context', 'scripts', 'resolve.mjs');
@@ -219,6 +219,8 @@ function deepMergeMissing(base, extra) {
 function recordInstall(root, lock) {
   const f = join(toolkitHome(), 'installs.json');
   const all = readJson(f, { version: 1, repos: {} });
+  all.factory = FACTORY;
+  all.sources = bundleSources(); // machine-specific paths stay here, never in a repo's lock
   if (Object.keys(lock.skills).length === 0) delete all.repos[root];
   else all.repos[root] = { mode: lock.mode, bundles: lock.bundles, skills: Object.keys(lock.skills).length, updatedAt: new Date().toISOString() };
   writeJson(f, all);
@@ -296,7 +298,11 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
   if (rest.pr) { delete rest.pr.commentMarker; if (!Object.keys(rest.pr).length) delete rest.pr; }
   let proj = existing;
   if (!existing) {
-    proj = { version: 1, name: basename(root) };
+    // Name from the remote (a worktree's directory name is not the project's name).
+    let name = basename(g.mainRoot);
+    const slug = parseRemote(git(root, 'remote', 'get-url', 'origin'))?.slug;
+    if (slug) name = slug.split('/').pop();
+    proj = { version: 1, name };
     const marker = await chooseMarker(opts.marker, markerDefault);
     proj.pr = { commentMarker: marker };
     deepMergeMissing(proj, rest);
@@ -485,6 +491,7 @@ async function doctor(opts) {
 
   // harness discovery: main checkout and a throwaway worktree
   const hs = harnessesPresent();
+  const uncommitted = lock.mode === 'commit' && !!git(root, 'status', '--porcelain', '--', LOCK);
   const wtDir = join(root, '.worktrees', 'test', 'skill-discovery');
   let wtMade = false;
   if (!existsSync(wtDir) && git(root, 'worktree', 'add', '--detach', '-q', wtDir) !== null) wtMade = true;
@@ -497,17 +504,26 @@ async function doctor(opts) {
         let detail = `${seen.length}/${names.length} skills on disk under ${posix(h.dir)}`;
         let ok = seen.length === names.length;
         if (opts.live) {
+          // Skills marked disable-model-invocation are user-only: harnesses keep them out of the
+          // model's own listing, so only model-invocable skills are expected there.
+          const expect = names.filter((n) => frontmatter(join(root, '.agents', 'skills', n, 'SKILL.md'))['disable-model-invocation'] !== 'true');
           const listed = liveList(h, dir);
-          const found = listed ? names.filter((n) => listed.includes(n)) : [];
-          ok = !!listed && found.length === names.length;
-          detail += `; live: ${listed ? `${found.length}/${names.length} listed` : 'harness run failed'}`;
+          const lines = new Set((listed || '').split(/\r?\n/).map((l) => l.replace(/^[\s*`•-]+|[`\s]+$/g, '')));
+          const found = expect.filter((n) => lines.has(n));
+          ok = !!listed && found.length === expect.length;
+          detail += `; live: ${listed ? `${found.length}/${expect.length} model-invocable listed` : 'harness run failed'}`;
+          if (listed && found.length < expect.length) detail += ` (missing ${expect.filter((n) => !lines.has(n)).join(', ')})`;
         }
         if (!ok && where === 'new worktree' && lock.mode === 'local') detail += '; run factory link in each new worktree';
+        if (!ok && where === 'new worktree' && lock.mode === 'commit' && uncommitted) detail += '; the install is not committed yet, and a new worktree starts from HEAD';
         check(`harness ${h.name} (${where})`, ok, detail, where === 'new worktree' && lock.mode === 'local' ? 'warn' : 'fail');
       }
     }
   } finally {
-    if (wtMade) git(root, 'worktree', 'remove', '--force', wtDir);
+    if (wtMade) {
+      git(root, 'worktree', 'remove', '--force', wtDir);
+      for (const d of [dirname(wtDir), dirname(dirname(wtDir))]) { try { if (!readdirSync(d).length) rmSync(d, { recursive: true }); } catch {} }
+    }
   }
 
   // context budget
