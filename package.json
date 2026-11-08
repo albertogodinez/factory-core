@@ -10,5 +10,5 @@
     "test": "node tests/run.mjs",
     "test:guardrails": "node --test tests/guardrails/resolver.guard.mjs"
   },
-  "engines": { "node": ">=20" }
+  "engines": { "node": ">=20.16" }
 }

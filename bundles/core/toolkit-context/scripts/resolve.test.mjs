@@ -194,3 +194,15 @@ test('Windows: paths are built with node:path, never by joining strings with "/"
   const bad = src.split('\n').filter((l) => !/^\s*\/\//.test(l) && !/slug|upstream/.test(l) && /\+\s*['"`]\/|['"`]\/['"`]\s*\+|`[^`]*\$\{[^}]+\}\/\$\{/.test(l));
   assert.deepEqual(bad, []);
 });
+
+test('--repo by slug: this project, a neighbor (read-only unless access is write), or an error', () => {
+  const d = join(fx.root, 'project');
+  assert.equal(run(d, ['--repo', 'acme/project', '--field', 'project.name']), 'project');
+  const n = run(d, ['--repo', 'acme/lib']);
+  assert.equal(n.project.name, 'lib');
+  assert.equal(n.project.trunk, 'develop');
+  assert.equal(n.writeAllowed, false, 'a read neighbor is not writable from the host');
+  assert.equal(run(d, ['--repo', 'lib', '--field', 'project.remote.host']), 'github.com');
+  assert.throws(() => run(d, ['--repo', 'acme/other']), (e) => e.status === 2 && /not this project/.test(e.stderr));
+  assert.equal(run(join(fx.root, 'hub'), ['--repo', 'acme/lib', '--field', 'project.name']), 'lib');
+});

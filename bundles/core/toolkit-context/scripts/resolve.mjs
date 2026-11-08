@@ -7,8 +7,6 @@
 // Usage: resolve.mjs [--cwd <dir>] [--config <file>] [--repo <name>]
 //                    [--field <dotted.path>] [--no-cache] [--pretty]
 import { readFileSync, statSync, writeFileSync, mkdirSync, renameSync, realpathSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import { join, dirname, resolve, relative, basename, sep } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -74,7 +72,9 @@ let spawnCount = 0;
 function gitFromSpawn(start) {
   if (spawnCount++ > 0) fail('internal: second git spawn');
   // Lazy: most runs never load child_process.
-  const { execFileSync } = createRequire(import.meta.url)('node:child_process');
+  // process.getBuiltinModule (Node 20.16+) loads child_process synchronously
+  // without importing it on the hot path.
+  const { execFileSync } = process.getBuiltinModule('node:child_process');
   let out;
   try {
     out = execFileSync('git', ['rev-parse', '--show-toplevel', '--absolute-git-dir', '--git-common-dir'],
@@ -258,7 +258,7 @@ export function resolveContext(opts = {}) {
   const cwd = resolve(opts.cwd || process.cwd());
   const deps = []; // every path whose existence or mtime affects the result
   const git = findGit(cwd, deps, true);
-  const configArg = opts.config || env.AI_TOOLKIT_CONFIG || null;
+  const configArg = opts.neighborOf ? null : (opts.config || env.AI_TOOLKIT_CONFIG || null);
 
   let source = null, mode = 'zero-config', configPath = null, config = null;
   if (configArg) {
@@ -297,7 +297,7 @@ export function resolveContext(opts = {}) {
     const entries = config.repos.map((e) => fromRegistryEntry(e, base));
     let match = null;
     if (opts.repo) {
-      match = entries.find((e) => e.name === opts.repo);
+      match = entries.find((e) => matchesRepo(e, opts.repo));
       if (!match) fail(`--repo ${opts.repo}: not in ${display(configPath)}`);
     } else if (git) {
       match = entries.find((e) => {
@@ -350,6 +350,16 @@ export function resolveContext(opts = {}) {
     writeAllowed = false;
   }
 
+  // --repo in project and zero-config modes: this project (by name or slug),
+  // or a neighbor, which is then resolved from its own root.
+  if (opts.repo && mode !== 'workspace' && !matchesRepo(project, opts.repo)) {
+    const n = neighbors.find((x) => x.name === opts.repo
+      || matchesRepo({ name: x.name, remote: (() => { const g = findGit(x.root, null); return g && parseRemote(remoteUrl(g.commonDir, null)); })() }, opts.repo));
+    if (!n) fail(`--repo ${opts.repo}: not this project (${project.name}) or one of its neighbors`);
+    const sub = resolveContext({ ...opts, cwd: n.root, repo: undefined, config: undefined, neighborOf: project.name });
+    sub.out.writeAllowed = sub.out.writeAllowed && n.access === 'write';
+    return { out: sub.out, deps: [...deps, ...sub.deps], git };
+  }
   delete project.personas;
   // Keep output small: a neighbor's root is omitted when it is the default
   // sibling path (<project.root>/../<name>), and access when it is "read".
@@ -374,6 +384,10 @@ function hereProject(git, cwd, remote, deps) {
     name: remote ? remote.slug.split('/').pop() : basename(git ? git.mainRoot : cwd),
     root, trunk: git ? detectTrunk(git, deps) : null, ...facts, remote,
   };
+}
+function matchesRepo(p, want) {
+  const w = want.toLowerCase();
+  return p.name === want || p.remote?.slug?.toLowerCase() === w || p.remote?.upstream?.toLowerCase() === w;
 }
 function neighbor(n, base, deps) {
   const root = resolve(base, n.root || join('..', n.name));
@@ -447,7 +461,7 @@ function parseArgs(argv) {
   return o;
 }
 
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.meta.filename)) {
   const opts = parseArgs(process.argv.slice(2));
   const { out } = cachedResolve(opts);
   if (opts.field) {

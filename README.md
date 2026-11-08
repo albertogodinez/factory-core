@@ -103,7 +103,7 @@ Output, the same whichever source matched:
 
 `writeAllowed` is always false in zero-config mode. A skill that posts, pushes or transitions a ticket needs config or an explicit confirmation first.
 
-Budget: one file, `node:` imports only, no network. Cached calls take a median under 50 ms and never more than 100 ms. Cold calls take under 150 ms. That means at most one `git` spawn cold and none cached. Output is at most 1 KB, or 200 bytes with `--field`. The cache is keyed by `HEAD` and the mtimes of the config files.
+Budget: one file, `node:` imports only, no network. A cached call adds under 15 ms to Node's startup and never takes more than 100 ms in all. A cold call adds under 60 ms and takes under 150 ms. That means at most one `git` spawn cold and none cached. Output is at most 1 KB, or 200 bytes with `--field`. The cache is keyed by `HEAD` and the mtimes of the config files.
 
 ## State by mode
 

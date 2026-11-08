@@ -12,7 +12,13 @@ import { makeFixtures } from '../fixtures/make.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL = join(HERE, '..', '..', 'bundles', 'core', 'toolkit-context');
 const RESOLVE = join(SKILL, 'scripts', 'resolve.mjs');
-const LIMITS = { cachedMedianMs: 50, cachedMaxMs: 100, coldMs: 150, coldSpawns: 1, cachedSpawns: 0, outBytes: 1024, fieldBytes: 200 };
+// Node itself takes 40-50 ms to start on a loaded laptop, so the speed limits
+// are on the resolver's overhead above an empty Node run, measured alternately
+// with it, with absolute caps as a backstop.
+const LIMITS = {
+  cachedOverheadMs: 15, cachedMaxMs: 100, coldOverheadMs: 60, coldMs: 150,
+  coldSpawns: 1, cachedSpawns: 0, outBytes: 1024, fieldBytes: 200,
+};
 
 let fx, fakeBin, counter;
 before(() => {
@@ -41,21 +47,34 @@ function spawns(fn) {
   return existsSync(counter) ? readFileSync(counter, 'utf8').trim().split('\n').length : 0;
 }
 
-test(`cached: median < ${LIMITS.cachedMedianMs} ms, max < ${LIMITS.cachedMaxMs} ms over 10 runs`, () => {
+function baseline(cwd) {
+  const t0 = process.hrtime.bigint();
+  spawnSync(process.execPath, ['--input-type=module', '-e', ''], { cwd });
+  return Number(process.hrtime.bigint() - t0) / 1e6;
+}
+const fmt = (xs) => xs.map((x) => x.toFixed(0)).join(', ');
+
+test(`cached: overhead over bare node < ${LIMITS.cachedOverheadMs} ms (median of 10), max < ${LIMITS.cachedMaxMs} ms`, () => {
   const cwd = join(fx.root, 'project');
   timed(cwd); // warm the cache
-  const runs = Array.from({ length: 10 }, () => timed(cwd).ms);
-  const m = median(runs), mx = Math.max(...runs);
-  assert.ok(m < LIMITS.cachedMedianMs, `median ${m.toFixed(1)} ms (runs: ${runs.map((x) => x.toFixed(0)).join(', ')})`);
-  assert.ok(mx < LIMITS.cachedMaxMs, `max ${mx.toFixed(1)} ms`);
+  const base = [], runs = [];
+  for (let i = 0; i < 10; i++) { base.push(baseline(cwd)); runs.push(timed(cwd).ms); }
+  const over = median(runs) - median(base);
+  const detail = `resolver median ${median(runs).toFixed(1)} ms, bare node ${median(base).toFixed(1)} ms (runs: ${fmt(runs)})`;
+  assert.ok(over < LIMITS.cachedOverheadMs, `overhead ${over.toFixed(1)} ms; ${detail}`);
+  assert.ok(Math.max(...runs) < LIMITS.cachedMaxMs, `max ${Math.max(...runs).toFixed(1)} ms; ${detail}`);
 });
 
-test(`cold: < ${LIMITS.coldMs} ms (median of 5, empty cache each time)`, () => {
-  const runs = ['project', 'zero-config', 'hub', 'project', 'zero-config'].map((d, i) => {
-    const home = join(fx.root, `cold-home-${i}`);
-    return timed(join(fx.root, d), [], baseEnv({ AI_TOOLKIT_HOME: home })).ms;
+test(`cold: overhead < ${LIMITS.coldOverheadMs} ms and total < ${LIMITS.coldMs} ms (median of 5, empty cache)`, () => {
+  const base = [], runs = [];
+  ['project', 'zero-config', 'hub', 'project', 'zero-config'].forEach((d, i) => {
+    const cwd = join(fx.root, d);
+    base.push(baseline(cwd));
+    runs.push(timed(cwd, [], baseEnv({ AI_TOOLKIT_HOME: join(fx.root, `cold-home-${i}`) })).ms);
   });
-  assert.ok(median(runs) < LIMITS.coldMs, `median ${median(runs).toFixed(1)} ms (runs: ${runs.map((x) => x.toFixed(0)).join(', ')})`);
+  const detail = `resolver median ${median(runs).toFixed(1)} ms, bare node ${median(base).toFixed(1)} ms (runs: ${fmt(runs)})`;
+  assert.ok(median(runs) - median(base) < LIMITS.coldOverheadMs, `overhead ${(median(runs) - median(base)).toFixed(1)} ms; ${detail}`);
+  assert.ok(median(runs) < LIMITS.coldMs, detail);
 });
 
 test(`git spawns: ≤ ${LIMITS.coldSpawns} cold, ${LIMITS.cachedSpawns} cached`, () => {

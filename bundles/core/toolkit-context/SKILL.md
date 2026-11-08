@@ -13,7 +13,7 @@ node <skills>/toolkit-context/scripts/resolve.mjs --field project.trunk
 node <skills>/toolkit-context/scripts/resolve.mjs --pretty        # for a person
 ```
 
-`<skills>` is the directory this skill is installed in (`.agents/skills` or `.claude/skills`). Other flags: `--cwd <dir>`, `--config <file>`, `--repo <name>` (workspace mode: one registered repo), `--no-cache`.
+`<skills>` is the directory this skill is installed in (`.agents/skills` or `.claude/skills`). Other flags: `--cwd <dir>`, `--config <file>`, `--no-cache`, and `--repo <name|owner/name>`, which resolves one registered repo (workspace mode) or this project's neighbor (project mode) instead of the cwd. A neighbor reached this way has `writeAllowed: false` unless its `access` is `write`.
 
 ## Sources, first match wins
 
@@ -49,6 +49,6 @@ Exit codes: 0 ok; 1 `--field` path not present; 2 bad usage, an invalid config, 
 
 ## Limits
 
-The resolver is a single file that imports only `node:` modules and makes no network calls. Cached calls take a median under 50 ms; cold calls under 150 ms. It spawns `git` at most once (only when `GIT_DIR` is set), and its output is at most 1 KB, or 200 B with `--field`. The cache lives in `~/.ai-toolkit/cache/resolver/` (or `$AI_TOOLKIT_HOME`), keyed by `HEAD` and the mtimes of every file it read.
+The resolver is a single file that imports only `node:` modules and makes no network calls. A cached call adds under 15 ms to Node's own startup (about 55 ms in all on a busy laptop) and never takes 100 ms; a cold call adds under 60 ms and stays under 150 ms. It spawns `git` at most once (only when `GIT_DIR` is set), and its output is at most 1 KB, or 200 B with `--field`. The cache lives in `~/.ai-toolkit/cache/resolver/` (or `$AI_TOOLKIT_HOME`), keyed by `HEAD` and the mtimes of every file it read.
 
 Tests: `node --test bundles/core/toolkit-context/scripts/resolve.test.mjs`. In agent-factory, `tests/guardrails/resolver.guard.mjs` enforces the limits.
