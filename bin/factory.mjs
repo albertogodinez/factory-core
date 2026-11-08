@@ -1,0 +1,569 @@
+#!/usr/bin/env node
+// factory: install agent-factory bundles into a repo, keep them current, and check them.
+// One file, node: imports only, copies from local paths, never touches the network.
+//
+//   factory install <bundle...> [--to <repo>] (--commit | --local) [--marker keep|off|text:<tag>]
+//                               [--force] [--dry-run]
+//   factory update [--all] [--to <repo>] [--force]
+//   factory remove <skill|bundle...> [--to <repo>] [--purge]
+//   factory link [--to <worktree>]
+//   factory doctor [--to <repo>] [--live] [--json]
+//   factory list [--to <repo>]
+//
+// Bundles: core (this repo), expedia (../eg-agent-kit), trips (../trips-ai-toolkit). Override
+// a bundle's path in ~/.ai-toolkit/sources.json: {"expedia": "/path/to/bundles/expedia"}.
+import {
+  readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, lstatSync, rmSync,
+  cpSync, symlinkSync, readlinkSync, realpathSync, renameSync,
+} from 'node:fs';
+import { join, dirname, resolve, relative, basename, sep } from 'node:path';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { findGit, toolkitHome } from '../bundles/core/toolkit-context/scripts/resolve.mjs';
+
+const FACTORY = dirname(dirname(realpathSync(import.meta.filename)));
+const RESOLVE = join(FACTORY, 'bundles', 'core', 'toolkit-context', 'scripts', 'resolve.mjs');
+const IS_WIN = process.platform === 'win32';
+const LOCK = join('.ai-toolkit', 'skills-lock.json');
+const PROJECT = join('.ai-toolkit', 'project.json');
+const BLOCK_START = '# >>> agent-factory (managed by factory; `factory remove` deletes this block)';
+const BLOCK_END = '# <<< agent-factory';
+const LIMITS = { descriptionChars: 600, listingChars: 14000, skillMdBytes: 24 * 1024 };
+
+// ---------- output ----------
+const out = (s = '') => process.stdout.write(s + '\n');
+const warn = (s) => process.stderr.write(`factory: ${s}\n`);
+function die(s, code = 1) { warn(s); process.exit(code); }
+
+// ---------- small fs helpers ----------
+const readJson = (p, fallback = null) => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return fallback; } };
+function writeJson(p, v) {
+  mkdirSync(dirname(p), { recursive: true });
+  const tmp = `${p}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(v, null, 2) + '\n');
+  renameSync(tmp, p);
+}
+const lexists = (p) => { try { lstatSync(p); return true; } catch { return false; } };
+const isLink = (p) => { try { return lstatSync(p).isSymbolicLink(); } catch { return false; } };
+const posix = (p) => p.split(sep).join('/');
+
+export function hashDir(dir) {
+  const h = createHash('sha256');
+  const walk = (d) => {
+    for (const e of readdirSync(d).filter((x) => x !== '.DS_Store').sort()) {
+      const p = join(d, e);
+      const st = statSync(p);
+      if (st.isDirectory()) walk(p);
+      else { h.update(posix(relative(dir, p))); h.update('\0'); h.update(readFileSync(p)); h.update('\0'); }
+    }
+  };
+  walk(dir);
+  return h.digest('hex');
+}
+
+function git(cwd, ...args) {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  return r.status === 0 ? r.stdout.trim() : null;
+}
+
+// ---------- sources and bundles ----------
+export function bundleSources(home = toolkitHome()) {
+  const def = {
+    core: join(FACTORY, 'bundles', 'core'),
+    expedia: join(dirname(FACTORY), 'eg-agent-kit', 'bundles', 'expedia'),
+    trips: join(dirname(FACTORY), 'trips-ai-toolkit', 'bundles', 'trips'),
+  };
+  return { ...def, ...readJson(join(home, 'sources.json'), {}) };
+}
+export function readBundle(name, sources = bundleSources()) {
+  const dir = sources[name];
+  if (!dir) die(`unknown bundle "${name}" (known: ${Object.keys(sources).join(', ')})`, 2);
+  if (!existsSync(dir)) die(`bundle "${name}" not found at ${dir}`, 2);
+  const skills = readdirSync(dir).filter((e) => existsSync(join(dir, e, 'SKILL.md'))).sort();
+  const repo = git(dir, 'rev-parse', '--show-toplevel');
+  return {
+    name, dir, skills, defaults: readJson(join(dir, 'defaults.json'), {}),
+    source: repo ? basename(repo) : basename(dir), repo,
+    rev: repo ? git(dir, 'rev-parse', '--short', 'HEAD') : null,
+  };
+}
+function frontmatter(skillMd) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(readFileSync(skillMd, 'utf8'));
+  const fm = {};
+  if (m) for (const line of m[1].split(/\r?\n/)) {
+    const kv = /^([A-Za-z_-]+):\s*(.*)$/.exec(line);
+    if (kv) fm[kv[1]] = kv[2].replace(/^["']|["']$/g, '');
+  }
+  return fm;
+}
+
+// ---------- target repo ----------
+function target(opts, { forLocal } = {}) {
+  const start = resolve(opts.to || process.cwd());
+  const g = findGit(start, null, true);
+  if (!g) die(`${start} is not inside a git repository`, 2);
+  return { git: g, root: forLocal ? g.mainRoot : g.toplevel };
+}
+const lockOf = (root) => readJson(join(root, LOCK), { version: 1, skills: {} });
+
+// .git/info/exclude lives in the common git dir, so one block covers every worktree.
+function excludeFile(g) { return join(g.commonDir, 'info', 'exclude'); }
+export function setExcludeBlock(g, lines) {
+  const f = excludeFile(g);
+  const text = existsSync(f) ? readFileSync(f, 'utf8') : '';
+  const re = new RegExp(`\\n?${BLOCK_START.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${BLOCK_END}\\n?`);
+  let next = text.replace(re, '\n').replace(/\n{3,}$/, '\n\n');
+  if (lines.length) next = `${next.replace(/\n*$/, '\n')}${BLOCK_START}\n${lines.join('\n')}\n${BLOCK_END}\n`;
+  mkdirSync(dirname(f), { recursive: true });
+  writeFileSync(f, next.replace(/^\n+/, ''));
+}
+export function excludeBlock(g) {
+  const f = excludeFile(g);
+  const text = existsSync(f) ? readFileSync(f, 'utf8') : '';
+  const i = text.indexOf(BLOCK_START), j = text.indexOf(BLOCK_END);
+  return i < 0 || j < 0 ? [] : text.slice(i + BLOCK_START.length, j).trim().split('\n').filter(Boolean);
+}
+function excludeLinesFor(lock, root) {
+  if (lock.mode !== 'local') return ['/.ai-toolkit/state/'];
+  const lines = ['/.ai-toolkit/'];
+  for (const n of Object.keys(lock.skills).sort()) lines.push(`/.agents/skills/${n}`);
+  if (lock.claudeLink === 'dir') lines.push('/.claude/skills');
+  else if (lock.claudeLink === 'per-skill') for (const n of Object.keys(lock.skills).sort()) lines.push(`/.claude/skills/${n}`);
+  return lines;
+}
+
+// ---------- the .claude/skills link ----------
+// Claude Code reads .claude/skills; the other harnesses read .agents/skills. Three layouts:
+//   absent → link .claude/skills to ../.agents/skills (copy on Windows)            ("dir")
+//   a link to .agents/skills → nothing to do                                          ("dir")
+//   a real directory (per-skill links or copies) → add one link per installed skill  ("per-skill")
+function claudeLayout(root) {
+  const c = join(root, '.claude', 'skills');
+  if (!lexists(c)) return 'absent';
+  if (isLink(c)) return 'dir';
+  return IS_WIN && existsSync(join(c, '.factory-copy')) ? 'dir' : 'per-skill';
+}
+function linkOrCopy(targetAbs, linkPath, relTarget) {
+  rmSync(linkPath, { recursive: true, force: true });
+  mkdirSync(dirname(linkPath), { recursive: true });
+  if (IS_WIN) cpSync(targetAbs, linkPath, { recursive: true });
+  else symlinkSync(relTarget, linkPath);
+}
+function ensureClaudeLinks(root, names, report, { dryRun } = {}) {
+  const layout = claudeLayout(root);
+  const c = join(root, '.claude', 'skills');
+  if (layout === 'absent') {
+    report.push('link .claude/skills -> ../.agents/skills');
+    if (!dryRun) {
+      linkOrCopy(join(root, '.agents', 'skills'), c, join('..', '.agents', 'skills'));
+      if (IS_WIN) writeFileSync(join(c, '.factory-copy'), 'copied by factory; refreshed by factory update\n');
+    }
+    return { mode: 'dir', created: true };
+  }
+  if (layout === 'dir') {
+    if (IS_WIN && !dryRun) for (const n of names) cpSync(join(root, '.agents', 'skills', n), join(c, n), { recursive: true });
+    return { mode: 'dir', created: false };
+  }
+  const conflicts = [];
+  for (const n of names) {
+    const p = join(c, n);
+    const rel = join('..', '..', '.agents', 'skills', n);
+    if (isLink(p) && readlinkSync(p) === rel) continue;
+    if (lexists(p) && !isLink(p) && !report.replaced?.has(n)) { conflicts.push(n); continue; }
+    report.push(`link .claude/skills/${n}`);
+    if (!dryRun) linkOrCopy(join(root, '.agents', 'skills', n), p, rel);
+  }
+  return { mode: 'per-skill', created: false, conflicts };
+}
+
+// ---------- marker question ----------
+async function ask(q) {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  const a = await new Promise((r) => rl.question(q, r));
+  rl.close();
+  return a.trim();
+}
+function describeMarker(m) {
+  if (!m || m.mode === 'off') return 'off (comments are posted as written)';
+  return `${m.mode}: <!-- ${m.text} {...} -->${m.mode === 'banner' ? ' plus a visible banner' : ''}`;
+}
+async function chooseMarker(flag, bundleDefault) {
+  if (flag === 'off') return { mode: 'off' };
+  if (flag === 'keep') return bundleDefault || { mode: 'off' };
+  if (flag?.startsWith('text:')) return { mode: 'text', text: flag.slice(5) };
+  if (flag) die(`--marker must be keep, off or text:<tag> (got ${flag})`, 2);
+  if (!process.stdin.isTTY) {
+    const m = bundleDefault || { mode: 'off' };
+    warn(`PR comment marker: ${describeMarker(m)} (no TTY; pass --marker keep|off|text:<tag> to choose)`);
+    return m;
+  }
+  out(`PR comment marker. Comments a session posts go out under your account; a marker lets you and your tools tell them apart.`);
+  out(`  default: ${describeMarker(bundleDefault)}`);
+  const a = (await ask('Keep the default, turn it off, or use your own tag? [keep/off/<tag>] ')).toLowerCase();
+  if (!a || a === 'keep' || a === 'k') return bundleDefault || { mode: 'off' };
+  if (a === 'off' || a === 'o' || a === 'none') return { mode: 'off' };
+  return { mode: 'text', text: a };
+}
+
+function deepMergeMissing(base, extra) {
+  for (const [k, v] of Object.entries(extra || {})) {
+    if (k.startsWith('$')) continue;
+    if (!(k in base)) base[k] = v;
+    else if (v && typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object') deepMergeMissing(base[k], v);
+  }
+  return base;
+}
+
+// ---------- installs.json ----------
+function recordInstall(root, lock) {
+  const f = join(toolkitHome(), 'installs.json');
+  const all = readJson(f, { version: 1, repos: {} });
+  if (Object.keys(lock.skills).length === 0) delete all.repos[root];
+  else all.repos[root] = { mode: lock.mode, bundles: lock.bundles, skills: Object.keys(lock.skills).length, updatedAt: new Date().toISOString() };
+  writeJson(f, all);
+}
+
+// ---------- install / update ----------
+async function install(bundleNames, opts, { isUpdate = false } = {}) {
+  if (!bundleNames.length) die('name at least one bundle: factory install core [expedia] [trips]', 2);
+  if (!bundleNames.includes('core')) bundleNames = ['core', ...bundleNames];
+  const prior = target(opts);
+  const priorLock = lockOf(prior.git.mainRoot);
+  let mode = opts.commit ? 'commit' : opts.local ? 'local' : (priorLock.mode || lockOf(prior.root).mode);
+  if (!mode) die('pass --commit (a repo you own: the skills are committed) or --local (a team repo: nothing is committed)', 2);
+  const { git: g, root } = target(opts, { forLocal: mode === 'local' });
+  const lock = lockOf(root);
+  if (lock.mode && lock.mode !== mode) die(`this repo has a ${lock.mode} install; remove it before installing as ${mode}`, 2);
+  lock.version = 1; lock.mode = mode;
+  lock.bundles = [...new Set([...(lock.bundles || []), ...bundleNames])];
+  const sources = bundleSources();
+  const bundles = bundleNames.map((b) => readBundle(b, sources));
+  const thirdPartyPath = join(root, 'skills-lock.json');
+  const thirdParty = readJson(thirdPartyPath, null);
+  const report = []; report.replaced = new Set();
+  const conflicts = [], edited = [];
+  const dest = (n) => join(root, '.agents', 'skills', n);
+  const plan = [];
+
+  for (const b of bundles) for (const n of b.skills) {
+    const src = join(b.dir, n);
+    const srcHash = hashDir(src);
+    const mine = lock.skills[n];
+    if (mine && mine.bundle !== b.name) { conflicts.push(`${n}: in both ${mine.bundle} and ${b.name}`); continue; }
+    if (existsSync(dest(n))) {
+      if (mine) {
+        if (mine.computedHash === srcHash && hashDir(dest(n)) === srcHash) continue; // current
+        if (hashDir(dest(n)) !== mine.computedHash && !opts.force) { edited.push(n); continue; }
+        report.push(`update ${n}`);
+      } else if (thirdParty?.skills?.[n]) {
+        report.push(`replace ${n} (was ${thirdParty.skills[n].source})`);
+        report.replaced.add(n);
+      } else if (!opts.force) {
+        conflicts.push(`${n}: the repo already has its own skill with this name; left alone (rename ours or pass --force)`);
+        continue;
+      } else report.push(`replace ${n} (repo's own, --force)`);
+    } else report.push(`add ${n}`);
+    plan.push({ n, src, srcHash, b });
+  }
+
+  if (!opts.dryRun) {
+    for (const { n, src, srcHash, b } of plan) {
+      rmSync(dest(n), { recursive: true, force: true });
+      mkdirSync(dirname(dest(n)), { recursive: true });
+      cpSync(src, dest(n), { recursive: true });
+      lock.skills[n] = { source: b.source, sourceType: 'local', bundle: b.name,
+        skillPath: posix(join(relative(b.repo || b.dir, b.dir), n, 'SKILL.md')), sourceRev: b.rev, computedHash: srcHash };
+    }
+    if (report.replaced.size && thirdParty) {
+      for (const n of report.replaced) delete thirdParty.skills[n];
+      writeJson(thirdPartyPath, thirdParty);
+    }
+  }
+  const names = Object.keys(lock.skills).length ? Object.keys(lock.skills) : plan.map((p) => p.n);
+  const claude = ensureClaudeLinks(root, names, report, opts);
+  lock.claudeLink = lock.claudeLink || (claude.created ? 'dir' : claude.mode === 'per-skill' ? 'per-skill' : 'existing');
+  for (const n of claude.conflicts || []) conflicts.push(`.claude/skills/${n}: exists and isn't a link to .agents/skills/${n}; left alone`);
+
+  // project.json: create once, asking the marker question; later installs only add missing defaults.
+  const projPath = join(root, PROJECT);
+  const existing = readJson(projPath, null);
+  const defaults = {};
+  for (const b of bundles) deepMergeMissing(defaults, b.defaults);
+  // The marker is chosen explicitly (chooseMarker), never merged field by field.
+  const markerDefault = defaults.pr?.commentMarker;
+  const rest = structuredClone(defaults);
+  if (rest.pr) { delete rest.pr.commentMarker; if (!Object.keys(rest.pr).length) delete rest.pr; }
+  let proj = existing;
+  if (!existing) {
+    proj = { version: 1, name: basename(root) };
+    const marker = await chooseMarker(opts.marker, markerDefault);
+    proj.pr = { commentMarker: marker };
+    deepMergeMissing(proj, rest);
+    report.push(`write ${posix(PROJECT)} (marker ${marker.mode})`);
+  } else {
+    const before = JSON.stringify(existing);
+    if (!existing.pr || !('commentMarker' in existing.pr)) {
+      existing.pr = { ...(existing.pr || {}), commentMarker: await chooseMarker(opts.marker, markerDefault) };
+    }
+    deepMergeMissing(existing, rest);
+    if (JSON.stringify(existing) !== before) report.push(`update ${posix(PROJECT)} (added bundle defaults)`);
+  }
+
+  if (!opts.dryRun) {
+    writeJson(projPath, proj);
+    writeJson(join(root, LOCK), lock);
+    setExcludeBlock(g, excludeLinesFor(lock, root));
+    recordInstall(root, lock);
+  }
+
+  out(`${opts.dryRun ? '[dry run] ' : ''}${isUpdate ? 'update' : 'install'} ${bundleNames.join(' ')} → ${root} (${mode})`);
+  for (const r of report) out(`  ${r}`);
+  if (!report.length) out('  nothing to change');
+  for (const e of edited) warn(`${e}: the installed copy was edited, so it wasn't updated. Move your change into the bundle, or pass --force to overwrite it.`);
+  for (const c of conflicts) warn(c);
+  if (mode === 'commit' && !opts.dryRun && report.length) {
+    out(`\nCommit the install: git -C ${root} add .agents/skills .claude/skills .ai-toolkit skills-lock.json && git -C ${root} commit -m "chore: install agent-factory ${bundleNames.join(' ')}"`);
+  }
+  return { edited, conflicts };
+}
+
+async function update(opts) {
+  const roots = opts.all
+    ? Object.keys(readJson(join(toolkitHome(), 'installs.json'), { repos: {} }).repos)
+    : [target(opts).git.mainRoot];
+  let failed = 0;
+  for (const r of roots) {
+    const lock = existsSync(join(r, LOCK)) ? lockOf(r) : lockOf(target({ to: r }).root);
+    if (!lock.mode) { warn(`${r}: no factory install`); failed++; continue; }
+    const res = await install([...(lock.bundles || ['core'])], { ...opts, to: r, all: false }, { isUpdate: true });
+    if (res.edited.length) failed++;
+  }
+  if (failed) process.exitCode = 1;
+}
+
+// ---------- remove ----------
+function remove(names, opts) {
+  if (!names.length) die('name a skill or bundle to remove (or "all")', 2);
+  const t0 = target(opts);
+  const root = existsSync(join(t0.git.mainRoot, LOCK)) && lockOf(t0.git.mainRoot).mode === 'local' ? t0.git.mainRoot : t0.root;
+  const lock = lockOf(root);
+  if (!lock.mode) die(`no factory install in ${root}`, 2);
+  const drop = Object.entries(lock.skills).filter(([n, s]) => names.includes('all') || names.includes(n) || names.includes(s.bundle)).map(([n]) => n);
+  for (const n of drop) {
+    rmSync(join(root, '.agents', 'skills', n), { recursive: true, force: true });
+    const c = join(root, '.claude', 'skills', n);
+    if (lock.claudeLink === 'per-skill' || IS_WIN) rmSync(c, { recursive: true, force: true });
+    delete lock.skills[n];
+    out(`  removed ${n}`);
+  }
+  lock.bundles = (lock.bundles || []).filter((b) => !names.includes(b) && !names.includes('all'));
+  const empty = Object.keys(lock.skills).length === 0;
+  if (empty && lock.claudeLink === 'dir' && isLink(join(root, '.claude', 'skills'))) rmSync(join(root, '.claude', 'skills'));
+  if (empty) {
+    rmSync(join(root, LOCK), { force: true });
+    if (opts.purge) rmSync(join(root, '.ai-toolkit'), { recursive: true, force: true });
+    setExcludeBlock(t0.git, opts.purge || lock.mode !== 'local' ? [] : ['/.ai-toolkit/']);
+  } else {
+    writeJson(join(root, LOCK), lock);
+    setExcludeBlock(t0.git, excludeLinesFor(lock, root));
+  }
+  recordInstall(root, empty ? { skills: {} } : lock);
+  out(`remove ${names.join(' ')} → ${root}: ${drop.length} skill(s)${empty ? '; install fully removed' + (opts.purge ? ' with .ai-toolkit/' : ' (.ai-toolkit/project.json kept; --purge deletes it)') : ''}`);
+}
+
+// ---------- link (local installs, new worktrees) ----------
+export function link(opts) {
+  const { git: g } = target(opts);
+  const wt = g.toplevel, main = g.mainRoot;
+  if (wt === main) die('run link inside a linked worktree; the main checkout already has the skills', 2);
+  const lock = lockOf(main);
+  if (lock.mode !== 'local') die(`link is for local-only installs; this repo's install is ${lock.mode || 'missing'}`, 2);
+  let n = 0;
+  for (const name of Object.keys(lock.skills)) {
+    const p = join(wt, '.agents', 'skills', name);
+    if (existsSync(join(p, 'SKILL.md')) && !isLink(p)) continue; // the branch has its own copy
+    linkOrCopy(join(main, '.agents', 'skills', name), p, relative(dirname(p), join(main, '.agents', 'skills', name)));
+    n++;
+  }
+  const c = join(wt, '.claude', 'skills');
+  if (!lexists(c)) linkOrCopy(join(wt, '.agents', 'skills'), c, join('..', '.agents', 'skills'));
+  else if (!isLink(c)) for (const name of Object.keys(lock.skills)) {
+    const p = join(c, name);
+    if (!lexists(p)) linkOrCopy(join(main, '.agents', 'skills', name), p, join('..', '..', '.agents', 'skills', name));
+  }
+  if (lock.claudeLink === 'dir' || !lexists(join(main, '.claude', 'skills'))) { /* covered by /.claude/skills */ }
+  out(`link: ${n} skill(s) linked into ${wt}`);
+}
+
+// ---------- list ----------
+function list(opts) {
+  const t0 = target(opts);
+  const lock = existsSync(join(t0.git.mainRoot, LOCK)) ? lockOf(t0.git.mainRoot) : lockOf(t0.root);
+  if (!lock.mode) { out('no factory install here'); return; }
+  const root = lock.mode === 'local' ? t0.git.mainRoot : t0.root;
+  out(`${root} (${lock.mode}; bundles: ${(lock.bundles || []).join(', ')})`);
+  for (const [n, s] of Object.entries(lock.skills).sort()) {
+    const d = join(root, '.agents', 'skills', n);
+    const state = !existsSync(d) ? 'MISSING' : hashDir(d) === s.computedHash ? 'ok' : 'EDITED';
+    out(`  ${n.padEnd(32)} ${s.bundle.padEnd(8)} ${s.sourceRev || ''} ${state}`);
+  }
+}
+
+// ---------- doctor ----------
+// AI_TOOLKIT_HARNESSES=claude-code,codex limits the check to those harnesses ("none" for none).
+function harnessesPresent() {
+  const only = process.env.AI_TOOLKIT_HARNESSES ? process.env.AI_TOOLKIT_HARNESSES.split(',') : null;
+  const which = (b) => spawnSync(IS_WIN ? 'where' : 'sh', IS_WIN ? [b] : ['-c', `command -v ${b}`], { encoding: 'utf8' }).status === 0;
+  return [
+    { name: 'claude-code', bin: 'claude', dir: join('.claude', 'skills') },
+    { name: 'codex', bin: 'codex', dir: join('.agents', 'skills') },
+    { name: 'copilot', bin: 'copilot', dir: join('.agents', 'skills') },
+    { name: 'cursor', bin: 'cursor-agent', dir: join('.agents', 'skills') },
+  ].map((h) => ({ ...h, present: only ? only.includes(h.name) : which(h.bin) }));
+}
+const LIST_PROMPT = 'List the name of every skill available to you in this session, one per line, with no other text.';
+function liveList(h, cwd) {
+  const args = {
+    'claude-code': ['-p', LIST_PROMPT, '--output-format', 'text'],
+    codex: ['exec', '--sandbox', 'read-only', '--skip-git-repo-check', LIST_PROMPT],
+    copilot: ['-p', LIST_PROMPT],
+    cursor: ['-p', LIST_PROMPT],
+  }[h.name];
+  const r = spawnSync(h.bin, args, { cwd, encoding: 'utf8', timeout: 240000, stdio: ['ignore', 'pipe', 'pipe'] });
+  return r.status === 0 ? r.stdout : null;
+}
+
+async function doctor(opts) {
+  const t0 = target(opts);
+  const mainLock = lockOf(t0.git.mainRoot);
+  const lock = mainLock.mode ? mainLock : lockOf(t0.root);
+  const root = lock.mode === 'local' ? t0.git.mainRoot : t0.root;
+  const results = [];
+  const check = (name, ok, detail = '', level = 'fail') => results.push({ name, status: ok ? 'ok' : level, detail });
+  const names = Object.keys(lock.skills || {});
+  check('install', !!lock.mode, lock.mode ? `${lock.mode}, ${names.length} skills, bundles ${(lock.bundles || []).join(', ')}` : 'no .ai-toolkit/skills-lock.json');
+
+  // resolver
+  const r = spawnSync(process.execPath, [join(root, '.agents', 'skills', 'toolkit-context', 'scripts', 'resolve.mjs'), '--no-cache'], { cwd: t0.git.toplevel, encoding: 'utf8' });
+  let ctx = null; try { ctx = JSON.parse(r.stdout); } catch {}
+  check('resolver', r.status === 0 && ctx, ctx ? `${ctx.mode}, ${ctx.project?.name}, trunk ${ctx.project?.trunk}, writeAllowed ${ctx.writeAllowed}` : (r.stderr || '').trim());
+  if (existsSync(join(root, PROJECT))) {
+    const v = spawnSync(process.execPath, [join(root, '.agents', 'skills', 'toolkit-context', 'scripts', 'validate.mjs'), join(root, PROJECT)], { encoding: 'utf8' });
+    check('project.json schema', v.status === 0, (v.stderr || '').trim().split('\n')[0]);
+  }
+  check('marker policy', ctx?.adapters && 'commentMarker' in ctx.adapters, ctx?.adapters?.commentMarker ? describeMarker(ctx.adapters.commentMarker) : 'pr.commentMarker not set');
+
+  // collisions and lock hashes
+  const third = readJson(join(root, 'skills-lock.json'), { skills: {} });
+  const dup = names.filter((n) => third.skills?.[n]);
+  check('no colliding skills', dup.length === 0, dup.length ? `also in skills-lock.json: ${dup.join(', ')}` : '');
+  const edited = names.filter((n) => existsSync(join(root, '.agents', 'skills', n)) && hashDir(join(root, '.agents', 'skills', n)) !== lock.skills[n].computedHash);
+  const missing = names.filter((n) => !existsSync(join(root, '.agents', 'skills', n, 'SKILL.md')));
+  check('lock hashes', !edited.length && !missing.length, [edited.length && `edited: ${edited.join(', ')}`, missing.length && `missing: ${missing.join(', ')}`].filter(Boolean).join('; '));
+  let behind = [];
+  try {
+    const src = bundleSources();
+    behind = names.filter((n) => { const s = lock.skills[n]; const d = join(src[s.bundle] || '', n); return existsSync(d) && hashDir(d) !== s.computedHash; });
+  } catch {}
+  check('up to date with sources', !behind.length, behind.length ? `${behind.length} changed upstream; run factory update` : '', 'warn');
+
+  // CLIs
+  const [maj, min] = process.versions.node.split('.').map(Number);
+  check('node >= 20.16', maj > 20 || (maj === 20 && min >= 16), process.version);
+  const gv = spawnSync('git', ['--version'], { encoding: 'utf8' });
+  check('git', gv.status === 0, (gv.stdout || '').trim());
+  const ghv = spawnSync('gh', ['--version'], { encoding: 'utf8' });
+  check('gh', ghv.status === 0, ghv.status === 0 ? ghv.stdout.split('\n')[0] : 'not found (PR skills need it)', 'warn');
+
+  // local-only: nothing shows in git status
+  if (lock.mode === 'local') {
+    const st = git(root, 'status', '--porcelain', '--untracked-files=all') || '';
+    const ours = st.split('\n').filter((l) => /\.ai-toolkit\/|\.agents\/skills\/|\.claude\/skills/.test(l) && names.some((n) => l.includes(n) || l.includes('.ai-toolkit')));
+    check('local-only install is invisible to git', ours.length === 0, ours.slice(0, 3).join(' | '));
+  }
+
+  // harness discovery: main checkout and a throwaway worktree
+  const hs = harnessesPresent();
+  const wtDir = join(root, '.worktrees', 'test', 'skill-discovery');
+  let wtMade = false;
+  if (!existsSync(wtDir) && git(root, 'worktree', 'add', '--detach', '-q', wtDir) !== null) wtMade = true;
+  try {
+    for (const h of hs) {
+      if (!h.present) { results.push({ name: `harness ${h.name}`, status: 'skip', detail: `${h.bin} not installed` }); continue; }
+      for (const [where, dir] of [['main checkout', root], ['new worktree', wtDir]]) {
+        if (!existsSync(dir)) { check(`harness ${h.name} (${where})`, false, 'could not create a worktree', 'warn'); continue; }
+        const seen = names.filter((n) => existsSync(join(dir, h.dir, n, 'SKILL.md')));
+        let detail = `${seen.length}/${names.length} skills on disk under ${posix(h.dir)}`;
+        let ok = seen.length === names.length;
+        if (opts.live) {
+          const listed = liveList(h, dir);
+          const found = listed ? names.filter((n) => listed.includes(n)) : [];
+          ok = !!listed && found.length === names.length;
+          detail += `; live: ${listed ? `${found.length}/${names.length} listed` : 'harness run failed'}`;
+        }
+        if (!ok && where === 'new worktree' && lock.mode === 'local') detail += '; run factory link in each new worktree';
+        check(`harness ${h.name} (${where})`, ok, detail, where === 'new worktree' && lock.mode === 'local' ? 'warn' : 'fail');
+      }
+    }
+  } finally {
+    if (wtMade) git(root, 'worktree', 'remove', '--force', wtDir);
+  }
+
+  // context budget
+  let listing = 0; const longDesc = [], bigMd = [];
+  for (const n of names) {
+    const md = join(root, '.agents', 'skills', n, 'SKILL.md');
+    if (!existsSync(md)) continue;
+    const fm = frontmatter(md);
+    listing += (fm.name || '').length + (fm.description || '').length;
+    if ((fm.description || '').length > LIMITS.descriptionChars) longDesc.push(`${n} (${fm.description.length})`);
+    if (statSync(md).size > LIMITS.skillMdBytes) bigMd.push(`${n} (${Math.round(statSync(md).size / 1024)} KB)`);
+  }
+  check('context budget', listing <= LIMITS.listingChars && !longDesc.length,
+    `listing ${listing} chars (~${Math.round(listing / 4)} tokens) of ${LIMITS.listingChars}` + (longDesc.length ? `; descriptions over ${LIMITS.descriptionChars}: ${longDesc.join(', ')}` : ''), 'warn');
+  if (bigMd.length) check('SKILL.md size', false, `over 24 KB: ${bigMd.join(', ')}`, 'warn');
+
+  if (opts.json) out(JSON.stringify({ root, results }, null, 2));
+  else {
+    out(`factory doctor: ${root}`);
+    const mark = { ok: 'ok  ', fail: 'FAIL', warn: 'warn', skip: 'skip' };
+    for (const x of results) out(`  ${mark[x.status]} ${x.name}${x.detail ? ` (${x.detail})` : ''}`);
+  }
+  const failed = results.filter((x) => x.status === 'fail').length;
+  if (!opts.json) out(failed ? `${failed} check(s) failed` : 'all checks passed');
+  process.exitCode = failed ? 1 : 0;
+  return results;
+}
+
+// ---------- CLI ----------
+function parse(argv) {
+  const o = { _: [] };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--to' || a === '--marker') { o[a.slice(2)] = argv[++i]; if (o[a.slice(2)] == null) die(`${a} needs a value`, 2); }
+    else if (['--commit', '--local', '--force', '--dry-run', '--all', '--purge', '--live', '--json'].includes(a)) o[a.slice(2).replace(/-(.)/g, (_, c) => c.toUpperCase())] = true;
+    else if (a === '-h' || a === '--help') o.help = true;
+    else if (a.startsWith('--')) die(`unknown flag ${a}`, 2);
+    else o._.push(a);
+  }
+  if (o.commit && o.local) die('--commit and --local are exclusive', 2);
+  return o;
+}
+function help() {
+  const src = readFileSync(import.meta.filename, 'utf8').split('\n');
+  out(src.slice(1, 15).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+}
+
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.meta.filename)) {
+  const [cmd, ...rest] = process.argv.slice(2);
+  const o = parse(rest);
+  if (!cmd || o.help || cmd === 'help') help();
+  else if (cmd === 'install') await install(o._, o);
+  else if (cmd === 'update') await update(o);
+  else if (cmd === 'remove') remove(o._, o);
+  else if (cmd === 'link') link(o);
+  else if (cmd === 'doctor') await doctor(o);
+  else if (cmd === 'list') list(o);
+  else die(`unknown command ${cmd} (see factory help)`, 2);
+}

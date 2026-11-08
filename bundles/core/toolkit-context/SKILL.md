@@ -8,12 +8,12 @@ description: Resolve which project the current directory belongs to and its sett
 Every agent-factory skill asks one script, "which project am I in, and what are its settings?", and never reads config files itself.
 
 ```bash
-node <skills>/toolkit-context/scripts/resolve.mjs                 # JSON, one line
-node <skills>/toolkit-context/scripts/resolve.mjs --field project.trunk
-node <skills>/toolkit-context/scripts/resolve.mjs --pretty        # for a person
+node .agents/skills/toolkit-context/scripts/resolve.mjs                 # JSON, one line
+node .agents/skills/toolkit-context/scripts/resolve.mjs --field project.trunk
+node .agents/skills/toolkit-context/scripts/resolve.mjs --pretty        # for a person
 ```
 
-`<skills>` is the directory this skill is installed in (`.agents/skills` or `.claude/skills`). Other flags: `--cwd <dir>`, `--config <file>`, `--no-cache`, and `--repo <name|owner/name>`, which resolves one registered repo (workspace mode) or this project's neighbor (project mode) instead of the cwd. A neighbor reached this way has `writeAllowed: false` unless its `access` is `write`.
+`factory install` puts skills in `.agents/skills` (with `.claude/skills` linking to it). Other flags: `--cwd <dir>`, `--config <file>`, `--no-cache`, and `--repo <name|owner/name>`, which resolves one registered repo (workspace mode) or this project's neighbor (project mode) instead of the cwd. A neighbor reached this way has `writeAllowed: false` unless its `access` is `write`.
 
 ## Sources, first match wins
 
@@ -45,7 +45,7 @@ Exit codes: 0 ok; 1 `--field` path not present; 2 bad usage, an invalid config, 
 
 ## Config
 
-`.ai-toolkit/project.json` follows `schemas/project.schema.json`. Every field is optional, and detection fills in what's missing. Check a config with `node <skills>/toolkit-context/scripts/validate.mjs [file]`.
+`.ai-toolkit/project.json` follows `schemas/project.schema.json`. Every field is optional, and detection fills in what's missing. Check a config with `node .agents/skills/toolkit-context/scripts/validate.mjs [file]`.
 
 ## Limits
 

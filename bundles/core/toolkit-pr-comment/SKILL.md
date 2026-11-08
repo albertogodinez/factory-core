@@ -23,7 +23,7 @@ Top-level `issues/<N>/comments` posts (`gh pr comment`) are outside this script'
 
 ## 2. Write the body
 
-Write the body to a file under the project's `stateRoot` (`node <skills>/toolkit-context/scripts/resolve.mjs --field stateRoot`; `mkdir -p` it first). Write only the body: the script adds the marker and banner, and refuses a body that already contains the marker.
+Write the body to a file under the project's `stateRoot` (`node .agents/skills/toolkit-context/scripts/resolve.mjs --field stateRoot`; `mkdir -p` it first). Write only the body: the script adds the marker and banner, and refuses a body that already contains the marker.
 
 - One finding or point per comment, on the line it's about.
 - Keep it short: the problem and its consequence, the concrete trigger, the fix as a snippet when it fits in about ten lines, and the test that would pin it.
@@ -38,7 +38,7 @@ Write the body to a file under the project's `stateRoot` (`node <skills>/toolkit
 ## 4. Post with the script
 
 ```bash
-node <skills>/toolkit-pr-comment/scripts/post-comment.mjs \
+node .agents/skills/toolkit-pr-comment/scripts/post-comment.mjs \
   --pr <N> --kind reply|annotation|review --body-file <file> \
   [--repo <owner/name>]                                  # default: this project's upstream, else origin
   [--in-reply-to <COMMENT_ID>]                           # reply: the thread's root comment id
@@ -66,4 +66,4 @@ What the script does:
 
 For each comment: the kind, `path:line` or the thread, the outcome (posted, added to pending review, skipped, or dropped), and the URL. Remind the user when anything is waiting in their pending review.
 
-Tests: `node --test <skills>/toolkit-pr-comment/scripts/post-comment.test.mjs` (in agent-factory; it uses a fake `gh`).
+Tests: `node --test .agents/skills/toolkit-pr-comment/scripts/post-comment.test.mjs` (in agent-factory; it uses a fake `gh`).
