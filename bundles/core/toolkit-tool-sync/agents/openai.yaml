@@ -1,0 +1,5 @@
+interface:
+  display_name: "Tool sync"
+  short_description: "Check the CLIs the skills depend on and review new releases"
+policy:
+  allow_implicit_invocation: false

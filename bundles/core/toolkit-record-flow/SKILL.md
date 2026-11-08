@@ -29,8 +29,9 @@ the flow from the project's feature map if it has one.
   `scripts/record-lib.sh` checks and refuses older versions. If the one on `PATH` is older, set
   `AGENT_BROWSER_BIN` to a 0.38+ binary; the session must have been started by that same version.
 - `ffmpeg` and `ffprobe` for `scripts/encode.sh`; `jq` and `python3` for `scripts/record-lib.sh`.
-- **Windows:** `record-lib.sh`, `take-template.sh` and `encode.sh` are bash. Run them in WSL or Git
-  Bash; there is no `.mjs` port yet. `side-by-side.mjs`, `caption.mjs` and `build-page.mjs` are plain
+- **Windows:** `record-lib.sh`, `take-template.sh` and `encode.sh` are bash and stay that way: they
+  drive agent-browser and ffmpeg through shell loops, and `record-lib.sh` is sourced into the take
+  script. Run them in WSL or Git Bash. `side-by-side.mjs`, `caption.mjs` and `build-page.mjs` are plain
   Node and run anywhere with `ffmpeg` on `PATH`.
 
 ## Steps

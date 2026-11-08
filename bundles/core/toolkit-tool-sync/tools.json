@@ -1,0 +1,31 @@
+{
+  "snapshotMaxAgeDays": 14,
+  "tools": [
+    {
+      "id": "node",
+      "version": { "argv": ["node", "--version"], "pattern": "v(\\d+\\.\\d+\\.\\d+)" },
+      "usage": "\\bnode\\b",
+      "min": "20.16.0",
+      "install": "nvm install 20, or the installer from nodejs.org",
+      "notes": "Every skill script is a .mjs that imports only node: modules. Node 20.16 is the lowest the resolver and test runner support."
+    },
+    {
+      "id": "git",
+      "version": { "argv": ["git", "--version"], "pattern": "git version (\\d+\\.\\d+(?:\\.\\d+)?)" },
+      "usage": "\\bgit (worktree|diff|rev-parse|ls-files|log|status|remote|branch|merge-base|show)\\b",
+      "min": "2.30.0",
+      "install": "brew install git, or the installer from git-scm.com",
+      "notes": "Worktree commands (add --detach, remove, prune, list) need a git that has them; 2.30 is well past that."
+    },
+    {
+      "id": "gh",
+      "version": { "argv": ["gh", "--version"], "pattern": "gh version (\\d+\\.\\d+\\.\\d+)" },
+      "usage": "\\bgh (api|pr|auth|release|repo|stack|issue|run|search)\\b",
+      "min": "2.100.0",
+      "verified": "2.103.3",
+      "latest": { "type": "github", "repo": "cli/cli" },
+      "install": "brew upgrade gh, or https://cli.github.com",
+      "notes": "2.100.0 for `gh pr create --attach` (toolkit-pr-create). 2.97.0 misreports a DNS failure as an invalid token."
+    }
+  ]
+}

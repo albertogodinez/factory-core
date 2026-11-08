@@ -2,7 +2,7 @@
 // run-hooks.mjs --run <dir> --diff <diff.txt> --repo-path <dir> --head <sha> [--personas a,b] [--packs a:b]
 // Without --personas it uses the dispatched personas in <run>/personas.json (from resolve-personas.mjs).
 // Runs the context hooks that installed persona packs declare in their pack.json, then prints
-// what each one produced. Run it after literal-sweep.sh, because hooks may read sweep-hits.tsv.
+// what each one produced. Run it after literal-sweep.mjs, because hooks may read sweep-hits.tsv.
 //
 // pack.json: { "context": [ { "name", "whenPersonas": [..], "command": [..], "output": "file.md",
 //                             "consumers": [..] } ],

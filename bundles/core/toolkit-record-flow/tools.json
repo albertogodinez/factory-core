@@ -1,0 +1,49 @@
+{
+  "tools": [
+    {
+      "id": "agent-browser",
+      "version": {
+        "argv": [
+          "agent-browser",
+          "--version"
+        ],
+        "pattern": "(\\d+\\.\\d+\\.\\d+)"
+      },
+      "usage": "\\bagent-browser\\b",
+      "min": "0.38.0",
+      "verified": "0.41.0",
+      "latest": {
+        "type": "npm",
+        "package": "agent-browser"
+      },
+      "install": "npm install -g agent-browser@<version>",
+      "notes": "0.38 added `record start --cursor` and `mouse move --human` (toolkit-record-flow).",
+      "reviewed": "2026-10-29",
+      "decision": "adopted: record-flow cursor recording unchanged on 0.41.0"
+    },
+    {
+      "id": "ffmpeg",
+      "version": {
+        "argv": [
+          "ffmpeg",
+          "-version"
+        ],
+        "pattern": "ffmpeg version (\\S+)"
+      },
+      "usage": "\\bffmpeg\\b",
+      "install": "brew install ffmpeg"
+    },
+    {
+      "id": "jq",
+      "version": {
+        "argv": [
+          "jq",
+          "--version"
+        ],
+        "pattern": "jq-(\\d+\\.\\d+(\\.\\d+)?)"
+      },
+      "usage": "\\bjq\\b",
+      "install": "brew install jq"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "tools": [
+    {
+      "id": "mise",
+      "version": {
+        "argv": [
+          "mise",
+          "--version"
+        ],
+        "pattern": "(\\d+\\.\\d+\\.\\d+)"
+      },
+      "usage": "\\bmise\\b",
+      "install": "brew install mise",
+      "notes": "statechart installs TLC 1.7.4 and Java (temurin-25) through mise on first run; without it, set TLA2TOOLS and JAVA instead."
+    }
+  ]
+}

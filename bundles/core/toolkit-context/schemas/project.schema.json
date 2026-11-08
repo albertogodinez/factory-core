@@ -75,8 +75,30 @@
     },
     "mining": {
       "type": "object",
-      "description": "toolkit-pr-mining settings for this repo: reviewer cohort, bots, path scope.",
-      "additionalProperties": true
+      "additionalProperties": false,
+      "description": "toolkit-pr-mining settings for this repo: reviewer cohort, bot policy, path scope.",
+      "properties": {
+        "cohort": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Bare reviewer logins whose comments count as human evidence." },
+        "loginSuffix": { "type": "string", "description": "Appended to a cohort login in GitHub search queries when the host's account names carry one. Output keeps bare logins." },
+        "bots": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mine": { "type": "boolean", "description": "Run the bot discovery axis by default. Default: false" },
+            "minOccurrenceUnits": { "type": "integer", "description": "Evidence bar for a pattern only bots raised. Default: 5" },
+            "minVerified": { "type": "integer", "description": "Occurrences that must be checked against the code. Default: 2" }
+          }
+        },
+        "paths": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "include": { "type": "array", "items": { "type": "string" }, "description": "Repo-relative directory prefixes in scope. Empty or absent: the whole repo." },
+            "exclude": { "type": "array", "items": { "type": "string" }, "description": "Prefixes removed from scope. Wins over include." },
+            "pathlessBodies": { "enum": ["scoped-pr-only", "never"], "description": "Keep a review body with no path only on a PR wholly in scope (default) or never." }
+          }
+        }
+      }
     }
   },
   "$defs": {

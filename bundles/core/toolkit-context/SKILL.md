@@ -45,7 +45,7 @@ Exit codes: 0 ok; 1 `--field` path not present; 2 bad usage, an invalid config, 
 
 ## Config
 
-`.ai-toolkit/project.json` follows `schemas/project.schema.json`. Every field is optional, and detection fills in what's missing. Check a config with `node .agents/skills/toolkit-context/scripts/validate.mjs [file]`.
+`.ai-toolkit/project.json` follows `schemas/project.schema.json`. Every field is optional, and detection fills in what's missing. Check a config with `node .agents/skills/toolkit-context/scripts/validate.mjs [file]`. The `adapters` values (tracker, personas, comment marker, env profile) name installed skills; their contracts are in `references/adapters.md`.
 
 ## Limits
 
