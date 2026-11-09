@@ -2,7 +2,10 @@
 // Clear `pending_pr` from feature-map entries whose PR has merged. Run it after a merge
 // (toolkit-pr-ci-monitor, teardown). It reads each PR's state with gh, so it is not a pre-commit check.
 //
-//   node clear-pending-prs.mjs [--pr <url>] [--cwd <dir>] [--apply]
+//   node clear-pending-prs.mjs [--pr <url>] [--cwd <dir> | --skills-dir <dir>] [--apply]
+//
+// --skills-dir scans a directory of skills instead of the project's .agents/skills: a bundle
+// source, where a map installed in other repos is edited.
 //
 // Without --apply it reports what it would do. Per entry:
 //   MERGED  -> remove the pending_pr line (with --apply)
@@ -31,8 +34,7 @@ export function withoutPendingPr(text) {
   return text.slice(0, end + 1).replace(LINE, '') + text.slice(end + 1);
 }
 
-function entries(root) {
-  const skills = join(root, '.agents/skills');
+export function entries(skills) {
   if (!existsSync(skills)) return [];
   return readdirSync(skills)
     .filter((name) => name.startsWith(MAP_PREFIX))
@@ -54,18 +56,23 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   const value = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
   const apply = argv.includes('--apply');
   const only = value('--pr');
-  if ((argv.includes('--pr') && !only) || (argv.includes('--cwd') && !value('--cwd'))) {
-    console.error('usage: clear-pending-prs.mjs [--pr <url>] [--cwd <dir>] [--apply]');
+  const flagWithoutValue = ['--pr', '--cwd', '--skills-dir'].some((f) => argv.includes(f) && !value(f));
+  if (flagWithoutValue || (argv.includes('--cwd') && argv.includes('--skills-dir'))) {
+    console.error('usage: clear-pending-prs.mjs [--pr <url>] [--cwd <dir> | --skills-dir <dir>] [--apply]');
     process.exit(2);
   }
-  let root;
-  try {
-    root = resolveContext({ cwd: value('--cwd') ?? process.cwd() }).project.root;
-  } catch (error) {
-    console.error(`clear-pending-prs: ${error.message}`);
-    process.exit(2);
+  let root, skills = value('--skills-dir');
+  if (skills) root = skills;
+  else {
+    try {
+      root = resolveContext({ cwd: value('--cwd') ?? process.cwd() }).project.root;
+    } catch (error) {
+      console.error(`clear-pending-prs: ${error.message}`);
+      process.exit(2);
+    }
+    skills = join(root, '.agents/skills');
   }
-  const pending = entries(root).map((file) => ({ file, text: readFileSync(file, 'utf8') }))
+  const pending = entries(skills).map((file) => ({ file, text: readFileSync(file, 'utf8') }))
     .map((e) => ({ ...e, url: pendingPrOf(e.text) }))
     .filter((e) => e.url && (!only || e.url === only));
   if (!pending.length) console.log(`no entry has pending_pr${only ? ` ${only}` : ''}`);

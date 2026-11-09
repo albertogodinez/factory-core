@@ -14,3 +14,18 @@ test('reads pending_pr from the frontmatter only', () => {
 test('removing it leaves the rest of the entry byte for byte', () => {
   assert.equal(withoutPendingPr(entry(`pending_pr: ${URL}\n`)), entry(''));
 });
+
+test('entries lists map entries in a skills directory, such as a bundle source', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { entries } = await import('./clear-pending-prs.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'fm-skills-'));
+  mkdirSync(join(dir, 'toolkit-features-app', 'features'), { recursive: true });
+  mkdirSync(join(dir, 'other-skill', 'features'), { recursive: true });
+  writeFileSync(join(dir, 'toolkit-features-app', 'features', 'a.md'), entry(''));
+  writeFileSync(join(dir, 'toolkit-features-app', 'features', 'README.md'), '# index\n');
+  writeFileSync(join(dir, 'other-skill', 'features', 'b.md'), entry(''));
+  assert.deepEqual(entries(dir), [join(dir, 'toolkit-features-app', 'features', 'a.md')]);
+  assert.deepEqual(entries(join(dir, 'missing')), []);
+});

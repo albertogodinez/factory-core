@@ -80,6 +80,8 @@ node .agents/skills/toolkit-feature-map/scripts/clear-pending-prs.mjs --pr <PR U
 
 Removes `pending_pr` from entries whose PR merged, and flags one whose PR closed unmerged. It reads PR state with `gh`, so it never runs as a pre-commit check. Without `--apply` it reports only. Commit the change.
 
+When the map is installed from a bundle, edit it in the bundle's source, not in the installed copy (`factory update` refuses to overwrite an edited one): pass `--skills-dir <bundle dir>`, commit there, then run `factory update` in the repos that install it.
+
 ## Design authority
 
 For a design-fidelity check, resolve one source before loading source-specific instructions:
