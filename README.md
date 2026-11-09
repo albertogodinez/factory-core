@@ -222,6 +222,7 @@ Codex may be the daily driver on another machine. `factory doctor` therefore run
    - CLI versions
    - harness discovery, from the main checkout and from a throwaway worktree
    - the context budget
+   - host linters: a warning when the repo's oxlint, ESLint or Biome would lint the installed skills' scripts under its own rules, with the ignore line to add (install prints the same warning)
 4. Start sessions in the repo.
 
 Keep the resolver and scripts fast, small and free of dependencies. On Windows, `factory` copies skills instead of linking them, and every script runs without a shell.
