@@ -745,6 +745,11 @@ function status(opts) {
   if (!root) return;
   const line = statusLine(root);
   if (line) out(line);
+  // A linked worktree of a local-only install sees the skills only after `factory link`.
+  if (root === g.mainRoot && g.toplevel !== g.mainRoot && lockOf(root).mode === 'local') {
+    const missing = Object.keys(lockOf(root).skills).filter((n) => !existsSync(join(g.toplevel, '.agents', 'skills', n, 'SKILL.md')));
+    if (missing.length) out(`agent-factory: this worktree can't see ${missing.length} installed skill(s). Link them: node ${join(FACTORY, 'bin', 'factory.mjs')} link`);
+  }
 }
 
 // ---------- CLI ----------

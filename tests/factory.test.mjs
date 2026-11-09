@@ -118,7 +118,12 @@ test('local-only install: git status stays clean, the team\'s tracked skill is u
   git(d, 'worktree', 'add', '-q', '.worktrees/feat/x', '-b', 'feat/x');
   const wt = join(d, '.worktrees/feat/x');
   assert.ok(!existsSync(join(wt, '.agents/skills/toolkit-context')));
+  let st = factory(['status'], wt);
+  assert.equal(st.status, 0);
+  assert.match(st.out, /this worktree can't see \d+ installed skill\(s\)\. Link them: node .*factory\.mjs link/);
   assert.equal(factory(['link'], wt).status, 0);
+  assert.doesNotMatch(factory(['status'], wt).out, /can't see/, 'linked: no hint');
+  assert.doesNotMatch(factory(['status'], d).out, /can't see/, 'the main checkout never gets the hint');
   assert.ok(existsSync(join(wt, '.agents/skills/toolkit-context/SKILL.md')));
   assert.equal(porcelain(wt), '', 'links are excluded too');
   const ctx = spawnSync(process.execPath, [join(wt, '.agents/skills/toolkit-context/scripts/resolve.mjs'), '--field', 'stateRoot'], { cwd: wt, encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: home, AI_TOOLKIT_CONFIG: '' } });
