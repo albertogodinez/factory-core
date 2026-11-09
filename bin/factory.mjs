@@ -98,6 +98,60 @@ function frontmatter(skillMd) {
   return fm;
 }
 
+// Host linters that would lint the installed skills' scripts under the host's own rules. A
+// skill is owned upstream and overwritten on update, so the host should skip both directories
+// (.claude/skills holds symlinks that linters follow, so it counts too). Text heuristics only:
+// a config or ignore file that names both directories counts as skipping them, and so does a
+// package.json script that runs the linter only on paths outside them (`eslint src/**`).
+const JS_EXT = /\.(m|c)?[jt]sx?$/;
+const VALUE_FLAGS = new Set(['--ext', '--config', '-c', '--config-path', '--format', '-f', '--rule', '--plugin', '--ignore-pattern', '--ignore-path', '--max-warnings', '--output-file', '-o', '--tsconfig']);
+// For each script invocation of `tool`: does it lint the repo root or the skill directories?
+// Returns null when no script runs it (an editor or CI may still), else true/false.
+function scriptReaches(scripts, tool) {
+  let seen = false, reaches = false;
+  for (const cmd of scripts) for (const seg of cmd.split(/&&|\|\||;|\|/)) {
+    const tok = seg.trim().split(/\s+/);
+    const i = tok.findIndex((x) => x === tool || x.endsWith(`/${tool}`));
+    if (i < 0) continue;
+    seen = true;
+    const paths = [];
+    for (let j = i + 1; j < tok.length; j++) {
+      const x = tok[j];
+      if (x.startsWith('-')) { if (VALUE_FLAGS.has(x)) j++; continue; }
+      if (tool === 'biome' && ['lint', 'check', 'ci', 'format'].includes(x)) continue;
+      paths.push(x.replace(/^["']|["']$/g, ''));
+    }
+    if (!paths.length || paths.some((p) => /^(\.\/?|\*.*|\.agents.*|\.claude.*)$/.test(p))) reaches = true;
+  }
+  return seen ? reaches : null;
+}
+function lintersCoveringSkills(root) {
+  const read = (f) => { try { return readFileSync(join(root, f), 'utf8'); } catch { return null; } };
+  const skips = (...texts) => { const s = texts.filter(Boolean).join('\n'); return /\.agents\b/.test(s) && /\.claude\b/.test(s); };
+  let files = []; try { files = readdirSync(root); } catch {}
+  const scripts = Object.values(readJson(join(root, 'package.json'), {})?.scripts || {});
+  const viaScripts = (tool) => scriptReaches(scripts, tool) !== false;
+  const out = [];
+  // oxlint: lints every JS/TS file unless ignored; runs with built-in rules even with no config.
+  const ox = files.find((f) => /^\.?oxlintrc(\.json|\.jsonc)?$|^oxlint\.json$/.test(f));
+  if ((ox || scriptReaches(scripts, 'oxlint')) && viaScripts('oxlint') && !skips(ox && read(ox), read('.oxlintignore'), read('.eslintignore')))
+    out.push({ tool: 'oxlint', file: ox || 'package.json', fix: 'add ".agents/skills/**", ".claude/skills/**" to ignorePatterns' });
+  // ESLint: flat config ignores only node_modules and .git by default.
+  const es = files.find((f) => /^eslint\.config\.(m|c)?[jt]s$|^\.eslintrc(\.\w+)?$/.test(f));
+  if (es && viaScripts('eslint') && !skips(read(es), read('.eslintignore')))
+    out.push({ tool: 'eslint', file: es, fix: es.startsWith('eslint.config') ? 'add { ignores: [".agents/skills/**", ".claude/skills/**"] }' : 'add both directories to ignorePatterns' });
+  // Biome: lints JS/TS by default; a files.includes list with no JS-capable entry leaves skills alone.
+  const bi = files.find((f) => /^biome\.jsonc?$/.test(f));
+  if (bi) {
+    const text = read(bi) || '';
+    const inc = /"includes"\s*:\s*\[([^\]]*)\]/.exec(text);
+    const positives = inc ? [...inc[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).filter((p) => !p.startsWith('!')) : null;
+    const reaches = !positives || positives.some((p) => (/^(\*\*|\.agents|\.claude|\*)/.test(p)) && (JS_EXT.test(p) || !/\.[a-z]+$/i.test(p)));
+    if (reaches && viaScripts('biome') && !skips(text)) out.push({ tool: 'biome', file: bi, fix: 'add "!.agents/skills", "!.claude/skills" to files.includes' });
+  }
+  return out;
+}
+
 // ---------- target repo ----------
 function target(opts, { forLocal } = {}) {
   const start = resolve(opts.to || process.cwd());
@@ -328,6 +382,7 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
   if (!report.length) out('  nothing to change');
   for (const e of edited) warn(`${e}: the installed copy was edited, so it wasn't updated. Move your change into the bundle, or pass --force to overwrite it.`);
   for (const c of conflicts) warn(c);
+  for (const l of lintersCoveringSkills(root)) warn(`${l.tool} (${l.file}) will lint the installed skills' scripts under this repo's rules: ${l.fix}.`);
   if (mode === 'commit' && !opts.dryRun && report.length) {
     out(`\nCommit the install: git -C ${root} add .agents/skills .claude/skills .ai-toolkit skills-lock.json && git -C ${root} commit -m "chore: install agent-factory ${bundleNames.join(' ')}"`);
   }
@@ -545,6 +600,10 @@ async function doctor(opts) {
   check('context budget', listing <= LIMITS.listingChars && !longDesc.length,
     `listing ${listing} chars (~${Math.round(listing / 4)} tokens) of ${LIMITS.listingChars}` + (longDesc.length ? `; descriptions over ${LIMITS.descriptionChars}: ${longDesc.join(', ')}` : ''), 'warn');
   if (bigMd.length) check('SKILL.md size', false, `over 24 KB: ${bigMd.join(', ')}`, 'warn');
+
+  // host linters
+  const linters = lintersCoveringSkills(root);
+  check('host linters skip installed skills', !linters.length, linters.map((l) => `${l.tool} (${l.file}): ${l.fix}`).join('; '), 'warn');
 
   if (opts.json) out(JSON.stringify({ root, results }, null, 2));
   else {

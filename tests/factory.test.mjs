@@ -182,3 +182,48 @@ test('update from a linked worktree finds a committed install made in that workt
   assert.equal(r.status, 0, r.err);
   assert.match(r.out, new RegExp(`update core → ${wt}`));
 });
+
+test('host linters: install and doctor warn when a linter would lint the installed skills', () => {
+  const line = (out) => out.split('\n').find((l) => l.includes('host linters skip installed skills')) || '';
+  // oxlint with no ignore for the skills, and ESLint flat config: both reported.
+  const a = join(t.root, 'lint-a');
+  makeRepo(a, { remote: 'git@github.com:me/lint-a.git', files: {
+    '.oxlintrc.json': '{\n  // comment\n  "ignorePatterns": ["dist/**"]\n}\n',
+    'eslint.config.mjs': 'export default [{ ignores: ["dist/**"] }];\n',
+  } });
+  const ia = factory(['install', 'core', '--commit'], a);
+  assert.equal(ia.status, 0, ia.err);
+  assert.match(ia.err, /oxlint \(\.oxlintrc\.json\) will lint the installed skills' scripts/);
+  assert.match(ia.err, /eslint \(eslint\.config\.mjs\)/);
+  const da = factory(['doctor'], a);
+  assert.equal(da.status, 0, 'a warning, not a failure');
+  assert.match(line(da.out), /warn .*oxlint.*ignorePatterns.*eslint.*ignores/);
+  // Ignores in place, Biome limited to CSS, oxlint only in package.json scripts with an ignore file.
+  const b = join(t.root, 'lint-b');
+  makeRepo(b, { remote: 'git@github.com:me/lint-b.git', files: {
+    '.oxlintrc.json': '{ "ignorePatterns": [".agents/skills/**", ".claude/skills/**"] }\n',
+    'biome.jsonc': '{ "files": { "includes": ["**/*.css", "!dist"] } }\n',
+  } });
+  assert.equal(factory(['install', 'core', '--commit'], b).status, 0);
+  assert.match(line(factory(['doctor'], b).out), /ok {3}host linters/);
+  // Biome with no includes lints JS everywhere; oxlint via a script with no config.
+  const c = join(t.root, 'lint-c');
+  makeRepo(c, { remote: 'git@github.com:me/lint-c.git', files: {
+    'biome.json': '{ "linter": { "enabled": true } }\n',
+    'package.json': { name: 'c', scripts: { lint: 'oxlint && biome lint .' } },
+  } });
+  assert.equal(factory(['install', 'core', '--commit'], c).status, 0);
+  const lc = line(factory(['doctor'], c).out);
+  assert.match(lc, /oxlint \(package\.json\)/); assert.match(lc, /biome \(biome\.json\): add "!\.agents\/skills"/);
+  // A lint script that names only paths outside the skills (eslint src/**) doesn't reach them.
+  const e = join(t.root, 'lint-e');
+  makeRepo(e, { remote: 'git@github.com:me/lint-e.git', files: {
+    'eslint.config.js': 'export default [];\n',
+    'package.json': { name: 'e', scripts: { lint: 'eslint src/** --ext .ts,.tsx --no-error-on-unmatched-pattern', 'lint:pg': 'pnpm -r lint && eslint playground/src' } },
+  } });
+  assert.equal(factory(['install', 'core', '--commit'], e).status, 0);
+  assert.match(line(factory(['doctor'], e).out), /ok {3}host linters/);
+  // The same config with `eslint .` does.
+  write(join(e, 'package.json'), { name: 'e', scripts: { lint: 'eslint .' } });
+  assert.match(line(factory(['doctor'], e).out), /warn host linters .*eslint \(eslint\.config\.js\)/);
+});
