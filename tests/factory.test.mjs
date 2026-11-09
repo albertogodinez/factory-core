@@ -400,6 +400,11 @@ test('status --hook: a running session hears once about an update or an edited c
   assert.match(said, /updated since this session last checked: alpha \(hook-src [0-9a-f]+\)\. If you read one of them earlier in this session, read its SKILL\.md again/);
   assert.doesNotMatch(said, /beta/);
   assert.equal(hook('s1', 'UserPromptSubmit'), '', 'said once');
+  appendFileSync(join(src, 'bundles/hb/alpha/SKILL.md'), 'another rule\n');
+  git(src, 'commit', '-qam', 'alpha changes again');
+  assert.equal(factory(['update'], d, env).status, 0);
+  assert.match(hook('s1', 'SessionStart'), /updated since this session last checked: alpha/, 'a resumed session hears about updates made while it was closed');
+  assert.equal(hook('s1', 'UserPromptSubmit'), '', 'and only once');
   assert.equal(hook('s2', 'SessionStart') + hook('s2', 'UserPromptSubmit'), '', 'a session started after the update already has it');
 
   const copy = join(d, '.agents/skills/beta/SKILL.md');

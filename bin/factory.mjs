@@ -840,7 +840,9 @@ function hookStatus(opts) {
         for (const f of readdirSync(SESSIONS())) if (now - statSync(join(SESSIONS(), f)).mtimeMs > 7 * 864e5) rmSync(join(SESSIONS(), f), { force: true });
       } catch {}
     }
-  } else {
+  }
+  // A resumed session (Codex fires SessionStart on resume too) still hears about updates made while it was closed.
+  if (state) {
     const ups = updatesSince(g.mainRoot, state.seen);
     const names = [...new Set(ups.flatMap((e) => e.skills.map((x) => x.name)))].sort();
     if (names.length) {
