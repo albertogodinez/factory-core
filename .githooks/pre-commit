@@ -6,3 +6,7 @@ node tests/run.mjs
 if git diff --cached --name-only | grep -q '^bundles/core/toolkit-context/'; then
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE node --test --test-reporter=dot tests/guardrails/resolver.guard.mjs
 fi
+# Status guardrails (a SessionStart hook runs it every session) run when the CLI changes.
+if git diff --cached --name-only | grep -q '^bin/factory.mjs$'; then
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE node --test --test-reporter=dot tests/guardrails/status.guard.mjs
+fi

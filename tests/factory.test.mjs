@@ -324,3 +324,34 @@ test('update after a bundle moves to another repo relocks the entries without co
   assert.doesNotMatch(r.out, /relock/);
   assert.equal(factory(['doctor'], d, env).status, 0);
 });
+
+test('status: silent when current; one line naming changed and new skills; silent outside an install', () => {
+  const h = join(t.root, 'home-status'); mkdirSync(h);
+  const src = join(t.root, 'status-src');
+  const skill = (n) => `---\nname: ${n}\ndescription: A ${n} skill.\n---\n# ${n}\n`;
+  makeRepo(src, { files: { 'bundles/b/one/SKILL.md': skill('one'), 'bundles/b/two/SKILL.md': skill('two'), 'other/file.txt': 'x\n' } });
+  const env = { AI_TOOLKIT_HOME: h };
+  write(join(h, 'sources.json'), { core: CORE, b: join(src, 'bundles', 'b') });
+  const d = personalRepo('pstatus');
+  assert.equal(factory(['install', 'core', 'b', '--commit'], d, env).status, 0);
+  let r = factory(['status'], d, env);
+  assert.equal(r.status, 0); assert.equal(r.out, '', 'current: silent');
+
+  // A commit outside the skill's directory is not a change to it.
+  write(join(src, 'other', 'file.txt'), 'y\n'); git(src, 'commit', '-qam', 'other');
+  assert.equal(factory(['status'], d, env).out, '');
+
+  appendFileSync(join(src, 'bundles/b/one/SKILL.md'), 'more\n');
+  write(join(src, 'bundles/b/three/SKILL.md'), skill('three'));
+  git(src, 'add', '-A'); git(src, 'commit', '-qm', 'change one, add three');
+  r = factory(['status'], d, env);
+  assert.equal(r.status, 0);
+  assert.match(r.out, /^agent-factory: skills 1 \(b: one\) changed upstream, 1 \(b: three\) new\. Update: node .*factory\.mjs update\n$/);
+  assert.equal(factory(['status'], d, env).out, r.out, 'the cached answer is the same');
+
+  assert.equal(factory(['update'], d, env).status, 0);
+  assert.equal(factory(['status'], d, env).out, '', 'after update: silent');
+  const bare = join(t.root, 'no-install'); makeRepo(bare);
+  assert.equal(factory(['status'], bare, env).out, '');
+  assert.equal(factory(['status'], t.root, env).status, 0, 'outside git: exit 0');
+});

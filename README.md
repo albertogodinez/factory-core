@@ -180,7 +180,16 @@ node factory.mjs remove <skill|bundle>
 node factory.mjs link                 # add the skills to the current worktree (local-only installs)
 node factory.mjs doctor               # onboarding tests
 node factory.mjs list
+node factory.mjs status               # one line when installed skills are behind their source; else silent
 ```
+
+`status` is the session-start drift check. A user-level SessionStart hook runs it in Claude Code (`~/.claude/settings.json`) and Codex (`~/.codex/hooks.json`), so no team repo's tracked settings change:
+
+```json
+{ "type": "command", "command": "node '<agent-factory>/bin/factory.mjs' status 2>/dev/null || true", "timeout": 5 }
+```
+
+It checks only the repo the session starts in. A skill is behind when a commit after its `sourceRev` touched its directory in the bundle's repo, and a bundle skill the repo lacks counts as new. There's no hashing. When a source repo's HEAD or the lock changed, it runs one `git log` per source repo. Otherwise it answers from `~/.ai-toolkit/status-cache.json` without spawning git. `tests/guardrails/status.guard.mjs` holds those limits. Uncommitted bundle edits don't count, and `doctor`'s hash check still catches them.
 
 `install` does the following:
 

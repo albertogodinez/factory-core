@@ -9,6 +9,7 @@
 //   factory link [--to <worktree>]
 //   factory doctor [--to <repo>] [--live] [--json]
 //   factory list [--to <repo>]
+//   factory status [--to <repo>]          one line when installed skills are behind; else silent
 //
 // Bundles: core (this repo), expedia and trips (../eg-agent-kit). Override
 // a bundle's path in ~/.ai-toolkit/sources.json: {"expedia": "/path/to/bundles/expedia"}.
@@ -659,6 +660,93 @@ async function doctor(opts) {
   return results;
 }
 
+// ---------- status: the session-start drift check ----------
+// Cheap enough for a SessionStart hook: no hashing, and one `git log` per source repo only when that
+// repo's HEAD or the lock changed since the last run (the answer is cached under ~/.ai-toolkit). A
+// skill is behind when a commit after its sourceRev touched its directory; a bundle skill missing
+// from the lock is new (update would add it). Uncommitted bundle edits don't count. Silent when the
+// repo has no install or a bundle's source isn't on this machine; always exits 0.
+function headOf(g) {
+  // HEAD from the filesystem, so a cache hit spawns nothing. null when it can't be read cheaply.
+  let head; try { head = readFileSync(join(g.gitDir, 'HEAD'), 'utf8').trim(); } catch { return null; }
+  if (!head.startsWith('ref: ')) return head;
+  const ref = head.slice(5);
+  try { return readFileSync(join(g.commonDir, ref), 'utf8').trim(); } catch {}
+  try { return (readFileSync(join(g.commonDir, 'packed-refs'), 'utf8').split('\n').find((l) => l.endsWith(` ${ref}`)) || '').split(' ')[0] || null; } catch { return null; }
+}
+export function drift(root, sources = bundleSources(), { maxCommits = 2000 } = {}) {
+  const lock = lockOf(root);
+  const byBundle = {};
+  for (const [n, s] of Object.entries(lock.skills || {})) (byBundle[s.bundle] ||= []).push([n, s]);
+  const behind = {}, added = {};
+  const repos = new Map(); // repo toplevel -> [{ b, prefix, skills }]
+  for (const [b, skills] of Object.entries(byBundle)) {
+    const dir = sources[b];
+    if (!dir || !existsSync(dir)) continue;
+    for (const e of readdirSync(dir)) if (!lock.skills[e] && existsSync(join(dir, e, 'SKILL.md'))) (added[b] ||= []).push(e);
+    const g = findGit(dir, null, true);
+    if (!g) continue;
+    const prefix = posix(relative(g.toplevel, dir));
+    if (!repos.has(g.toplevel)) repos.set(g.toplevel, []);
+    repos.get(g.toplevel).push({ b, prefix: prefix ? `${prefix}/` : '', skills });
+  }
+  for (const [top, bundles] of repos) {
+    const log = git(top, 'log', `-n${maxCommits}`, '--format=%x00%H', '--name-only', 'HEAD');
+    if (log == null) continue;
+    const pending = bundles.flatMap(({ b, prefix, skills }) => skills.filter(([, s]) => s.sourceRev).map(([n, s]) => ({ b, key: `${prefix}${n}`, n, rev: s.sourceRev })));
+    const touched = new Set();
+    for (const block of log.split('\0').slice(1)) {
+      if (!pending.length) break;
+      const [sha, ...files] = block.split('\n').filter(Boolean);
+      for (let i = pending.length - 1; i >= 0; i--) {
+        const p = pending[i];
+        if (!sha.startsWith(p.rev)) continue;
+        if (touched.has(p.key)) (behind[p.b] ||= []).push(p.n);
+        pending.splice(i, 1);
+      }
+      for (const f of files) for (const { prefix } of bundles) {
+        if (prefix && !f.startsWith(prefix)) continue;
+        touched.add(prefix + f.slice(prefix.length).split('/')[0]);
+      }
+    }
+  }
+  for (const m of [behind, added]) for (const k in m) m[k].sort();
+  return { behind, added };
+}
+function statusLine(root) {
+  const sources = bundleSources();
+  const lockFile = join(root, LOCK);
+  const heads = {};
+  for (const b of Object.keys(sources).sort()) {
+    const g = existsSync(sources[b]) ? findGit(sources[b], null, true) : null;
+    heads[b] = g ? headOf(g) : null;
+  }
+  let mtime = 0; try { mtime = statSync(lockFile).mtimeMs; } catch {}
+  const key = JSON.stringify({ mtime, sources, heads });
+  const cacheFile = join(toolkitHome(), 'status-cache.json');
+  const cache = readJson(cacheFile, {});
+  if (cache[root]?.key === key && Object.values(heads).every(Boolean)) return cache[root].line;
+  const { behind, added } = drift(root, sources);
+  const list = (m) => {
+    const parts = Object.entries(m).map(([b, ns]) => `${b}: ${ns.slice(0, 4).join(', ')}${ns.length > 4 ? ` +${ns.length - 4}` : ''}`);
+    return `${Object.values(m).flat().length} (${parts.join('; ')})`;
+  };
+  const bits = [];
+  if (Object.keys(behind).length) bits.push(`${list(behind)} changed upstream`);
+  if (Object.keys(added).length) bits.push(`${list(added)} new`);
+  const line = bits.length ? `agent-factory: skills ${bits.join(', ')}. Update: node ${join(FACTORY, 'bin', 'factory.mjs')} update` : '';
+  try { cache[root] = { key, line }; writeJson(cacheFile, cache); } catch {}
+  return line;
+}
+function status(opts) {
+  const g = findGit(resolve(opts.to || process.cwd()), null, true);
+  if (!g) return;
+  const root = [g.toplevel, g.mainRoot].find((r) => existsSync(join(r, LOCK)) && Object.keys(lockOf(r).skills || {}).length);
+  if (!root) return;
+  const line = statusLine(root);
+  if (line) out(line);
+}
+
 // ---------- CLI ----------
 function parse(argv) {
   const o = { _: [] };
@@ -688,5 +776,6 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.met
   else if (cmd === 'link') link(o);
   else if (cmd === 'doctor') await doctor(o);
   else if (cmd === 'list') list(o);
+  else if (cmd === 'status') { try { status(o); } catch {} process.exitCode = 0; }
   else die(`unknown command ${cmd} (see factory help)`, 2);
 }

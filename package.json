@@ -8,7 +8,7 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
     "test": "node tests/run.mjs",
-    "test:guardrails": "node --test tests/guardrails/resolver.guard.mjs"
+    "test:guardrails": "node --test tests/guardrails/resolver.guard.mjs tests/guardrails/status.guard.mjs"
   },
   "engines": { "node": ">=20.16" }
 }
