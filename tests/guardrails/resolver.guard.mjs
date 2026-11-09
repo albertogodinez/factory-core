@@ -7,7 +7,7 @@ import { join, dirname } from 'node:path';
 import { readFileSync, readdirSync, writeFileSync, chmodSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { makeFixtures } from '../fixtures/make.mjs';
+import { makeFixtures, write, makeRepo } from '../fixtures/make.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL = join(HERE, '..', '..', 'bundles', 'core', 'toolkit-context');
@@ -17,7 +17,7 @@ const RESOLVE = join(SKILL, 'scripts', 'resolve.mjs');
 // with it, with absolute caps as a backstop.
 const LIMITS = {
   cachedOverheadMs: 15, cachedMaxMs: 100, coldOverheadMs: 60, coldMs: 150,
-  coldSpawns: 1, cachedSpawns: 0, outBytes: 1024, fieldBytes: 200,
+  coldSpawns: 1, cachedSpawns: 0, outBytes: 1024, perNeighborBytes: 70, fieldBytes: 200,
 };
 
 let fx, fakeBin, counter;
@@ -89,10 +89,24 @@ test(`git spawns: ≤ ${LIMITS.coldSpawns} cold, ${LIMITS.cachedSpawns} cached`,
   assert.equal(spawns(() => timed(join(fx.root, 'project'), [], gitEnv)), 1, 'GIT_DIR fallback');
 });
 
-test(`output: ≤ ${LIMITS.outBytes} B, ≤ ${LIMITS.fieldBytes} B with --field`, () => {
-  for (const [d, args] of [['project', []], ['zero-config', []], ['hub', []], ['hub', ['--repo', 'project']], ['project/.worktrees/feat/x', []]]) {
+// The neighbor list is the one part that grows with the config, so the cap does too.
+const outCap = (out) => LIMITS.outBytes + LIMITS.perNeighborBytes * (JSON.parse(out).neighbors?.length || 0);
+
+test(`output: ≤ ${LIMITS.outBytes} B + ${LIMITS.perNeighborBytes} B per neighbor, ≤ ${LIMITS.fieldBytes} B with --field`, () => {
+  // A hub the size of a real one: 10 registered repos with long names, and a project.json
+  // overlay that adds a tracker, an env profile and a banner comment marker.
+  const big = join(fx.root, 'big-hub');
+  makeRepo(big, { remote: 'git@github-work:some-org/a-fairly-long-hub-repository-name.git' });
+  const names = Array.from({ length: 10 }, (_, i) => `registered-repository-name-${i}`);
+  write(join(big, '.claude/repos.json'), { version: 2, repos: names.map((n) => ({ name: n, localPath: `../${n}`,
+    remote: { org: 'some-org', repo: n, ghHost: 'github.com', sshAlias: 'github-work' }, primaryBranch: 'master', commands: {} })) });
+  write(join(big, '.ai-toolkit/project.json'), { version: 1, name: 'big-hub', workspace: '.claude/repos.json',
+    pr: { commentMarker: { mode: 'banner', text: 'cc-autoreply', banner: { reply: 'x'.repeat(200), review: 'y'.repeat(200) } } },
+    adapters: { tracker: 'toolkit-tracker-jira', envProfile: 'eg-corporate' } });
+  for (const [d, args] of [['project', []], ['zero-config', []], ['hub', []], ['hub', ['--repo', 'project']], ['project/.worktrees/feat/x', []], ['big-hub', []]]) {
     const { out } = timed(join(fx.root, d), ['--no-cache', ...args]);
-    assert.ok(Buffer.byteLength(out) <= LIMITS.outBytes, `${d}: ${Buffer.byteLength(out)} B`);
+    if (d === 'big-hub') assert.equal(JSON.parse(out).neighbors.length, 10);
+    assert.ok(Buffer.byteLength(out) <= outCap(out), `${d}: ${Buffer.byteLength(out)} B > ${outCap(out)} B`);
   }
   for (const f of ['project.trunk', 'stateRoot', 'project.remote', 'writeAllowed']) {
     const { out } = timed(join(fx.root, 'project'), ['--no-cache', '--field', f]);

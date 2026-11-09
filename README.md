@@ -103,7 +103,7 @@ Output, the same whichever source matched:
 
 `writeAllowed` is always false in zero-config mode. A skill that posts, pushes or transitions a ticket needs config or an explicit confirmation first.
 
-Budget: one file, `node:` imports only, no network. A cached call adds under 15 ms to Node's startup and never takes more than 100 ms in all. A cold call adds under 60 ms and takes under 150 ms. That means at most one `git` spawn cold and none cached. Output is at most 1 KB, or 200 bytes with `--field`. The cache is keyed by `HEAD` and the mtimes of the config files.
+Budget: one file, `node:` imports only, no network. A cached call adds under 15 ms to Node's startup and never takes more than 100 ms in all. A cold call adds under 60 ms and takes under 150 ms. That means at most one `git` spawn cold and none cached. Output is at most 1 KB plus 70 bytes per neighbor (the neighbor list is the one part that grows with the config), or 200 bytes with `--field`. The cache is keyed by `HEAD` and the mtimes of the config files.
 
 ## State by mode
 
@@ -202,7 +202,7 @@ Context use is held to proxies a hook can measure. Tokens are roughly characters
 | Skill description | every session | 600 chars each; 14K chars for all of core |
 | SKILL.md body | when the skill is used | 24 KB; longer detail goes in `references/` |
 | Script stdout | every call | a stated limit per script, checked in its tests |
-| Resolver output | every call | 1 KB |
+| Resolver output | every call | 1 KB + 70 B per neighbor |
 
 The check is a ratchet. A baseline records current sizes, a commit fails only when something grows past its baseline, and the baseline tightens as skills get trimmed.
 

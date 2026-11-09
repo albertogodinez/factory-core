@@ -49,6 +49,6 @@ Exit codes: 0 ok; 1 `--field` path not present; 2 bad usage, an invalid config, 
 
 ## Limits
 
-The resolver is a single file that imports only `node:` modules and makes no network calls. A cached call adds under 15 ms to Node's own startup (about 55 ms in all on a busy laptop) and never takes 100 ms; a cold call adds under 60 ms and stays under 150 ms. It spawns `git` at most once (only when `GIT_DIR` is set), and its output is at most 1 KB, or 200 B with `--field`. The cache lives in `~/.ai-toolkit/cache/resolver/` (or `$AI_TOOLKIT_HOME`), keyed by `HEAD` and the mtimes of every file it read.
+The resolver is a single file that imports only `node:` modules and makes no network calls. A cached call adds under 15 ms to Node's own startup (about 55 ms in all on a busy laptop) and never takes 100 ms; a cold call adds under 60 ms and stays under 150 ms. It spawns `git` at most once (only when `GIT_DIR` is set), and its output is at most 1 KB plus 70 B per neighbor, or 200 B with `--field`. The cache lives in `~/.ai-toolkit/cache/resolver/` (or `$AI_TOOLKIT_HOME`), keyed by `HEAD` and the mtimes of every file it read.
 
 Tests: `node --test bundles/core/toolkit-context/scripts/resolve.test.mjs`. In agent-factory, `tests/guardrails/resolver.guard.mjs` enforces the limits.
