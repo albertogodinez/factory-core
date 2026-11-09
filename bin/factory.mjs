@@ -270,6 +270,8 @@ function deepMergeMissing(base, extra) {
 }
 
 // ---------- installs.json ----------
+// Keyed by the main checkout: a committed install made in a worktree lands in the
+// main checkout once the branch merges, and the worktree is usually deleted.
 function recordInstall(root, lock) {
   const f = join(toolkitHome(), 'installs.json');
   const all = readJson(f, { version: 1, repos: {} });
@@ -374,7 +376,7 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
     writeJson(projPath, proj);
     writeJson(join(root, LOCK), lock);
     setExcludeBlock(g, excludeLinesFor(lock, root));
-    recordInstall(root, lock);
+    recordInstall(g.mainRoot, lock);
   }
 
   out(`${opts.dryRun ? '[dry run] ' : ''}${isUpdate ? 'update' : 'install'} ${bundleNames.join(' ')} → ${root} (${mode})`);
@@ -395,8 +397,19 @@ async function update(opts) {
     : [(() => { const t = target(opts); return existsSync(join(t.git.toplevel, LOCK)) ? t.git.toplevel : t.git.mainRoot; })()];
   let failed = 0;
   for (const r of roots) {
+    if (opts.all && !existsSync(r)) {
+      warn(`${r}: no longer exists; dropped from installs.json (reinstall from the repo's main checkout if it moved)`);
+      recordInstall(r, { skills: {} });
+      continue;
+    }
     const lock = existsSync(join(r, LOCK)) ? lockOf(r) : lockOf(target({ to: r }).root);
-    if (!lock.mode) { warn(`${r}: no factory install`); failed++; continue; }
+    if (!lock.mode) {
+      const g = findGit(r, null, true);
+      let branch = '';
+      try { branch = readFileSync(join(g.gitDir, 'HEAD'), 'utf8').match(/^ref: refs\/heads\/(.+)/)?.[1] || ''; } catch {}
+      warn(`${r}: no factory install${branch ? ` on the checked-out branch (${branch}); switch to the branch that has it, or run update from a worktree of it` : ''}`);
+      failed++; continue;
+    }
     const res = await install([...(lock.bundles || ['core'])], { ...opts, to: r, all: false }, { isUpdate: true });
     if (res.edited.length) failed++;
   }
@@ -429,7 +442,7 @@ function remove(names, opts) {
     writeJson(join(root, LOCK), lock);
     setExcludeBlock(t0.git, excludeLinesFor(lock, root));
   }
-  recordInstall(root, empty ? { skills: {} } : lock);
+  if (root === t0.git.mainRoot) recordInstall(root, empty ? { skills: {} } : lock);
   out(`remove ${names.join(' ')} → ${root}: ${drop.length} skill(s)${empty ? '; install fully removed' + (opts.purge ? ' with .ai-toolkit/' : ' (.ai-toolkit/project.json kept; --purge deletes it)') : ''}`);
 }
 

@@ -227,3 +227,24 @@ test('host linters: install and doctor warn when a linter would lint the install
   write(join(e, 'package.json'), { name: 'e', scripts: { lint: 'eslint .' } });
   assert.match(line(factory(['doctor'], e).out), /warn host linters .*eslint \(eslint\.config\.js\)/);
 });
+
+test('installs.json: a committed install from a worktree is recorded under the main checkout; update --all prunes missing paths and names the branch', () => {
+  const d = personalRepo('wt-main');
+  const wt = join(t.root, 'wt-main-pilot');
+  git(d, 'worktree', 'add', '-q', '-b', 'chore/pilot', wt);
+  assert.equal(factory(['install', 'core', '--commit'], wt).status, 0);
+  const repos = () => json(join(home, 'installs.json')).repos;
+  assert.ok(repos()[d], 'keyed by the main checkout');
+  assert.equal(repos()[wt], undefined, 'not by the worktree');
+  // Before the branch merges, the main checkout has no install: update --all says which branch.
+  const before = factory(['update', '--all'], d);
+  assert.match(before.err, new RegExp(`${d}: no factory install on the checked-out branch \\(main\\)`));
+  // A recorded path that no longer exists is dropped, not retried forever.
+  const gone = join(t.root, 'deleted-repo');
+  const f = join(home, 'installs.json'); const all = json(f);
+  all.repos[gone] = { mode: 'commit', bundles: ['core'], skills: 1 }; writeFileSync(f, JSON.stringify(all));
+  const r = factory(['update', '--all'], d);
+  assert.match(r.err, /deleted-repo: no longer exists; dropped from installs\.json/);
+  assert.equal(repos()[gone], undefined);
+  git(d, 'worktree', 'remove', '--force', wt);
+});
