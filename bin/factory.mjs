@@ -48,10 +48,22 @@ const lexists = (p) => { try { lstatSync(p); return true; } catch { return false
 const isLink = (p) => { try { return lstatSync(p).isSymbolicLink(); } catch { return false; } };
 const posix = (p) => p.split(sep).join('/');
 
-export function hashDir(dir) {
+// What an install copies and hashes. Tests run in the bundle's own repo, where their fixtures
+// live; a consumer can't run them, so they aren't installed (hash version 2). Version 1 hashed
+// everything but .DS_Store; a lock without hashVersion is checked by that rule until the next
+// update rewrites it.
+export const HASH_VERSION = 2;
+const SKIP = {
+  1: (name) => name === '.DS_Store',
+  2: (name) => name === '.DS_Store' || name === '__pycache__' || /\.(test|guard)\.mjs$/.test(name),
+};
+export const installs = (name) => !SKIP[HASH_VERSION](name);
+
+export function hashDir(dir, version = HASH_VERSION) {
+  const skip = SKIP[version] || SKIP[HASH_VERSION];
   const h = createHash('sha256');
   const walk = (d) => {
-    for (const e of readdirSync(d).filter((x) => x !== '.DS_Store').sort()) {
+    for (const e of readdirSync(d).filter((x) => !skip(x)).sort()) {
       const p = join(d, e);
       const st = statSync(p);
       if (st.isDirectory()) walk(p);
@@ -312,7 +324,7 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
     if (existsSync(dest(n))) {
       if (mine) {
         if (mine.computedHash === srcHash && hashDir(dest(n)) === srcHash) continue; // current
-        if (hashDir(dest(n)) !== mine.computedHash && !opts.force) { edited.push(n); continue; }
+        if (hashDir(dest(n), lock.hashVersion || 1) !== mine.computedHash && !opts.force) { edited.push(n); continue; }
         report.push(`update ${n}`);
       } else if (thirdParty?.skills?.[n]) {
         report.push(`replace ${n} (was ${thirdParty.skills[n].source})`);
@@ -329,10 +341,11 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
     for (const { n, src, srcHash, b } of plan) {
       rmSync(dest(n), { recursive: true, force: true });
       mkdirSync(dirname(dest(n)), { recursive: true });
-      cpSync(src, dest(n), { recursive: true });
+      cpSync(src, dest(n), { recursive: true, filter: (p) => installs(basename(p)) });
       lock.skills[n] = { source: b.source, sourceType: 'local', bundle: b.name,
         skillPath: posix(join(relative(b.repo || b.dir, b.dir), n, 'SKILL.md')), sourceRev: b.rev, computedHash: srcHash };
     }
+    lock.hashVersion = HASH_VERSION;
     if (report.replaced.size && thirdParty) {
       for (const n of report.replaced) delete thirdParty.skills[n];
       writeJson(thirdPartyPath, thirdParty);
@@ -484,7 +497,7 @@ function list(opts) {
   out(`${root} (${lock.mode}; bundles: ${(lock.bundles || []).join(', ')})`);
   for (const [n, s] of Object.entries(lock.skills).sort()) {
     const d = join(root, '.agents', 'skills', n);
-    const state = !existsSync(d) ? 'MISSING' : hashDir(d) === s.computedHash ? 'ok' : 'EDITED';
+    const state = !existsSync(d) ? 'MISSING' : hashDir(d, lock.hashVersion || 1) === s.computedHash ? 'ok' : 'EDITED';
     out(`  ${n.padEnd(32)} ${s.bundle.padEnd(8)} ${s.sourceRev || ''} ${state}`);
   }
 }
@@ -537,7 +550,7 @@ async function doctor(opts) {
   const third = readJson(join(root, 'skills-lock.json'), { skills: {} });
   const dup = names.filter((n) => third.skills?.[n]);
   check('no colliding skills', dup.length === 0, dup.length ? `also in skills-lock.json: ${dup.join(', ')}` : '');
-  const edited = names.filter((n) => existsSync(join(root, '.agents', 'skills', n)) && hashDir(join(root, '.agents', 'skills', n)) !== lock.skills[n].computedHash);
+  const edited = names.filter((n) => existsSync(join(root, '.agents', 'skills', n)) && hashDir(join(root, '.agents', 'skills', n), lock.hashVersion || 1) !== lock.skills[n].computedHash);
   const missing = names.filter((n) => !existsSync(join(root, '.agents', 'skills', n, 'SKILL.md')));
   check('lock hashes', !edited.length && !missing.length, [edited.length && `edited: ${edited.join(', ')}`, missing.length && `missing: ${missing.join(', ')}`].filter(Boolean).join('; '));
   let behind = [];

@@ -3,6 +3,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tempRoot, makeRepo, write, git } from '../../../../tests/fixtures/make.mjs';
 
@@ -131,4 +132,24 @@ test('a missing map directory is an error', () => {
   const r = run('--map', join(t.root, 'nope'));
   assert.equal(r.status, 1);
   assert.match(r.out, /feature map directory does not exist/);
+});
+
+test('features/keys.json: a declared extra key is accepted, an undeclared one (a typo) still warns', () => {
+  const keys = join(app, '.agents/skills/toolkit-features-app/features/keys.json');
+  const withKeys = (extra) => SKILL('checkout').replace('---\n', `---\n${extra}\n`);
+  write(entry(), withKeys('proto_recipe: proto/checkout.recipe\nproto_recipie: oops'));
+  try {
+    let r = run();
+    assert.match(r.out, /unknown frontmatter key "proto_recipe"/);
+    write(keys, { proto_recipe: 'replayable route through the design prototype' });
+    r = run();
+    assert.equal(r.status, 0, r.out);
+    assert.doesNotMatch(r.out, /"proto_recipe"/);
+    assert.match(r.out, /unknown frontmatter key "proto_recipie".*declare it in features\/keys\.json/);
+    write(keys, { code: 'dup', verified_by: '' });
+    r = run();
+    assert.match(r.out, /"code" is already a core key/);
+    assert.match(r.out, /"verified_by" needs a one-line meaning/);
+    assert.equal(r.status, 1);
+  } finally { rmSync(keys, { force: true }); write(entry(), SKILL('checkout')); }
 });

@@ -40,7 +40,7 @@ last_verified: 2026-10-02            # last live drive, not last edit; "never" u
 - `sources` records provenance and useful evidence. It doesn't rank sources or choose design authority; `design-authority.json` does that.
 - `app_recipe` points to `app/<feature-id>.recipe`: the route into the running app that "Driving it" describes, replayed by the map's own `scripts/replay-app.mjs`. The checker runs it with `--check`. A map that doesn't ship a replayer shouldn't set this key.
 - `pending_pr` names the open PR the entry already describes, so the entry is committed with the PR rather than left in a working tree until the merge. While it's set, an anchor that doesn't resolve is a warning naming the PR. After the merge, `scripts/clear-pending-prs.mjs --apply` removes the field.
-- Other keys are ignored with a warning, so a map can carry its own extras without breaking the check.
+- A map's own extra keys go in `features/keys.json`, as `{ "<key>": "<one-line meaning>" }`. A declared key is accepted on every entry. Any other key is ignored with a warning, so a typo still shows.
 
 ## Body
 

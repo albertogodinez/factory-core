@@ -184,7 +184,7 @@ node factory.mjs list
 
 `install` does the following:
 
-- copies the bundles into `.agents/skills`
+- copies the bundles into `.agents/skills`, leaving out test files (`*.test.mjs`, `*.guard.mjs`): they run in the bundle's own repo, where their fixtures live
 - replaces same-named skills and their lock entries, and reports what it replaced
 - creates the `.claude/skills` link (a copy on Windows)
 - writes `.ai-toolkit/project.json`, asking once about the PR comment marker (keep, change or off)

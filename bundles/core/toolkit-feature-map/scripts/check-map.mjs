@@ -133,6 +133,21 @@ function checkHistory(file, raw) {
   report(strict ? 'error' : 'warn', file, `${hits.length} line(s) read as history (${shown}${more}); see entry-contract.md "What an entry leaves out"`);
 }
 
+// A map's own extra frontmatter keys, from features/keys.json: { "<key>": "<one-line meaning>" }.
+// A declared key is accepted on every entry; an undeclared one still warns, so typos show.
+const mapKeys = new Set();
+function loadMapKeys(file) {
+  if (!fs.existsSync(file)) return;
+  let keys;
+  try { keys = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { report('error', file, `invalid JSON: ${e.message}`); return; }
+  if (!keys || typeof keys !== 'object' || Array.isArray(keys)) { report('error', file, 'must be an object of "<key>": "<one-line meaning>"'); return; }
+  for (const [key, meaning] of Object.entries(keys)) {
+    if (KNOWN_KEYS.has(key)) report('warn', file, `"${key}" is already a core key; remove it here`);
+    else if (typeof meaning !== 'string' || !meaning.trim()) report('error', file, `"${key}" needs a one-line meaning`);
+    else mapKeys.add(key);
+  }
+}
+
 function checkEntry(file) {
   const raw = fs.readFileSync(file, 'utf8');
   const parsed = parseFrontmatter(raw);
@@ -147,7 +162,9 @@ function checkEntry(file) {
     for (const message of errors) report('error', file, `frontmatter ${message}`);
     return null;
   }
-  for (const key of Object.keys(data)) if (!KNOWN_KEYS.has(key)) report('warn', file, `unknown frontmatter key "${key}" is ignored`);
+  for (const key of Object.keys(data)) {
+    if (!KNOWN_KEYS.has(key) && !mapKeys.has(key)) report('warn', file, `unknown frontmatter key "${key}" is ignored; declare it in features/keys.json if the map uses it`);
+  }
   if (data.id !== path.basename(file, '.md')) report('error', file, `id "${data.id}" does not match the filename`);
 
   checkSections(file, parsed.content);
@@ -224,6 +241,7 @@ if (!fs.existsSync(mapDir)) {
   report('error', mapDir, 'feature map directory does not exist; create one with references/create.md');
 } else {
   const featuresDir = path.join(mapDir, 'features');
+  loadMapKeys(path.join(featuresDir, 'keys.json'));
   const featureFiles = fs.existsSync(featuresDir)
     ? fs.readdirSync(featuresDir).filter((name) => name.endsWith('.md') && name !== 'README.md').map((name) => path.join(featuresDir, name))
     : [];

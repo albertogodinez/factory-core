@@ -264,3 +264,32 @@ test('install into a hub with a registry writes a workspace pointer, so the regi
   assert.equal(o.mode, 'workspace');
   assert.deepEqual(o.neighbors.map((n) => n.name), ['other']);
 });
+
+test('tests are not installed; an install from before (hash v1) is not "edited", and update migrates it', async () => {
+  const { hashDir } = await import('../bin/factory.mjs');
+  const { readdirSync, statSync, cpSync } = await import('node:fs');
+  const walk = (d) => readdirSync(d).flatMap((e) => (statSync(join(d, e)).isDirectory() ? walk(join(d, e)) : [join(d, e)]));
+  const d = personalRepo('no-tests');
+  assert.equal(factory(['install', 'core', '--commit'], d).status, 0);
+  const skills = join(d, '.agents/skills');
+  assert.deepEqual(walk(skills).filter((f) => /\.(test|guard)\.mjs$/.test(f)), [], 'no test files installed');
+  assert.ok(existsSync(join(skills, 'toolkit-context/scripts/resolve.mjs')), 'the scripts themselves are');
+  const lockPath = join(d, '.ai-toolkit/skills-lock.json');
+  assert.equal(json(lockPath).hashVersion, 2);
+  // Rebuild what an older factory left: test files copied in, hashes over everything, no hashVersion.
+  const lock = json(lockPath); delete lock.hashVersion;
+  for (const n of ['toolkit-context', 'toolkit-review']) {
+    cpSync(join(CORE, n), join(skills, n), { recursive: true });
+    lock.skills[n].computedHash = hashDir(join(skills, n), 1);
+  }
+  writeFileSync(lockPath, JSON.stringify(lock));
+  assert.ok(walk(join(skills, 'toolkit-context')).some((f) => f.endsWith('.test.mjs')));
+  const doc = factory(['doctor'], d);
+  assert.doesNotMatch(doc.out, /lock hashes.*edited/, doc.out);
+  const up = factory(['update'], d);
+  assert.equal(up.status, 0, up.err);
+  assert.doesNotMatch(up.err, /was edited/);
+  assert.equal(json(lockPath).hashVersion, 2);
+  assert.ok(!walk(join(skills, 'toolkit-context')).some((f) => f.endsWith('.test.mjs')), 'update removed the old test files');
+  assert.doesNotMatch(factory(['doctor'], d).out, /FAIL lock hashes/);
+});
