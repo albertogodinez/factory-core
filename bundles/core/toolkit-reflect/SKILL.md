@@ -81,7 +81,7 @@ For each approved row:
    - **Check**: build it, then prove it goes red on the real past mistake (make the mistake, see it fail, revert). A check that never fails protects nothing.
    - **Skill, rule, AGENTS.md or glossary edit**: read `writing-for-agents` first. A one-line fix is done directly; a new section or a new skill follows its full guidance.
    - Run the repo's checks (`project.commands.lint` and `test`). Commit and push only under the user's standing authorization. A commit that touches a review rule names its source (the PR, ticket or `session`) in a `Source:` trailer; the rule itself states the lesson with no PR or ticket numbers.
-3. **Core and org lessons wait for the promotion prompt.** Don't edit the shared skill yet, unless the user says "promote now".
+3. **Core and org lessons wait for the promotion prompt,** unless the user approves the edit now ("promote now", or picking that row to apply). Then write it as a lesson branch ([Landing a lesson branch](#landing-a-lesson-branch)). The user wants to see the edit before choosing: write the branch, show its diff, and ask then. A branch costs nothing and deletes cleanly. An abstract "record 1, 2, 3?" with no diff behind it stalls.
 
 Then ask about whatever is due, at most three prompts per session:
 
@@ -98,7 +98,18 @@ node .agents/skills/toolkit-reflect/scripts/lessons.mjs decide --fingerprint <sl
 - **never** is remembered, and that fingerprint is never offered again.
 - **not now** waits for another occurrence.
 - Entries expire after 90 days without a new occurrence.
-- **promote**: `lessons.mjs target --skill <name>` names the source repo of the skill the lesson changes. Edit the skill there on a local branch, `lesson/<fingerprint>`, commit, and ask the user to review the branch. After they merge it, `factory update --all` delivers it to every repo. Writes outside this repo go only to `~/.ai-toolkit/` and, on promote, to that source repo.
+- **promote**: write it as a lesson branch (below). Writes outside this repo go only to `~/.ai-toolkit/` and, on promote, to that source repo.
+
+### Landing a lesson branch
+
+1. `lessons.mjs target --skill <name>` names the source repo and bundle of the installed skill. If its source isn't on this machine, record the lesson and say where it has to be promoted. Stop there.
+2. In that repo: `git switch -c lesson/<fingerprint>` from an up-to-date trunk, make the edit (read `writing-for-agents` first), and commit. The repo's pre-commit hook runs its suite. Keep each skill description within the repo's limit, and say when an edit leaves it close.
+3. Show the user `git -C <repo> diff <trunk>...lesson/<fingerprint>` and ask: merge it?
+4. On yes, the route depends on `git -C <repo> remote`:
+   - **No remote** (a local source repo): run the suite on the branch (a merge doesn't run pre-commit), rebase it on trunk if trunk moved (it was never pushed, so that's safe), `git merge --ff-only`, then `git branch -d` it.
+   - **A remote**: push the branch and open the PR with `toolkit-pr-create`. The merge happens there, under that repo's review.
+5. After the merge: `factory update --all`, then commit the update in each commit-mode repo under that repo's own rules (some want approval for every commit). Local installs need no commit.
+6. A branch the user hasn't decided on stays and goes in the report, so the next session can pick it up. Never leave one unmentioned.
 
 Backlog items (a check worth building but too large now) go to the user as a list to file.
 
@@ -107,6 +118,7 @@ Backlog items (a check worth building but too large now) go to the user as a lis
 A short list, no preamble:
 
 - **Edits made**: `<destination path>`: what changed, one line each. For a check, the command that proved it red.
+- **Lesson branches**: each `lesson/*` branch still open in a source repo, with the repo path and a one-line diff summary.
 - **Edits proposed** (not yet approved): `<destination path>`: one line each.
 - **Recorded**: each fingerprint with its scope and occurrence count; any promotion answers given.
 - **Backlog**: one line each, with the suggested mechanism.
