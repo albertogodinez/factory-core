@@ -1,6 +1,6 @@
 ---
 name: toolkit-dev-slot
-description: Give each worktree its own local dev server (a dev slot) so parallel agents can validate the same app at once, as a per-worktree container published on 127.0.0.1:<port> with no app changes. Use before starting a dev server or validating in a browser when another agent or worktree may be running one, when the app's fixed dev port is taken (EADDRINUSE), or when you would stop and restart one server to compare branches. Triggers on "port in use", "another worktree has the dev server", "run agents in parallel", "start a dev slot".
+description: Give each worktree its own local dev server (a dev slot) so parallel agents can validate the same app at once, as a per-worktree container published on 127.0.0.1:<port> with no app changes. Use before starting a dev server or validating in a browser when another agent or worktree may be running one, when the app's fixed dev port is taken (EADDRINUSE), when you would stop and restart one server to compare branches, or when stopping a dev server you started. Triggers on "port in use", "another worktree has the dev server", "run agents in parallel", "start a dev slot", "stop the dev server".
 ---
 
 # Dev slots
@@ -21,7 +21,7 @@ node .agents/skills/toolkit-dev-slot/scripts/slot.mjs up
    ```
 2. **Point every browser step at it.** Use the printed `baseUrl` and `session`. `eval "$(node .../slot.mjs env)"` exports `DEV_SLOT_BASE_URL` and `DEV_SLOT_SESSION` (names an app config can change, see `env`). Each Bash tool call is a fresh shell, so repeat the `eval` in every call that needs them.
 3. **Prove ownership before you report a result:** `slot check` exits 0 only when the slot's port (or `--url URL`) is served by this worktree. Exit 9 names the worktree that is actually serving it; anything you saw there is someone else's code.
-4. **Done:** `slot down` removes the container and keeps its `node_modules` volume; `--purge` drops the volume too. Stop your slot when the task ends. A slot you forget is reaped after `idleMinutes`.
+4. **Done:** `slot down` removes the container and keeps its `node_modules` volume; `--purge` drops the volume too. Stop your slot when the task ends. A server you started outside a slot stops by its own PID (see below). A slot you forget is reaped after `idleMinutes`.
 
 The step is complete when `slot check` exits 0 for the URL your browser session used.
 
