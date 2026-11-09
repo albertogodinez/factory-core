@@ -1,6 +1,6 @@
 ---
 name: diagnosing-bugs
-description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow.
+description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose", "debug this", "investigate", "look into" or "why does X happen", or reports something broken/throwing/failing/slow.
 ---
 
 # Diagnosing Bugs
@@ -96,6 +96,8 @@ Do not proceed until you have reproduced **and** minimised.
 Generate **3–5 ranked hypotheses** before testing any of them. Single-hypothesis generation anchors on the first plausible idea.
 
 Each hypothesis must be **falsifiable**: state the prediction it makes.
+
+**A cause read from code alone is a hypothesis, and you say so.** Before you present a cause or a fix, run the cheapest real probe that could prove it wrong: one request, one log line, one toggled input. If you can't run one yet, label the claim *unverified* everywhere you write it. A "no effect" claim ("the query ignores the filter") names what was compared and every other difference the run showed. Two room headers that vanished are not "no effect" just because the default selection stayed.
 
 > Format: "If <X> is the cause, then <changing Y> will make the bug disappear / <changing Z> will make it worse."
 
