@@ -106,7 +106,7 @@ Carry into the tick prompt so it doesn't rediscover settled ground: the new head
 
 Run `<GH_PREFIX>gh pr checks <N>` in the repo, then:
 
-1. `gh pr view <N> --json state -q .state`. If `MERGED`, run teardown ([references/teardown.md](references/teardown.md)), report, schedule nothing, stop.
+1. `gh pr view <N> --json state,mergeable -q '.state+" "+.mergeable'`. If `MERGED`, run teardown ([references/teardown.md](references/teardown.md)), report, schedule nothing, stop. If `CONFLICTING`, GitHub starts no `pull_request` workflows on the head, so checks missing since the last tick are blocked, not queued: merge trunk (a merge commit on another author's branch), resolve, run the local suite, push, and report the PR as conflicting until the new head's checks start.
 2. All checks `pass` or `skipping`: CI is green. Run the comment triage before declaring done, since a green PR can still hold bot findings. Report "CI green, no open AI-reviewer findings" and stop scheduling only when both are clear.
 3. Some `pending`: report how many, and run the triage anyway. Bot reviews land independently of CI.
 4. Any `fail`: diagnose and fix ([references/ci-failure.md](references/ci-failure.md)).
