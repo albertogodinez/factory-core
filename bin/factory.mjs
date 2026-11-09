@@ -10,7 +10,7 @@
 //   factory doctor [--to <repo>] [--live] [--json]
 //   factory list [--to <repo>]
 //
-// Bundles: core (this repo), expedia (../eg-agent-kit), trips (../trips-ai-toolkit). Override
+// Bundles: core (this repo), expedia and trips (../eg-agent-kit). Override
 // a bundle's path in ~/.ai-toolkit/sources.json: {"expedia": "/path/to/bundles/expedia"}.
 import {
   readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, lstatSync, rmSync,
@@ -84,7 +84,7 @@ export function bundleSources(home = toolkitHome()) {
   const def = {
     core: join(FACTORY, 'bundles', 'core'),
     expedia: join(dirname(FACTORY), 'eg-agent-kit', 'bundles', 'expedia'),
-    trips: join(dirname(FACTORY), 'trips-ai-toolkit', 'bundles', 'trips'),
+    trips: join(dirname(FACTORY), 'eg-agent-kit', 'bundles', 'trips'),
   };
   return { ...def, ...readJson(join(home, 'sources.json'), {}) };
 }
@@ -295,6 +295,8 @@ function recordInstall(root, lock) {
 }
 
 // ---------- install / update ----------
+const lockEntry = (b, n, computedHash) => ({ source: b.source, sourceType: 'local', bundle: b.name,
+  skillPath: posix(join(relative(b.repo || b.dir, b.dir), n, 'SKILL.md')), sourceRev: b.rev, computedHash });
 async function install(bundleNames, opts, { isUpdate = false } = {}) {
   if (!bundleNames.length) die('name at least one bundle: factory install core [expedia] [trips]', 2);
   if (!bundleNames.includes('core')) bundleNames = ['core', ...bundleNames];
@@ -314,7 +316,7 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
   const report = []; report.replaced = new Set();
   const conflicts = [], edited = [];
   const dest = (n) => join(root, '.agents', 'skills', n);
-  const plan = [];
+  const plan = [], relock = [];
 
   for (const b of bundles) for (const n of b.skills) {
     const src = join(b.dir, n);
@@ -323,7 +325,16 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
     if (mine && mine.bundle !== b.name) { conflicts.push(`${n}: in both ${mine.bundle} and ${b.name}`); continue; }
     if (existsSync(dest(n))) {
       if (mine) {
-        if (mine.computedHash === srcHash && hashDir(dest(n)) === srcHash) continue; // current
+        if (mine.computedHash === srcHash && hashDir(dest(n)) === srcHash) {
+          // Current. If the bundle moved to another repo, the files are the same but the lock
+          // still names the old source: rewrite the entry only (sourceRev alone is not a move).
+          const entry = lockEntry(b, n, srcHash);
+          if (entry.source !== mine.source || entry.skillPath !== mine.skillPath) {
+            report.push(`relock ${n} (source ${mine.source} → ${entry.source})`);
+            relock.push({ n, entry });
+          }
+          continue;
+        }
         if (hashDir(dest(n), lock.hashVersion || 1) !== mine.computedHash && !opts.force) { edited.push(n); continue; }
         report.push(`update ${n}`);
       } else if (thirdParty?.skills?.[n]) {
@@ -342,9 +353,9 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
       rmSync(dest(n), { recursive: true, force: true });
       mkdirSync(dirname(dest(n)), { recursive: true });
       cpSync(src, dest(n), { recursive: true, filter: (p) => installs(basename(p)) });
-      lock.skills[n] = { source: b.source, sourceType: 'local', bundle: b.name,
-        skillPath: posix(join(relative(b.repo || b.dir, b.dir), n, 'SKILL.md')), sourceRev: b.rev, computedHash: srcHash };
+      lock.skills[n] = lockEntry(b, n, srcHash);
     }
+    for (const { n, entry } of relock) lock.skills[n] = entry;
     lock.hashVersion = HASH_VERSION;
     if (report.replaced.size && thirdParty) {
       for (const n of report.replaced) delete thirdParty.skills[n];

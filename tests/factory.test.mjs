@@ -293,3 +293,34 @@ test('tests are not installed; an install from before (hash v1) is not "edited",
   assert.ok(!walk(join(skills, 'toolkit-context')).some((f) => f.endsWith('.test.mjs')), 'update removed the old test files');
   assert.doesNotMatch(factory(['doctor'], d).out, /FAIL lock hashes/);
 });
+
+test('update after a bundle moves to another repo relocks the entries without copying, and a later update is a no-op', () => {
+  const h = join(t.root, 'home-move'); mkdirSync(h);
+  const skill = '---\nname: moved-skill\ndescription: A skill whose bundle moves.\n---\n# moved\n';
+  const oldRepo = join(t.root, 'old-src'), newRepo = join(t.root, 'new-src');
+  makeRepo(oldRepo, { files: { 'bundles/moved/moved-skill/SKILL.md': skill } });
+  makeRepo(newRepo, { files: { 'bundles/moved/moved-skill/SKILL.md': skill } });
+  const env = { AI_TOOLKIT_HOME: h };
+  write(join(h, 'sources.json'), { core: CORE, moved: join(oldRepo, 'bundles', 'moved') });
+  const d = personalRepo('pmove');
+  assert.equal(factory(['install', 'core', 'moved', '--commit'], d, env).status, 0);
+  const lockPath = join(d, '.ai-toolkit', 'skills-lock.json');
+  assert.equal(json(lockPath).skills['moved-skill'].source, 'old-src');
+  const installed = join(d, '.agents/skills/moved-skill/SKILL.md');
+  const mtime = lstatSync(installed).mtimeMs;
+
+  write(join(h, 'sources.json'), { core: CORE, moved: join(newRepo, 'bundles', 'moved') });
+  let r = factory(['update'], d, env);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, /relock moved-skill \(source old-src → new-src\)/);
+  const e = json(lockPath).skills['moved-skill'];
+  assert.equal(e.source, 'new-src');
+  assert.equal(e.skillPath, 'bundles/moved/moved-skill/SKILL.md');
+  assert.equal(e.sourceRev, git(newRepo, 'rev-parse', '--short', 'HEAD'));
+  assert.equal(lstatSync(installed).mtimeMs, mtime, 'the installed copy is not rewritten');
+  assert.equal(json(join(h, 'installs.json')).sources.moved, join(newRepo, 'bundles', 'moved'));
+
+  r = factory(['update'], d, env);
+  assert.doesNotMatch(r.out, /relock/);
+  assert.equal(factory(['doctor'], d, env).status, 0);
+});

@@ -19,7 +19,7 @@ Design rules:
 |---|---|---|
 | `core` | Principles, writing, review, PR, plan, CI watch, recording, feature-map, formal-verify, dev-slot, registry/status, PR mining, the resolver, and the factory kit (reflect, ask, docs-validate, tool-sync, writing-for-agents) | `agent-factory` |
 | `expedia` | Tracker adapter (Jira link, `In Review` transition, Confluence), GHE host, the `cc-autoreply` marker policy, dev-slot's `eg-corporate` env profile, the EGDS persona, and the tarmac skills (deploy-preflight, oncall, telemetry, design-capture) | `eg-agent-kit` |
-| `trips` | Trip Expert auth, prototype and feature maps, CCUI and shared-ui testing, tarball linking, template blocks, RUM, dev-slot app configs, trips reviewer personas, trips data (mining cohorts, experiment map) | `trips-ai-toolkit` |
+| `trips` | Trip Expert auth, prototype and feature maps, CCUI and shared-ui testing, tarball linking, template blocks, RUM, dev-slot app configs, trips reviewer personas, trips data (mining cohorts, experiment map) | `eg-agent-kit` |
 
 Core carries no internal data: no repo names, reviewer logins, hosts or paths. A core skill gets that data from the resolver, which reads it from the consumer's config or from an adapter bundle.
 
@@ -34,10 +34,10 @@ Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-archite
 ├── agent-factory/                  # core + factory CLI · local git, no remote
 │   ├── bin/factory.mjs
 │   └── bundles/core/<skill>/SKILL.md
-├── eg-agent-kit/                   # expedia bundle · local git
-│   └── bundles/expedia/<skill>/SKILL.md
-├── trips-ai-toolkit/               # trips bundle + trips data
+├── eg-agent-kit/                   # expedia + trips bundles · local git
+│   ├── bundles/expedia/<skill>/SKILL.md
 │   └── bundles/trips/<skill>/SKILL.md
+├── trips-ai-toolkit/               # hub: a consumer of core, expedia and trips
 ├── ai-shopping-pwa/                # team repo → LOCAL-ONLY install
 │   ├── .agents/skills/
 │   │   ├── migrate-ai-shopping-playground/   # the team's tracked skill, never touched
