@@ -359,10 +359,15 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
     const slug = parseRemote(git(root, 'remote', 'get-url', 'origin'))?.slug;
     if (slug) name = slug.split('/').pop();
     proj = { version: 1, name };
+    // A hub already resolving through a multi-repo registry stays in workspace mode:
+    // without this pointer, the new project.json would outrank the registry and drop its repos.
+    const registry = ['.ai-toolkit/workspace.json', '.claude/repos.json']
+      .find((r) => Array.isArray(readJson(join(root, ...r.split('/')), null)?.repos));
+    if (registry) proj.workspace = registry;
     const marker = await chooseMarker(opts.marker, markerDefault);
     proj.pr = { commentMarker: marker };
     deepMergeMissing(proj, rest);
-    report.push(`write ${posix(PROJECT)} (marker ${marker.mode})`);
+    report.push(`write ${posix(PROJECT)} (marker ${marker.mode}${registry ? `; workspace ${registry}` : ''})`);
   } else {
     const before = JSON.stringify(existing);
     if (!existing.pr || !('commentMarker' in existing.pr)) {

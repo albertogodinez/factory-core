@@ -35,6 +35,7 @@
       }
     },
     "worktreeConvention": { "enum": ["dot-worktrees", "sibling-directory", "none"] },
+    "workspace": { "type": "string", "minLength": 1, "description": "Repo-relative path to a multi-repo registry (.ai-toolkit/workspace.json or a legacy .claude/repos.json). Keeps workspace mode: the registry lists the repos, and this file's settings apply on top." },
     "planHome": { "type": "string", "description": "Repo-relative directory for plans. Default: plans" },
     "writeAllowed": { "type": "boolean", "description": "false makes every posting, pushing or ticket-moving skill ask first. Default: true" },
     "neighbors": {

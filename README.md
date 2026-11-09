@@ -79,7 +79,7 @@ Every skill asks one script, `toolkit-context`, "which project am I in, and what
 Sources, first match wins:
 
 1. `--config <file>` or `AI_TOOLKIT_CONFIG`
-2. The nearest `.ai-toolkit/project.json`, searching from the cwd up to the git root
+2. The nearest `.ai-toolkit/project.json`, searching from the cwd up to the git root. In a hub, its `workspace` field points at the registry (3 or 4), which keeps workspace mode and the registry's repos; `factory install` sets it
 3. The nearest ancestor `.ai-toolkit/workspace.json` (used only by trips-ai-toolkit during migration)
 4. Legacy `.claude/repos.json` (read-only, used only during migration)
 5. Zero-config detection from git: trunk from `origin/HEAD` or the current branch, the remote host, the package manager from the lockfile, the PR template

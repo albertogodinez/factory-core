@@ -219,3 +219,27 @@ test('a long comment-marker banner is elided by default and shown with --full', 
     assert.deepEqual(run(join(fx.root, 'project'), ['--full']).adapters.commentMarker.banner, banner);
   } finally { write(p, good); }
 });
+
+test('project.json with "workspace" keeps workspace mode and lays its settings over the registry', () => {
+  const hub = join(fx.root, 'hub');
+  write(join(hub, '.ai-toolkit/project.json'), { version: 1, name: 'hub', workspace: '.claude/repos.json',
+    pr: { commentMarker: { mode: 'off' } }, adapters: { tracker: 'some-tracker' }, review: { personas: ['hub-persona'] } });
+  try {
+    const o = run(hub);
+    assert.equal(o.mode, 'workspace');
+    assert.equal(o.source, '.ai-toolkit/project.json');
+    assert.deepEqual(o.neighbors.map((n) => n.name), ['project', 'lib']);
+    assert.equal(o.adapters.tracker, 'some-tracker');
+    assert.deepEqual(o.adapters.commentMarker, { mode: 'off' });
+    assert.deepEqual(o.adapters.personas, ['hub-persona']);
+    assert.equal(o.stateRoot, join(hub, 'tmp'));
+    assert.equal(o.writeAllowed, true);
+    // --repo still finds a registered repo, with its own personas from the registry.
+    const r = run(hub, ['--repo', 'project']);
+    assert.equal(r.project.root, join(fx.root, 'project'));
+    assert.deepEqual(r.adapters.personas, ['general']);
+    // A pointer to a file that isn't a registry is an error, not a silent fallback.
+    write(join(hub, '.ai-toolkit/project.json'), { version: 1, workspace: 'nope.json' });
+    assert.throws(() => run(hub), (e) => e.status === 2 && /"workspace" names/.test(e.stderr));
+  } finally { rmSync(join(hub, '.ai-toolkit'), { recursive: true }); }
+});

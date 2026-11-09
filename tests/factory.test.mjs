@@ -248,3 +248,19 @@ test('installs.json: a committed install from a worktree is recorded under the m
   assert.equal(repos()[gone], undefined);
   git(d, 'worktree', 'remove', '--force', wt);
 });
+
+test('install into a hub with a registry writes a workspace pointer, so the registry still lists its repos', () => {
+  const d = join(t.root, 'hub-install');
+  makeRepo(d, { remote: 'git@github.com:me/hub-install.git', files: {
+    '.claude/repos.json': { version: 2, repos: [
+      { name: 'other', localPath: '../other', remote: { org: 'me', repo: 'other', ghHost: 'github.com' }, primaryBranch: 'main', commands: {} },
+    ] } } });
+  const r = factory(['install', 'core', '--commit'], d);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, /workspace \.claude\/repos\.json/);
+  assert.equal(json(join(d, '.ai-toolkit/project.json')).workspace, '.claude/repos.json');
+  const ctx = spawnSync(process.execPath, [join(d, '.agents/skills/toolkit-context/scripts/resolve.mjs'), '--no-cache'], { cwd: d, encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: home, AI_TOOLKIT_CONFIG: '' } });
+  const o = JSON.parse(ctx.stdout);
+  assert.equal(o.mode, 'workspace');
+  assert.deepEqual(o.neighbors.map((n) => n.name), ['other']);
+});

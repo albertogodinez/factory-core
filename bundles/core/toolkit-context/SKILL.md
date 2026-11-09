@@ -18,7 +18,7 @@ node .agents/skills/toolkit-context/scripts/resolve.mjs --pretty        # for a 
 ## Sources, first match wins
 
 1. `--config <file>` or `AI_TOOLKIT_CONFIG`.
-2. The nearest `.ai-toolkit/project.json` from the cwd up to the git root. A linked worktree with none of its own uses the main checkout's.
+2. The nearest `.ai-toolkit/project.json` from the cwd up to the git root. A linked worktree with none of its own uses the main checkout's. If it has `"workspace": "<registry path>"` (a hub), the mode stays `workspace`: that registry lists the repos, and project.json's marker, adapters, personas and `writeAllowed` apply on top. `factory install` writes the pointer when the repo already has a registry.
 3. The nearest `.ai-toolkit/workspace.json` (a multi-repo registry; migration only).
 4. A legacy `.claude/repos.json` registry (read-only; migration only).
 5. Zero-config: git and the working tree. Trunk comes from `origin/HEAD`, then a `main`, `master` or `trunk` branch, then the current branch. The package manager comes from the lockfile, commands from `package.json` scripts, and the PR template from `.github/`.

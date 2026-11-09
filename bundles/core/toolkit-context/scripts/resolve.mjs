@@ -287,6 +287,18 @@ export function resolveContext(opts = {}) {
     if (configPath) { config = readJson(configPath); source = configPath; }
   }
 
+  // A project.json with "workspace" keeps the hub in workspace mode: the registry it
+  // names supplies the repos (neighbors, --repo), and project.json's own settings
+  // (pr marker, adapters, personas, writeAllowed) are laid over it.
+  let overlay = null;
+  if (mode === 'project' && typeof config?.workspace === 'string') {
+    const wsPath = resolve(dirname(dirname(configPath)), config.workspace);
+    deps.push(wsPath);
+    const registry = readJson(wsPath);
+    if (!registry || !Array.isArray(registry.repos)) fail(`${configPath}: "workspace" names ${wsPath}, which is not a registry with a repos list`);
+    overlay = config; config = registry; configPath = wsPath; mode = 'workspace';
+  }
+
   const display = (p) => (git && p.startsWith(git.mainRoot + sep) ? relative(git.mainRoot, p) : p).split(sep).join('/');
   const home = toolkitHome(env);
   const remoteHere = git ? parseRemote(remoteUrl(git.commonDir, deps)) : null;
@@ -319,8 +331,14 @@ export function resolveContext(opts = {}) {
     if (!opts.repo) neighbors = entries.filter((e) => e.name !== project.name)
       .map((e) => ({ name: e.name, root: e.root, trunk: e.trunk, access: 'write' }));
     adapters = { ...(config.adapters || {}), personas: project.personas };
+    if (overlay) {
+      Object.assign(adapters, overlay.adapters || {});
+      if (overlay.pr && 'commentMarker' in overlay.pr) adapters.commentMarker = overlay.pr.commentMarker;
+      // Per-repo personas from the registry win for a --repo lookup; the overlay sets the hub's own.
+      if (overlay.review?.personas && !opts.repo) adapters.personas = overlay.review.personas;
+    }
     stateRoot = join(base, 'tmp');
-    writeAllowed = true;
+    writeAllowed = overlay ? overlay.writeAllowed !== false : true;
   } else if (mode === 'project') {
     const det = git ? hereProject(git, cwd, remoteHere, deps) : { name: basename(cwd), root: cwd };
     const c = config;
