@@ -16,5 +16,11 @@ function* walk(dir) {
   }
 }
 const files = [...walk(join(ROOT, 'tests')), ...walk(join(ROOT, 'bundles')), ...process.argv.slice(2)];
-const r = spawnSync(process.execPath, ['--test', ...(process.env.CI || process.argv.includes('--tap') ? [] : ['--test-reporter=dot']), ...files.filter((f) => f !== '--tap')], { cwd: ROOT, stdio: 'inherit' });
+// A pre-commit hook runs this with git's own repo variables set (`git commit -a` points
+// GIT_INDEX_FILE at a temporary index). Inherited by the factory and resolver processes the
+// tests spawn, they would write fixture state into the commit being made. Tests that need
+// one set it themselves.
+const env = { ...process.env };
+for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_PREFIX']) delete env[k];
+const r = spawnSync(process.execPath, ['--test', ...(process.env.CI || process.argv.includes('--tap') ? [] : ['--test-reporter=dot']), ...files.filter((f) => f !== '--tap')], { cwd: ROOT, stdio: 'inherit', env });
 process.exit(r.status ?? 1);
