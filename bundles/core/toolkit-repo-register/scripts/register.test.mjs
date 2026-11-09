@@ -85,3 +85,27 @@ test('bad input exits 2', () => {
     assert.equal(run(t.root, t.root, '--dry-run').status, 2); // not a repo
   } finally { t.cleanup(); }
 });
+
+test('--persona adds an installed persona once, finds it in a toolkit-review-* pack, and refuses an unknown one', async () => {
+  const { propose, availablePersonas } = await import('./register.mjs');
+  const t = tempRoot();
+  try {
+    const app = makeRepo(join(t.root, 'app'), { remote: 'git@github.com:acme/app.git', files: { 'package.json': {} } });
+    const skills = join(t.root, 'skills');
+    write(join(skills, 'toolkit-review/personas/general.md'), '---\nname: general\n---\n');
+    write(join(skills, 'toolkit-review-acme/personas/acme-conventions.md'), '---\nname: acme-conventions\n---\n');
+    write(join(skills, 'unrelated/personas/other.md'), '---\nname: other\n---\n');
+    assert.deepEqual([...availablePersonas(skills)].sort(), [['acme-conventions', 'toolkit-review-acme'], ['general', 'toolkit-review']]);
+    const p = propose(app, { personas: ['acme-conventions', 'acme-conventions'], skills });
+    assert.deepEqual(p.config.review, { personas: ['acme-conventions'] });
+    assert.deepEqual(p.notes.personas, ['added acme-conventions (toolkit-review-acme)', 'acme-conventions already listed']);
+    assert.throws(() => propose(app, { personas: ['other'], skills }), /--persona other: no personas\/other\.md .*installed: acme-conventions, general/);
+    // The CLI looks beside itself: core's own personas are there.
+    let r = run(t.root, app, '--dry-run', '--persona', 'test-behavior');
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout).review, { personas: ['test-behavior'] });
+    assert.match(r.stderr, /persona: added test-behavior \(toolkit-review\)/);
+    r = run(t.root, app, '--dry-run', '--persona', 'no-such-persona');
+    assert.equal(r.status, 2);
+  } finally { t.cleanup(); }
+});

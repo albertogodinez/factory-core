@@ -53,6 +53,14 @@ node .agents/skills/toolkit-repo-register/scripts/register.mjs --neighbor <name>
 
 The neighbor must be a git checkout at `../<name>`. `read` is the default and is omitted from the file. Use `write` only when the user wants skills to change that repo without asking. The neighbor's own trunk and commands come from its own config or detection.
 
+## Review personas
+
+```bash
+node .agents/skills/toolkit-repo-register/scripts/register.mjs --persona <name> --write
+```
+
+Adds `<name>` to `review.personas`, which `toolkit-review` reads. It checks first that `personas/<name>.md` exists in `toolkit-review` or an installed `toolkit-review-*` pack, and the error lists the installed ones. Repeat the flag to add several. It never removes one: delete it from `review.personas` by hand.
+
 ## Confirm before writing
 
 Report every `check` line and anything you judged. The register cannot know:

@@ -3,11 +3,13 @@
 // into .ai-toolkit/project.json. node: imports only, no network.
 //
 //   register.mjs [--cwd <dir>] [--dry-run | --write] [--refresh] [--neighbor <name>[:read|write]]...
+//                [--persona <name>]...
 //
 // Default is --dry-run: stdout is the proposed project.json, stderr is a report (added, drift,
 // judgment calls). --write validates with toolkit-context/scripts/validate.mjs, then writes.
 // An existing config is kept: --write adds missing fields and neighbors and reports drift;
-// --refresh also replaces drifted fields with the verified value.
+// --refresh also replaces drifted fields with the verified value. --persona adds a toolkit-review
+// persona to review.personas after checking a persona file for it is installed beside this skill.
 import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, readdirSync, realpathSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
@@ -16,6 +18,20 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CONTEXT = join(HERE, '..', '..', 'toolkit-context', 'scripts');
+const SKILLS = join(HERE, '..', '..');
+
+// Persona files toolkit-review can dispatch: its own personas/, then sibling toolkit-review-* packs.
+export function availablePersonas(skills = SKILLS) {
+  const found = new Map();
+  let dirs = [];
+  try { dirs = readdirSync(skills).filter((d) => d === 'toolkit-review' || d.startsWith('toolkit-review-')).sort((a, b) => (a === 'toolkit-review' ? -1 : b === 'toolkit-review' ? 1 : a.localeCompare(b))); } catch {}
+  for (const d of dirs) {
+    let files = [];
+    try { files = readdirSync(join(skills, d, 'personas')); } catch { continue; }
+    for (const f of files) if (f.endsWith('.md') && !found.has(f.slice(0, -3))) found.set(f.slice(0, -3), d);
+  }
+  return found;
+}
 
 const read = (p) => { try { return readFileSync(p, 'utf8'); } catch { return null; } };
 const readJson = (p) => { try { return JSON.parse(read(p)); } catch { return null; } };
@@ -140,14 +156,14 @@ function detection(root) {
 }
 
 // ---------- proposal ----------
-export function propose(cwd, { neighbors = [], refresh = false } = {}) {
+export function propose(cwd, { neighbors = [], personas = [], refresh = false, skills = SKILLS } = {}) {
   const v = verify(cwd);
   const det = detection(v.root);
   const file = join(v.root, '.ai-toolkit', 'project.json');
   const existing = readJson(file);
   if (existsSync(file) && !existing) throw new Error(`${file} exists but is not valid JSON; fix it first`);
   const config = existing ? structuredClone(existing) : { version: 1 };
-  const notes = { added: [], drift: [], refreshed: [], neighbors: [], uncertain: v.uncertain };
+  const notes = { added: [], drift: [], refreshed: [], neighbors: [], personas: [], uncertain: v.uncertain };
   const apply = (key, value) => {
     const cur = config[key];
     if (cur === undefined) { config[key] = value; notes.added.push(key); }
@@ -194,6 +210,16 @@ export function propose(cwd, { neighbors = [], refresh = false } = {}) {
     else if ((entry.access || 'read') !== access) { if (access === 'write') entry.access = 'write'; else delete entry.access; notes.neighbors.push(`${name}: access now ${access}`); }
     else notes.neighbors.push(`${name} already listed`);
   }
+  if (personas.length) {
+    const have = availablePersonas(skills);
+    for (const p of personas) {
+      if (!have.has(p)) throw new Error(`--persona ${p}: no personas/${p}.md in toolkit-review or a toolkit-review-* pack here (installed: ${[...have.keys()].sort().join(', ') || 'none'})`);
+      config.review ||= {};
+      config.review.personas ||= [];
+      if (config.review.personas.includes(p)) notes.personas.push(`${p} already listed`);
+      else { config.review.personas.push(p); notes.personas.push(`added ${p} (${have.get(p)})`); }
+    }
+  }
   return { file, root: v.root, exists: !!existing, config, notes };
 }
 
@@ -208,7 +234,7 @@ function validateConfig(config) {
 }
 
 function parseArgs(argv) {
-  const o = { neighbors: [] };
+  const o = { neighbors: [], personas: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => { const x = argv[++i]; if (x == null || x.startsWith('--')) die(`usage: ${a} <value>`); return x; };
@@ -217,7 +243,8 @@ function parseArgs(argv) {
     else if (a === '--write') o.write = true;
     else if (a === '--refresh') o.refresh = true;
     else if (a === '--neighbor') o.neighbors.push(val());
-    else if (a === '-h' || a === '--help') { process.stdout.write('usage: register.mjs [--cwd dir] [--dry-run | --write] [--refresh] [--neighbor name[:read|write]]...\n'); process.exit(0); }
+    else if (a === '--persona') o.personas.push(val());
+    else if (a === '-h' || a === '--help') { process.stdout.write('usage: register.mjs [--cwd dir] [--dry-run | --write] [--refresh] [--neighbor name[:read|write]]... [--persona name]...\n'); process.exit(0); }
     else die(`unknown argument: ${a}`);
   }
   if (o.dry && o.write) die('--dry-run and --write are exclusive');
@@ -228,7 +255,7 @@ function die(m) { process.stderr.write(`register: ${m}\n`); process.exit(2); }
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const o = parseArgs(process.argv.slice(2));
   let p;
-  try { p = propose(resolve(o.cwd || process.cwd()), { neighbors: o.neighbors, refresh: o.refresh }); } catch (e) { die(e.message); }
+  try { p = propose(resolve(o.cwd || process.cwd()), { neighbors: o.neighbors, personas: o.personas, refresh: o.refresh }); } catch (e) { die(e.message); }
   const errs = validateConfig(p.config);
   const n = p.notes;
   const err = (s) => process.stderr.write(s + '\n');
@@ -237,8 +264,9 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   for (const d of n.drift) err(`  drift: ${d.field} is ${JSON.stringify(d.config)} in config; verified ${JSON.stringify(d.verified)} (kept; --refresh replaces)`);
   for (const d of n.refreshed) err(`  refreshed: ${d.field} ${JSON.stringify(d.was)} -> ${JSON.stringify(d.now)}`);
   for (const x of n.neighbors) err(`  neighbor: ${x}`);
+  for (const x of n.personas) err(`  persona: ${x}`);
   for (const u of n.uncertain) err(`  check: ${u}`);
-  if (!n.added.length && !n.drift.length && !n.refreshed.length && !n.neighbors.length) err('  nothing to change: detection already matches the repo');
+  if (!n.added.length && !n.drift.length && !n.refreshed.length && !n.neighbors.length && !n.personas.length) err('  nothing to change: detection already matches the repo');
   if (errs.length) { for (const e of errs) err(`  invalid: ${e}`); process.exit(1); }
   if (o.write) {
     mkdirSync(dirname(p.file), { recursive: true });
