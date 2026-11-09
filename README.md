@@ -25,7 +25,7 @@ Core carries no internal data: no repo names, reviewer logins, hosts or paths. A
 
 There's no hub bundle. Working across several repos is a mode of core (see [Neighbors](#neighbors-cross-repo-work)).
 
-Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-architecture`, `wait-what`, `writing-for-agents`, originally from `mattpocock/skills`) ship as our versions. When the factory installs core into a repo, they replace any copies already there. `toolkit-upstream-sync` pulls upstream improvements into our versions. It runs only in agent-factory.
+Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-architecture`, `wait-what`, `writing-for-agents`, originally from `mattpocock/skills`) ship as our versions. When the factory installs core into a repo, they replace any copies already there. `toolkit-upstream-sync` (in this repo's own `.agents/skills`, not a bundle) pulls upstream improvements into our versions. It runs only in agent-factory; the pre-commit hook runs its offline check.
 
 ## Directory layout
 

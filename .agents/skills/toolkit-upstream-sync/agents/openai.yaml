@@ -1,0 +1,5 @@
+interface:
+  display_name: "Upstream sync"
+  short_description: "Review upstream changes to skills adopted from other repos"
+policy:
+  allow_implicit_invocation: false

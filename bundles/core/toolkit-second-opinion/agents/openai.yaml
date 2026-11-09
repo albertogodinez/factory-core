@@ -1,0 +1,5 @@
+interface:
+  display_name: "Second opinion"
+  short_description: "Review with the other vendor's model, or a fresh subagent as fallback"
+policy:
+  allow_implicit_invocation: true

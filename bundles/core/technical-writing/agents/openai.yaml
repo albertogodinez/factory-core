@@ -1,0 +1,5 @@
+interface:
+  display_name: "Technical Writing"
+  short_description: "Layered standard for write-ups"
+policy:
+  allow_implicit_invocation: false

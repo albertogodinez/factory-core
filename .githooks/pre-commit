@@ -10,3 +10,5 @@ fi
 if git diff --cached --name-only | grep -q '^bin/factory.mjs$'; then
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE node --test --test-reporter=dot tests/guardrails/status.guard.mjs
 fi
+# Upstream adoptions (offline half; warns, never fails).
+node .agents/skills/toolkit-upstream-sync/scripts/check-upstreams.mjs

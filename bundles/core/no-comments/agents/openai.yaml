@@ -1,0 +1,5 @@
+interface:
+  display_name: "No Comments"
+  short_description: "Delete comments; encode constraints as tests"
+policy:
+  allow_implicit_invocation: false

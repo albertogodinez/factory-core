@@ -1,0 +1,18 @@
+{
+  "verified": "2026-11-02",
+  "reviewers": {
+    "codex": {
+      "model": "gpt-6-sol",
+      "effort": "high",
+      "track": "^gpt-(\\d+(?:\\.\\d+)?)-sol$"
+    },
+    "claude": {
+      "model": "claude-opus-5-5",
+      "effort": "xhigh",
+      "track": "^claude-opus-(\\d+(?:-\\d+)?)$"
+    }
+  },
+  "reviewTimeoutSeconds": 600,
+  "claudeMaxBudgetUsd": 5,
+  "cacheMaxAgeDays": 7
+}

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Formal verify"
+  short_description: "Create, maintain, or drift-check a subsystem's formal verify skill"
+policy:
+  allow_implicit_invocation: false
