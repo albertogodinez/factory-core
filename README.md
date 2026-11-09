@@ -181,12 +181,19 @@ node factory.mjs link                 # add the skills to the current worktree (
 node factory.mjs doctor               # onboarding tests
 node factory.mjs list
 node factory.mjs status               # one line when installed skills are behind their source; else silent
+node factory.mjs status --hook        # as a hook: also tells a running session about updates and edited copies
 ```
 
-`status` is the session-start drift check. A user-level SessionStart hook runs it in Claude Code (`~/.claude/settings.json`) and Codex (`~/.codex/hooks.json`), so no team repo's tracked settings change:
+`status --hook` reads the hook's JSON from stdin (`session_id`, `hook_event_name`, `cwd`). It answers the session-start check the same way, and on later prompts it tells a running session, once, what changed since it last checked:
+- Skills `factory update` copied in. `update` appends each copy to `~/.ai-toolkit/updates.jsonl`.
+- Installed copies someone edited in place, found by a file newer than the lock and then confirmed by hash.
+
+A skill read earlier in a session stays in that session's context, so the notice says to read its SKILL.md again. Per-session state lives in `~/.ai-toolkit/sessions/` and is pruned after a week. It runs on every prompt with no git spawns, and `status.guard.mjs` holds its overhead limit.
+
+`status` is the session-start drift check. User-level `SessionStart` and `UserPromptSubmit` hooks run it in Claude Code (`~/.claude/settings.json`) and Codex (`~/.codex/hooks.json`), so no team repo's tracked settings change:
 
 ```json
-{ "type": "command", "command": "node '<agent-factory>/bin/factory.mjs' status 2>/dev/null || true", "timeout": 5 }
+{ "type": "command", "command": "node '<agent-factory>/bin/factory.mjs' status --hook 2>/dev/null || true", "timeout": 5 }
 ```
 
 It checks only the repo the session starts in. A skill is behind when a commit after its `sourceRev` touched its directory in the bundle's repo, and a bundle skill the repo lacks counts as new. There's no hashing. When a source repo's HEAD or the lock changed, it runs one `git log` per source repo. Otherwise it answers from `~/.ai-toolkit/status-cache.json` without spawning git. `tests/guardrails/status.guard.mjs` holds those limits. Uncommitted bundle edits don't count, and `doctor`'s hash check still catches them. In a linked worktree of a local-only install, it also says when the worktree has no links to the installed skills yet (a new worktree never does) and gives the `factory link` command.

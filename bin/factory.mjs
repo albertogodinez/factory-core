@@ -10,12 +10,14 @@
 //   factory doctor [--to <repo>] [--live] [--json]
 //   factory list [--to <repo>]
 //   factory status [--to <repo>]          one line when installed skills are behind; else silent
+//   factory status --hook                 the same as a hook: also says, once per session, which skills
+//                                         were updated or edited in place after the session started
 //
 // Bundles: core (this repo), expedia and trips (../eg-agent-kit). Override
 // a bundle's path in ~/.ai-toolkit/sources.json: {"expedia": "/path/to/bundles/expedia"}.
 import {
   readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, lstatSync, rmSync,
-  cpSync, symlinkSync, readlinkSync, realpathSync, renameSync,
+  cpSync, symlinkSync, readlinkSync, realpathSync, renameSync, appendFileSync, openSync, fstatSync, readSync, closeSync,
 } from 'node:fs';
 import { join, dirname, resolve, relative, basename, sep } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -416,6 +418,7 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
     writeJson(join(root, LOCK), lock);
     setExcludeBlock(g, excludeLinesFor(lock, root));
     recordInstall(g.mainRoot, lock);
+    if (plan.length) logUpdate(g.mainRoot, plan.map(({ n, b }) => ({ name: n, bundle: b.name, source: b.source, rev: b.rev })));
   }
 
   out(`${opts.dryRun ? '[dry run] ' : ''}${isUpdate ? 'update' : 'install'} ${bundleNames.join(' ')} → ${root} (${mode})`);
@@ -766,13 +769,102 @@ function status(opts) {
   }
 }
 
+// ---------- the update log and per-session notices ----------
+// update appends what it copied; `status --hook` tells a running session about it at its next prompt.
+// A skill read earlier in a session is still in that session's context, so the notice says to re-read it.
+const UPDATES = () => join(toolkitHome(), 'updates.jsonl');
+const SESSIONS = () => join(toolkitHome(), 'sessions');
+function logUpdate(mainRoot, skills) {
+  try {
+    mkdirSync(toolkitHome(), { recursive: true });
+    appendFileSync(UPDATES(), JSON.stringify({ at: Date.now(), root: mainRoot, skills }) + '\n');
+  } catch {}
+}
+function updatesSince(mainRoot, since) {
+  let text = '';
+  try {
+    const fd = openSync(UPDATES(), 'r');
+    const size = fstatSync(fd).size, len = Math.min(size, 256 * 1024);
+    const buf = Buffer.alloc(len);
+    readSync(fd, buf, 0, len, size - len);
+    closeSync(fd);
+    text = buf.toString('utf8');
+  } catch { return []; }
+  const out = [];
+  for (const line of text.split('\n')) {
+    try { const e = JSON.parse(line); if (e.root === mainRoot && e.at > since) out.push(e); } catch {}
+  }
+  return out;
+}
+// Installed copies changed after the lock was written. A file newer than the lock is the cheap signal;
+// only those skills are hashed, so a clean repo costs stats, not hashes.
+function editedCopies(root, lock) {
+  let lockAt = 0; try { lockAt = statSync(join(root, LOCK)).mtimeMs; } catch { return []; }
+  const newer = (d) => {
+    for (const e of readdirSync(d)) {
+      if (!installs(e)) continue;
+      const p = join(d, e);
+      const st = statSync(p);
+      if (st.isDirectory() ? newer(p) : st.mtimeMs > lockAt + 1000) return true;
+    }
+    return false;
+  };
+  const out = [];
+  for (const [n, s] of Object.entries(lock.skills || {})) {
+    const d = join(root, '.agents', 'skills', n);
+    try { if (newer(d) && hashDir(d, lock.hashVersion || 1) !== s.computedHash) out.push({ name: n, source: s.source, skillPath: s.skillPath }); } catch {}
+  }
+  return out;
+}
+function readHookInput() {
+  if (process.stdin.isTTY) return {};
+  try { return JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { return {}; }
+}
+function hookStatus(opts) {
+  const input = readHookInput();
+  const sid = String(input.session_id || input.sessionId || '').replace(/[^A-Za-z0-9_-]/g, '');
+  const g = findGit(resolve(opts.to || input.cwd || process.cwd()), null, true);
+  if (!g) return;
+  const root = [g.toplevel, g.mainRoot].find((r) => existsSync(join(r, LOCK)) && Object.keys(lockOf(r).skills || {}).length);
+  if (!root) return;
+  const lock = lockOf(root);
+  const event = input.hook_event_name || input.hookEventName || '';
+  const file = sid ? join(SESSIONS(), `${sid}.json`) : null;
+  const state = (file && readJson(file, null)) || null;
+  const now = Date.now();
+  const lines = [];
+  if (!state || event === 'SessionStart') {
+    status({ ...opts, to: opts.to || input.cwd }); // the drift line and the worktree hint, as at any session start
+    if (file) {
+      try { // forget sessions untouched for a week
+        for (const f of readdirSync(SESSIONS())) if (now - statSync(join(SESSIONS(), f)).mtimeMs > 7 * 864e5) rmSync(join(SESSIONS(), f), { force: true });
+      } catch {}
+    }
+  } else {
+    const ups = updatesSince(g.mainRoot, state.seen);
+    const names = [...new Set(ups.flatMap((e) => e.skills.map((x) => x.name)))].sort();
+    if (names.length) {
+      const revs = [...new Set(ups.flatMap((e) => e.skills.map((x) => `${x.source} ${x.rev}`)))].join(', ');
+      const shown = names.slice(0, 6).join(', ') + (names.length > 6 ? ` +${names.length - 6}` : '');
+      lines.push(`agent-factory: updated since this session last checked: ${shown} (${revs}). If you read one of them earlier in this session, read its SKILL.md again before following it.`);
+    }
+  }
+  const told = new Set(state?.edited || []);
+  const edited = editedCopies(root, lock).filter((e) => !told.has(e.name));
+  for (const e of edited) lines.push(`agent-factory: the installed copy of ${e.name} was edited here, but it's owned by ${e.source} (${e.skillPath}). Move the edit there, commit, then run factory update; the next update won't overwrite this copy until you do.`);
+  for (const l of lines) out(l);
+  if (file) {
+    try { writeJson(file, { root: g.mainRoot, seen: now, edited: [...told, ...edited.map((e) => e.name)] }); } catch {}
+  }
+}
+
 // ---------- CLI ----------
 function parse(argv) {
   const o = { _: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--to' || a === '--marker') { o[a.slice(2)] = argv[++i]; if (o[a.slice(2)] == null) die(`${a} needs a value`, 2); }
-    else if (['--commit', '--local', '--force', '--dry-run', '--all', '--purge', '--live', '--json'].includes(a)) o[a.slice(2).replace(/-(.)/g, (_, c) => c.toUpperCase())] = true;
+    else if (['--commit', '--local', '--force', '--dry-run', '--all', '--purge', '--live', '--json', '--hook'].includes(a)) o[a.slice(2).replace(/-(.)/g, (_, c) => c.toUpperCase())] = true;
     else if (a === '-h' || a === '--help') o.help = true;
     else if (a.startsWith('--')) die(`unknown flag ${a}`, 2);
     else o._.push(a);
@@ -795,6 +887,6 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.met
   else if (cmd === 'link') link(o);
   else if (cmd === 'doctor') await doctor(o);
   else if (cmd === 'list') list(o);
-  else if (cmd === 'status') { try { status(o); } catch {} process.exitCode = 0; }
+  else if (cmd === 'status') { try { o.hook ? hookStatus(o) : status(o); } catch {} process.exitCode = 0; }
   else die(`unknown command ${cmd} (see factory help)`, 2);
 }

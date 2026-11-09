@@ -13,7 +13,7 @@ const FACTORY = join(ROOT, 'bin', 'factory.mjs');
 const CORE = join(ROOT, 'bundles', 'core');
 // Node takes 40-50 ms to start on a loaded laptop, so the limits are on overhead above an empty
 // Node run, measured alternately with it.
-const LIMITS = { cachedOverheadMs: 40, cachedSpawns: 0, uncachedOverheadMs: 250, uncachedSpawnsPerRepo: 1 };
+const LIMITS = { cachedOverheadMs: 40, cachedSpawns: 0, uncachedOverheadMs: 250, uncachedSpawnsPerRepo: 1, hookOverheadMs: 60, hookSpawns: 0 };
 
 let t, home, repo, fakeBin, counter;
 before(() => {
@@ -67,4 +67,15 @@ test('cached: no git spawns, near-zero overhead', () => {
   assert.equal(spawns(() => timed([FACTORY, 'status'])), LIMITS.cachedSpawns);
   const ms = overhead(() => {});
   assert.ok(ms < LIMITS.cachedOverheadMs, `cached overhead ${ms.toFixed(0)} ms >= ${LIMITS.cachedOverheadMs}`);
+});
+
+test('--hook on a prompt: no git spawns, bounded overhead (it runs on every prompt)', () => {
+  const input = JSON.stringify({ session_id: 'guard', hook_event_name: 'UserPromptSubmit', cwd: repo });
+  const run = () => spawnSync(process.execPath, [FACTORY, 'status', '--hook'], { cwd: repo, env: env(), input, encoding: 'utf8' });
+  spawnSync(process.execPath, [FACTORY, 'status', '--hook'], { cwd: repo, env: env(), input: input.replace('UserPromptSubmit', 'SessionStart') });
+  assert.equal(spawns(() => run()), LIMITS.hookSpawns);
+  const d = [];
+  for (let i = 0; i < 7; i++) { let s = performance.now(); run(); const a = performance.now() - s; s = performance.now(); spawnSync(process.execPath, ['-e', '0']); d.push(a - (performance.now() - s)); }
+  const ms = d.sort((p, q) => p - q)[3];
+  assert.ok(ms < LIMITS.hookOverheadMs, `hook overhead ${ms.toFixed(0)} ms >= ${LIMITS.hookOverheadMs}`);
 });

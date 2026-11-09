@@ -371,3 +371,41 @@ test('local install: a plan directory the team already tracks is left visible', 
   write(join(d, 'plans', 'feat-new.md'), '# plan\n');
   assert.match(porcelain(d), /plans\/feat-new\.md/, 'the team tracks plans/, so a new plan shows');
 });
+
+test('status --hook: a running session hears once about an update or an edited copy made after it started', async () => {
+  const { utimesSync } = await import('node:fs');
+  const h = join(t.root, 'home-hook'); mkdirSync(h);
+  const src = join(t.root, 'hook-src');
+  const skill = (n) => `---\nname: ${n}\ndescription: A ${n} skill.\n---\n# ${n}\n`;
+  makeRepo(src, { files: { 'bundles/hb/alpha/SKILL.md': skill('alpha'), 'bundles/hb/beta/SKILL.md': skill('beta') } });
+  const env = { AI_TOOLKIT_HOME: h };
+  write(join(h, 'sources.json'), { core: CORE, hb: join(src, 'bundles', 'hb') });
+  const d = personalRepo('phook');
+  assert.equal(factory(['install', 'core', 'hb', '--commit'], d, env).status, 0);
+  const hook = (sid, event) => {
+    const r = spawnSync(process.execPath, [FACTORY, 'status', '--hook'], { cwd: d, encoding: 'utf8',
+      input: JSON.stringify({ session_id: sid, hook_event_name: event, cwd: d }),
+      env: { ...process.env, AI_TOOLKIT_HOME: h, AI_TOOLKIT_CONFIG: '', AI_TOOLKIT_HARNESSES: 'none' } });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout;
+  };
+  assert.equal(hook('s1', 'SessionStart'), '', 'current at start: silent');
+  assert.equal(hook('s1', 'UserPromptSubmit'), '', 'nothing changed: silent');
+
+  appendFileSync(join(src, 'bundles/hb/alpha/SKILL.md'), 'new rule\n');
+  git(src, 'commit', '-qam', 'alpha changes');
+  assert.equal(factory(['update'], d, env).status, 0);
+  assert.match(readFileSync(join(h, 'updates.jsonl'), 'utf8'), /"name":"alpha"/);
+  const said = hook('s1', 'UserPromptSubmit');
+  assert.match(said, /updated since this session last checked: alpha \(hook-src [0-9a-f]+\)\. If you read one of them earlier in this session, read its SKILL\.md again/);
+  assert.doesNotMatch(said, /beta/);
+  assert.equal(hook('s1', 'UserPromptSubmit'), '', 'said once');
+  assert.equal(hook('s2', 'SessionStart') + hook('s2', 'UserPromptSubmit'), '', 'a session started after the update already has it');
+
+  const copy = join(d, '.agents/skills/beta/SKILL.md');
+  appendFileSync(copy, 'local tweak\n');
+  const later = new Date(Date.now() + 5000); utimesSync(copy, later, later);
+  assert.match(hook('s1', 'UserPromptSubmit'), /the installed copy of beta was edited here, but it's owned by hook-src \(bundles\/hb\/beta\/SKILL\.md\)\. Move the edit there/);
+  assert.equal(hook('s1', 'UserPromptSubmit'), '', 'the edit is reported once a session');
+  assert.match(hook('s3', 'SessionStart'), /installed copy of beta was edited/, 'a new session hears about it too');
+});
