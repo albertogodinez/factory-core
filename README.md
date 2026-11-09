@@ -197,7 +197,7 @@ It checks only the repo the session starts in. A skill is behind when a commit a
 - replaces same-named skills and their lock entries, and reports what it replaced
 - creates the `.claude/skills` link (a copy on Windows)
 - writes `.ai-toolkit/project.json`, asking once about the PR comment marker (keep, change or off)
-- hides `.ai-toolkit/`, plus the copies in local-only mode, through `.git/info/exclude`
+- hides `.ai-toolkit/`, plus the copies and the plan directory (`planHome`, default `plans/`, unless the team already tracks it) in local-only mode, through `.git/info/exclude`
 - records the repo in `~/.ai-toolkit/installs.json`
 
 The lock keeps the `skills-lock.json` shape (`source`, `skillPath`, `computedHash`).

@@ -111,6 +111,9 @@ test('local-only install: git status stays clean, the team\'s tracked skill is u
   const r = factory(['install', 'core', '--local'], d);
   assert.equal(r.status, 0, r.err);
   assert.equal(porcelain(d), '', 'nothing shows in git status');
+  // A plan written by toolkit-plan-create (default planHome: plans) stays out of git status too.
+  write(join(d, 'plans', 'feat-x.md'), '# plan\n');
+  assert.equal(porcelain(d), '', 'plans/ is hidden in a local install');
   assert.equal(readFileSync(join(d, '.agents/skills/team-skill/SKILL.md'), 'utf8'), before);
   assert.ok(existsSync(join(d, '.claude/skills/toolkit-context/SKILL.md')), 'reached through the tracked link');
   assert.equal(factory(['doctor'], d).status, 0);
@@ -359,4 +362,12 @@ test('status: silent when current; one line naming changed and new skills; silen
   const bare = join(t.root, 'no-install'); makeRepo(bare);
   assert.equal(factory(['status'], bare, env).out, '');
   assert.equal(factory(['status'], t.root, env).status, 0, 'outside git: exit 0');
+});
+
+test('local install: a plan directory the team already tracks is left visible', () => {
+  const d = join(t.root, 'team-plans');
+  makeRepo(d, { remote: 'git@github.com:team/plans-app.git', files: { 'plans/README.md': '# team plans\n' } });
+  assert.equal(factory(['install', 'core', '--local'], d).status, 0);
+  write(join(d, 'plans', 'feat-new.md'), '# plan\n');
+  assert.match(porcelain(d), /plans\/feat-new\.md/, 'the team tracks plans/, so a new plan shows');
 });

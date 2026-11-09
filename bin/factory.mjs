@@ -191,9 +191,18 @@ export function excludeBlock(g) {
   const i = text.indexOf(BLOCK_START), j = text.indexOf(BLOCK_END);
   return i < 0 || j < 0 ? [] : text.slice(i + BLOCK_START.length, j).trim().split('\n').filter(Boolean);
 }
+// A local install's plans are working files in a team's repo: hide the plan directory too, unless
+// the team already tracks files there (then whether plans are committed is theirs to decide).
+function planDirToHide(root) {
+  const home = String(readJson(join(root, PROJECT), {})?.planHome || 'plans').replace(/^\.?\/+|\/+$/g, '');
+  if (!home || home.split('/').includes('..') || home.startsWith('/')) return null;
+  return git(root, 'ls-files', '--', home) ? null : home;
+}
 function excludeLinesFor(lock, root) {
   if (lock.mode !== 'local') return ['/.ai-toolkit/state/'];
   const lines = ['/.ai-toolkit/'];
+  const plans = planDirToHide(root);
+  if (plans) lines.push(`/${plans}/`);
   for (const n of Object.keys(lock.skills).sort()) lines.push(`/.agents/skills/${n}`);
   if (lock.claudeLink === 'dir') lines.push('/.claude/skills');
   else if (lock.claudeLink === 'per-skill') for (const n of Object.keys(lock.skills).sort()) lines.push(`/.claude/skills/${n}`);
@@ -565,6 +574,11 @@ async function doctor(opts) {
   const edited = names.filter((n) => existsSync(join(root, '.agents', 'skills', n)) && hashDir(join(root, '.agents', 'skills', n), lock.hashVersion || 1) !== lock.skills[n].computedHash);
   const missing = names.filter((n) => !existsSync(join(root, '.agents', 'skills', n, 'SKILL.md')));
   check('lock hashes', !edited.length && !missing.length, [edited.length && `edited: ${edited.join(', ')}`, missing.length && `missing: ${missing.join(', ')}`].filter(Boolean).join('; '));
+  if (lock.mode === 'local') {
+    const plans = planDirToHide(root);
+    const shown = plans && existsSync(join(root, plans)) && git(root, 'status', '--porcelain', '--', plans);
+    check('plans hidden', !shown, shown ? `${plans}/ shows in git status; run factory update to hide it` : '', 'warn');
+  }
   let behind = [];
   try {
     const src = bundleSources();
