@@ -91,3 +91,20 @@ test('classify: marker beats everything, bots open findings, replies to bots ste
   assert.deepEqual(classify(threads, 'me', '_corp').map((c) => c.interlocutor), ['toolkit-posted', 'bot-finding', 'agent-steering', 'self-defense', 'agent-steering']);
   assert.deepEqual(classify({ ...threads, pr: { author: 'other' } }, 'me', '_corp').map((c) => c.interlocutor)[3], 'peer-review');
 });
+
+test('learn dir: <stateRoot>/pr-mining/learn by default; mining.learnDir (repo-relative) wins, with no cohort needed', () => {
+  const f = makeFixtures();
+  try {
+    const p = join(f.root, 'project');
+    write(join(p, '.ai-toolkit/project.json'), { version: 1, name: 'project', mining: { cohort: ['ann'] } });
+    const d = scope(f, p, '--learn-dir');
+    assert.equal(d.status, 0, d.stderr);
+    assert.match(d.stdout.trim(), /\.ai-toolkit\/state\/main\/pr-mining\/learn$/);
+    assert.equal(JSON.parse(scope(f, p).stdout).learnDir, d.stdout.trim());
+    // A durable ledger: learnDir alone, without a cohort, is enough for --learn-dir.
+    write(join(p, '.ai-toolkit/project.json'), { version: 1, name: 'project', mining: { learnDir: 'decisions/pr-mining-learn' } });
+    const w = scope(f, p, '--learn-dir');
+    assert.equal(w.status, 0, w.stderr);
+    assert.equal(w.stdout.trim(), join(p, 'decisions', 'pr-mining-learn'));
+  } finally { f.cleanup(); }
+});

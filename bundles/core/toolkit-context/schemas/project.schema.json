@@ -80,6 +80,7 @@
       "description": "toolkit-pr-mining settings for this repo: reviewer cohort, bot policy, path scope.",
       "properties": {
         "cohort": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Bare reviewer logins whose comments count as human evidence." },
+        "learnDir": { "type": "string", "minLength": 1, "description": "Repo-relative directory for learn mode's ledger and state. Default: <stateRoot>/pr-mining/learn. Set it when stateRoot may be wiped." },
         "loginSuffix": { "type": "string", "description": "Appended to a cohort login in GitHub search queries when the host's account names carry one. Output keeps bare logins." },
         "bots": {
           "type": "object",

@@ -3,6 +3,7 @@
 // Prints one JSON object; exit 1 with a message when mining isn't configured. node: imports only.
 //
 //   scope.mjs [--cwd <dir>] [--neighbor <name>] [--reviewers a,b] [--mine-bots | --no-mine-bots]
+//   scope.mjs --learn-dir [--cwd <dir>] [--neighbor <name>]   print only learn mode's directory (no cohort needed)
 //
 // Identity, trunk, host and the state directory come from toolkit-context. The mining block
 // (cohort, loginSuffix, bots, paths) is read from the config file the resolver reports as its
@@ -33,6 +34,17 @@ function configFile(ctx) {
   return [join(main, ctx.source), join(ctx.project.root, ctx.source)].find(existsSync) || null;
 }
 
+// Learn mode's ledger and state: mining.learnDir (relative to the config's repo) when set, for a
+// ledger that has to outlive a wiped stateRoot; otherwise <stateRoot>/pr-mining/learn.
+function learnDirOf(ctx, file, mining) {
+  return mining?.learnDir ? resolve(dirname(dirname(file)), mining.learnDir) : join(ctx.stateRoot, 'pr-mining', 'learn');
+}
+export function learnDir({ cwd = process.cwd(), neighbor } = {}) {
+  const ctx = resolveCtx(cwd, neighbor);
+  const file = configFile(ctx);
+  return learnDirOf(ctx, file, (file && JSON.parse(readFileSync(file, 'utf8')).mining) || null);
+}
+
 export function effectiveScope({ cwd = process.cwd(), neighbor, reviewers, mineBots } = {}) {
   const ctx = resolveCtx(cwd, neighbor);
   const file = configFile(ctx);
@@ -58,7 +70,7 @@ export function effectiveScope({ cwd = process.cwd(), neighbor, reviewers, mineB
     bots, wholeRepo: include.length === 0,
     paths: { include, exclude, pathlessBodies: mining?.paths?.pathlessBodies || 'scoped-pr-only' },
     marker: ctx.adapters?.commentMarker?.text || null,
-    stateRoot: ctx.stateRoot, writeAllowed: ctx.writeAllowed !== false,
+    stateRoot: ctx.stateRoot, learnDir: learnDirOf(ctx, file, mining), writeAllowed: ctx.writeAllowed !== false,
     configFile: file, notes,
   };
 }
@@ -81,7 +93,10 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
     else if (a[i] === '--reviewers') o.reviewers = v().split(',').map((s) => s.trim()).filter(Boolean);
     else if (a[i] === '--mine-bots') o.mineBots = true;
     else if (a[i] === '--no-mine-bots') o.mineBots = false;
+    else if (a[i] === '--learn-dir') o.learnDirOnly = true;
     else die(`unknown argument: ${a[i]}`, 2);
   }
-  try { process.stdout.write(JSON.stringify(effectiveScope(o), null, 2) + '\n'); } catch (e) { die(e.message, e.code || 2); }
+  try {
+    process.stdout.write(o.learnDirOnly ? learnDir(o) + '\n' : JSON.stringify(effectiveScope(o), null, 2) + '\n');
+  } catch (e) { die(e.message, e.code || 2); }
 }

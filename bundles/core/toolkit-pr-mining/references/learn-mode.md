@@ -6,10 +6,14 @@ Mining asks what humans keep flagging. `learn` asks whether the comments `toolki
 
 Our comments are the ones carrying the project's comment marker. `scope.mjs` prints it as `marker` (the resolver's `adapters.commentMarker.text`; `resolve.mjs --full` shows the full config). **With no marker set, skip `learn` and say so**: there is no way to tell our comments from the user's own. Don't guess from the wording.
 
+## Where it writes
+
+`<learnDir>` holds the ledger and `state.json`. Get it with `node .agents/skills/toolkit-pr-mining/scripts/scope.mjs --learn-dir` (`learnDir` in the full output too): `mining.learnDir` from project.json when set, repo-relative, for a ledger that must outlive a wiped `stateRoot`; otherwise `<stateRoot>/pr-mining/learn`. `mkdir -p` it before writing.
+
 ## Inputs
 
 - `learn <PR URL | owner/repo#N> [...]`, or
-- `learn --since-last`: merged PRs since `<stateRoot>/pr-mining/learn/state.json` `last_run` (none yet: 30 days) that carry at least one of our `kind: "review"` comments. Find candidates with `GH_HOST=<host> gh search prs --commenter <login> --merged ">=<last_run>" --repo <owner/repo> --json number`, then keep only PRs whose fetched threads contain such a comment.
+- `learn --since-last`: merged PRs since `<learnDir>/state.json` `last_run` (none yet: 30 days) that carry at least one of our `kind: "review"` comments. Find candidates with `GH_HOST=<host> gh search prs --commenter <login> --merged ">=<last_run>" --repo <owner/repo> --json number`, then keep only PRs whose fetched threads contain such a comment.
 
 ## Steps, per PR
 
@@ -27,7 +31,7 @@ Our comments are the ones carrying the project's comment marker. `scope.mjs` pri
    A human's explicit, reasoned call settles an item; silence doesn't. `strength: "strong"` only for a code change at the line or a reasoned reply; everything else is `weak` with an `innocent_reading` ("author fixed it in a follow-up PR", "merged in a hurry"). Judge from the code, never from the resolved state alone.
 3. **List missed findings.** Every `peer-review` comment by a cohort member on a file or line no toolkit comment addressed is a candidate miss. If the review's report survives in the state directory, check it: a finding the report listed but the user chose not to post is `found_not_posted`, not `missed`.
 4. **Name the mechanism.** One sentence per item that would read the same with every name from the PR deleted ("flags a duplicated block without checking the two copies handle different events"). Record the persona and rule that produced or should have produced it.
-5. **Append to the ledger**, one JSON line per item, `<stateRoot>/pr-mining/learn/ledger.jsonl`:
+5. **Append to the ledger**, one JSON line per item, `<learnDir>/ledger.jsonl`:
 
    ```json
    {"ts":"<ISO8601>","repo":"app","pr":234,"comment_id":4169230325,"kind":"toolkit_comment|missed|found_not_posted",
