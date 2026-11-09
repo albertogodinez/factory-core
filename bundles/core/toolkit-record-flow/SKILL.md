@@ -90,6 +90,9 @@ STATE=$(node .agents/skills/toolkit-context/scripts/resolve.mjs --field stateRoo
    `mark` calls gets one frame per mark, and `contact-sheet.txt` gives each tile's time and label,
    so call `mark` right after every state the video has to prove. Without marks the sheet is six
    evenly spaced frames, which can miss a short state entirely.
+   Before captioning or attaching, name the one user action that fires the behaviour the change
+   touches (a click, a scroll step, a resize), `mark` right after it, and open that frame: it shows
+   the change, or the take drove the wrong trigger and gets re-recorded.
 5. **Before/after comparison** (a change whose point is timing: a jump, an animation, a loading hand-off, a load-order race). For a race, each take uses the trigger that reproduced it (the same request order as the failure, forced by slowing the load that loses), so the before half shows the bug. If no take shows it, the PR says the video evidence is missing rather than that the race can't be filmed. Record
    the same take script against each build, one dev server at a time, before from a worktree detached at the branch's merge base
    (`git worktree add --detach <path> $(git merge-base HEAD origin/<trunk>)`), not trunk's tip. Then
