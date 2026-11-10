@@ -33,7 +33,7 @@ const CONFIG = {
 
   // The primitive set.
   repo: '<owner>/<repo>',
-  trunkRef: '<e.g. origin/main — use the resolver's trunk per repo>',
+  trunkRef: '<e.g. origin/main — use the resolver trunk per repo>',
   primitivePrs: [/* e.g. 524, 527, 528, 531 */],
   primitiveDirs: '<e.g. frontend/src/components/primitives/>',
 
