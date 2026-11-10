@@ -24,7 +24,7 @@ before(() => {
 after(() => fx.cleanup());
 
 function setMarker(marker, extra = {}) {
-  const p = join(fx.root, 'project/.ai-toolkit/project.json');
+  const p = join(fx.root, 'project/.agents/factory-metadata/project.json');
   const c = JSON.parse(readFileSync(p, 'utf8'));
   const next = { ...c, pr: marker === undefined ? undefined : { commentMarker: marker }, ...extra };
   if (marker === undefined) delete next.pr;
@@ -40,7 +40,7 @@ function post(args, { cwd = join(fx.root, 'project'), sc = {} } = {}) {
   const r = spawnSync(process.execPath, [POST, '--body-file', body, '--model', 'm-1', ...args], {
     cwd, encoding: 'utf8',
     env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, FAKE_GH_SCENARIO: scenario, FAKE_GH_LOG: log,
-      AI_TOOLKIT_HOME: fx.home, AI_TOOLKIT_CONFIG: '', POST_COMMENT_TS: '2026-01-01T00:00:00Z' },
+      FACTORY_HOME: fx.home, FACTORY_CONFIG: '', POST_COMMENT_TS: '2026-01-01T00:00:00Z' },
   });
   const calls = existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [];
   return { ...r, calls, writes: calls.filter((c) => c.argv.includes('POST') || /mutation/.test(c.argv.join(' '))) };
@@ -153,7 +153,7 @@ test('a body that already carries the marker is refused', () => {
   setMarker({ mode: 'banner', text: 'test-marker', banner: BANNERS });
   const own = join(fx.root, 'marked.md'); writeFileSync(own, '<!-- test-marker {} -->\nhi\n');
   const r = spawnSync(process.execPath, [POST, '--body-file', own, '--pr', '7', '--kind', 'reply', '--in-reply-to', '55'], {
-    cwd: join(fx.root, 'project'), encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: fx.home, AI_TOOLKIT_CONFIG: '', PATH: `${bin}:${process.env.PATH}`, FAKE_GH_SCENARIO: scenario, FAKE_GH_LOG: log },
+    cwd: join(fx.root, 'project'), encoding: 'utf8', env: { ...process.env, FACTORY_HOME: fx.home, FACTORY_CONFIG: '', PATH: `${bin}:${process.env.PATH}`, FAKE_GH_SCENARIO: scenario, FAKE_GH_LOG: log },
   });
   assert.equal(r.status, 1); assert.match(r.stderr, /already contains test-marker/);
 });

@@ -10,7 +10,7 @@ Pull review comments from a repo's reviewer cohort, cluster them by theme, apply
 
 ## Configuration
 
-Mining reads `mining` from the repo's `.ai-toolkit/project.json` (schema: `toolkit-context/schemas/project.schema.json`):
+Mining reads `mining` from the repo's `.agents/factory-metadata/project.json` (schema: `toolkit-context/schemas/project.schema.json`):
 
 ```json
 { "mining": { "cohort": ["ann", "bo"], "loginSuffix": "", 

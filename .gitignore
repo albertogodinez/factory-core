@@ -1,3 +1,3 @@
 node_modules/
 tmp/
-.ai-toolkit/state/
+.agents/factory-metadata/state/

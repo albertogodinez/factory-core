@@ -17,7 +17,7 @@ let t, repo, pack, out;
 before(() => {
   t = tempRoot('review-');
   repo = makeRepo(join(t.root, 'proj'), {
-    files: { '.ai-toolkit/project.json': { version: 1, name: 'proj', review: { personas: ['react-patterns', 'acme-conv', 'ghost-conv'] } } },
+    files: { '.agents/factory-metadata/project.json': { version: 1, name: 'proj', review: { personas: ['react-patterns', 'acme-conv', 'ghost-conv'] } } },
   });
   pack = join(t.root, 'toolkit-review-acme');
   write(join(pack, 'personas/acme-conv.md'), '---\nname: acme-conv\ndescription: Acme conventions.\n---\nBody\n');

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://agent-factory/skills/toolkit-formal-verify/schemas/coverage.schema.json",
+  "$id": "https://factory-core/skills/toolkit-formal-verify/schemas/coverage.schema.json",
   "title": "Verify skill coverage record",
   "description": "coverage.json of a formal verify skill (.agents/skills/toolkit-verify-<repo>-<subsystem>/). check-drift.mjs reads it to find the code each check covers and the commit at which the model last matched that code.",
   "type": "object",

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scope.mjs: the effective mining scope for this repo (or a neighbor) from .ai-toolkit/project.json.
+// scope.mjs: the effective mining scope for this repo (or a neighbor) from .agents/factory-metadata/project.json.
 // Prints one JSON object; exit 1 with a message when mining isn't configured. node: imports only.
 //
 //   scope.mjs [--cwd <dir>] [--neighbor <name>] [--reviewers a,b] [--mine-bots | --no-mine-bots]
@@ -37,7 +37,7 @@ function configFile(ctx) {
 // Learn mode's ledger and state: mining.learnDir (relative to the config's repo) when set, for a
 // ledger that has to outlive a wiped stateRoot; otherwise <stateRoot>/pr-mining/learn.
 function learnDirOf(ctx, file, mining) {
-  return mining?.learnDir ? resolve(dirname(dirname(file)), mining.learnDir) : join(ctx.stateRoot, 'pr-mining', 'learn');
+  return mining?.learnDir ? resolve(dirname(dirname(dirname(file))), mining.learnDir) : join(ctx.stateRoot, 'pr-mining', 'learn');
 }
 export function learnDir({ cwd = process.cwd(), neighbor } = {}) {
   const ctx = resolveCtx(cwd, neighbor);
@@ -50,7 +50,7 @@ export function effectiveScope({ cwd = process.cwd(), neighbor, reviewers, mineB
   const file = configFile(ctx);
   const mining = (file && JSON.parse(readFileSync(file, 'utf8')).mining) || null;
   if (!mining && !reviewers) {
-    throw Object.assign(new Error(`no "mining" block in ${file || ctx.source || 'any .ai-toolkit/project.json'} for ${ctx.project.name}. Add one: {"mining":{"cohort":["login"],"paths":{"include":["src/"]}}}`), { code: 1 });
+    throw Object.assign(new Error(`no "mining" block in ${file || ctx.source || 'any .agents/factory-metadata/project.json'} for ${ctx.project.name}. Add one: {"mining":{"cohort":["login"],"paths":{"include":["src/"]}}}`), { code: 1 });
   }
   const cohort = reviewers || mining?.cohort || [];
   if (!cohort.length) throw Object.assign(new Error(`mining.cohort is empty for ${ctx.project.name}; list the reviewer logins or pass --reviewers`), { code: 1 });

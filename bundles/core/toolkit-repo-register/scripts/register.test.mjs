@@ -11,7 +11,7 @@ const REG = join(dirname(fileURLToPath(import.meta.url)), 'register.mjs');
 function env(root) {
   mkdirSync(join(root, 'home/.ssh'), { recursive: true });
   write(join(root, 'home/.ssh/config'), 'Host work-gh\n  HostName github.corp.example\n');
-  return { ...process.env, HOME: join(root, 'home'), AI_TOOLKIT_HOME: join(root, 'toolkit-home') };
+  return { ...process.env, HOME: join(root, 'home'), FACTORY_HOME: join(root, 'toolkit-home') };
 }
 const run = (root, cwd, ...args) => spawnSync(process.execPath, [REG, '--cwd', cwd, ...args], { encoding: 'utf8', env: env(root) });
 
@@ -30,7 +30,7 @@ test('dry run proposes only what detection does not already give', () => {
     assert.deepEqual(cfg.commands, { format: 'pnpm format', install: 'pnpm install' }); // build/test already detected
     assert.equal(cfg.worktreeConvention, 'dot-worktrees');
     for (const k of ['trunk', 'packageManager', 'prTemplate', 'remote']) assert.equal(k in cfg, false, k);
-    assert.equal(existsSync(join(app, '.ai-toolkit/project.json')), false, 'dry run writes nothing');
+    assert.equal(existsSync(join(app, '.agents/factory-metadata/project.json')), false, 'dry run writes nothing');
   } finally { t.cleanup(); }
 });
 
@@ -53,7 +53,7 @@ test('--write validates, writes, and a second run has nothing to change', () => 
     makeRepo(join(t.root, 'lib'), { remote: 'git@github.com:acme/lib.git' });
     let r = run(t.root, app, '--write', '--neighbor', 'lib:write');
     assert.equal(r.status, 0, r.stderr);
-    const cfg = JSON.parse(readFileSync(join(app, '.ai-toolkit/project.json'), 'utf8'));
+    const cfg = JSON.parse(readFileSync(join(app, '.agents/factory-metadata/project.json'), 'utf8'));
     assert.deepEqual(cfg.neighbors, [{ name: 'lib', access: 'write' }]);
     assert.equal(cfg.commands.test, 'make test');
     r = run(t.root, app, '--dry-run', '--neighbor', 'lib:write');
@@ -66,13 +66,13 @@ test('existing values are kept and reported as drift until --refresh', () => {
   const t = tempRoot();
   try {
     const app = makeRepo(join(t.root, 'app'), { remote: 'git@github.com:acme/app.git', branch: 'main', files: { 'yarn.lock': '' , 'package.json': { scripts: {} } } });
-    write(join(app, '.ai-toolkit/project.json'), { version: 1, packageManager: 'pnpm' });
+    write(join(app, '.agents/factory-metadata/project.json'), { version: 1, packageManager: 'pnpm' });
     let r = run(t.root, app, '--write');
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stderr, /drift: packageManager is "pnpm" in config; verified "yarn"/);
-    assert.equal(JSON.parse(readFileSync(join(app, '.ai-toolkit/project.json'), 'utf8')).packageManager, 'pnpm');
+    assert.equal(JSON.parse(readFileSync(join(app, '.agents/factory-metadata/project.json'), 'utf8')).packageManager, 'pnpm');
     r = run(t.root, app, '--write', '--refresh');
-    assert.equal(JSON.parse(readFileSync(join(app, '.ai-toolkit/project.json'), 'utf8')).packageManager, 'yarn');
+    assert.equal(JSON.parse(readFileSync(join(app, '.agents/factory-metadata/project.json'), 'utf8')).packageManager, 'yarn');
   } finally { t.cleanup(); }
 });
 

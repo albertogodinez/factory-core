@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "toolkit-dev-slot app",
-  "description": "How to run one app's dev server in a per-worktree container. Lives in <project>/.ai-toolkit/dev-slot.json or in an installed companion's apps/<name>.json.",
+  "description": "How to run one app's dev server in a per-worktree container. Lives in <project>/.agents/factory-metadata/dev-slot.json or in an installed companion's apps/<name>.json.",
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "image", "containerPort", "healthPath", "portRange", "memoryGiB"],

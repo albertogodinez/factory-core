@@ -16,7 +16,7 @@ after(() => fx.cleanup());
 
 function run(cwd, args = [], env = {}) {
   const out = execFileSync(process.execPath, [RESOLVE, '--no-cache', ...args], {
-    cwd, encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: fx.home, AI_TOOLKIT_CONFIG: '', ...env },
+    cwd, encoding: 'utf8', env: { ...process.env, FACTORY_HOME: fx.home, FACTORY_CONFIG: '', ...env },
   });
   return args.includes('--field') ? out.trim() : JSON.parse(out);
 }
@@ -30,15 +30,15 @@ test('source 1: --config wins over a project.json', () => {
   assert.ok(o.stateRoot.startsWith(join(fx.home, 'cache')), 'explicit config keeps state out of the repo');
 });
 
-test('source 1: AI_TOOLKIT_CONFIG works like --config', () => {
-  const o = run(join(fx.root, 'project'), [], { AI_TOOLKIT_CONFIG: join(fx.root, 'explicit.json') });
+test('source 1: FACTORY_CONFIG works like --config', () => {
+  const o = run(join(fx.root, 'project'), [], { FACTORY_CONFIG: join(fx.root, 'explicit.json') });
   assert.equal(o.project.name, 'explicit-name');
 });
 
 test('source 2: the nearest project.json, from a subdirectory', () => {
   const o = run(join(fx.root, 'project', '.github'));
   assert.equal(o.mode, 'project');
-  assert.equal(o.source, '.ai-toolkit/project.json');
+  assert.equal(o.source, '.agents/factory-metadata/project.json');
   assert.equal(o.project.name, 'project');
   assert.equal(o.project.root, join(fx.root, 'project'));
   assert.equal(o.project.trunk, 'main');
@@ -47,7 +47,7 @@ test('source 2: the nearest project.json, from a subdirectory', () => {
   assert.deepEqual(o.project.commands, { build: 'pnpm build', test: 'pnpm test', lint: 'pnpm lint' });
   assert.deepEqual(o.project.remote, { host: 'github.com', slug: 'acme/project' });
   assert.deepEqual(o.adapters, { commentMarker: { mode: 'off' } });
-  assert.equal(o.stateRoot, join(fx.root, 'project', '.ai-toolkit', 'state', 'main'));
+  assert.equal(o.stateRoot, join(fx.root, 'project', '.agents/factory-metadata', 'state', 'main'));
   assert.equal(o.writeAllowed, true);
 });
 
@@ -58,12 +58,12 @@ test('neighbors: default sibling root is omitted, trunk read from the neighbor',
 
 test('source 3 beats 4: workspace.json is used before a legacy repos.json', () => {
   const hub = join(fx.root, 'hub');
-  write(join(hub, '.ai-toolkit/workspace.json'), { version: 2, repos: [] });
+  write(join(hub, '.agents/factory-metadata/workspace.json'), { version: 2, repos: [] });
   try {
     const o = run(hub);
     assert.equal(o.mode, 'workspace');
-    assert.equal(o.source, '.ai-toolkit/workspace.json');
-  } finally { rmSync(join(hub, '.ai-toolkit'), { recursive: true }); }
+    assert.equal(o.source, '.agents/factory-metadata/workspace.json');
+  } finally { rmSync(join(hub, '.agents/factory-metadata'), { recursive: true }); }
 });
 
 test('source 4: legacy repos.json lists every registered repo as a neighbor', () => {
@@ -111,7 +111,7 @@ test('a linked worktree resolves to its parent project, with its own stateRoot',
   assert.equal(o.mode, 'project');
   assert.equal(o.project.name, 'project');
   assert.equal(o.project.root, wt);
-  assert.equal(o.stateRoot, join(fx.root, 'project', '.ai-toolkit', 'state', 'x'));
+  assert.equal(o.stateRoot, join(fx.root, 'project', '.agents/factory-metadata', 'state', 'x'));
 });
 
 test('a sibling checkout resolves by remote against a workspace config', () => {
@@ -144,7 +144,7 @@ test('outside any git repo and config: a clear error, exit 2', () => {
 });
 
 test('invalid project.json is reported, not ignored', () => {
-  const p = join(fx.root, 'project/.ai-toolkit/project.json');
+  const p = join(fx.root, 'project/.agents/factory-metadata/project.json');
   const good = readFileSync(p, 'utf8');
   write(p, '{ not json');
   try { assert.throws(() => run(join(fx.root, 'project')), (e) => e.status === 2 && /invalid JSON/.test(e.stderr)); }
@@ -153,9 +153,9 @@ test('invalid project.json is reported, not ignored', () => {
 
 test('the cache is reused, and invalidated by a config change and by a HEAD change', () => {
   const d = join(fx.root, 'project');
-  const env = { ...process.env, AI_TOOLKIT_HOME: fx.home, AI_TOOLKIT_CONFIG: '' };
+  const env = { ...process.env, FACTORY_HOME: fx.home, FACTORY_CONFIG: '' };
   const call = () => execFileSync(process.execPath, [RESOLVE, '--field', 'project.trunk'], { cwd: d, encoding: 'utf8', env }).trim();
-  const p = join(d, '.ai-toolkit/project.json');
+  const p = join(d, '.agents/factory-metadata/project.json');
   const good = readFileSync(p, 'utf8');
   assert.equal(call(), 'main');
   write(p, { ...JSON.parse(good), trunk: 'cached-check' });
@@ -181,7 +181,7 @@ test('parseRemote normalizes ssh, scp-style, https and aliases', () => {
 
 test('the shipped fixtures and an empty config pass the schema', () => {
   const schema = loadSchema();
-  assert.deepEqual(validate(schema, JSON.parse(readFileSync(join(fx.root, 'project/.ai-toolkit/project.json'), 'utf8'))), []);
+  assert.deepEqual(validate(schema, JSON.parse(readFileSync(join(fx.root, 'project/.agents/factory-metadata/project.json'), 'utf8'))), []);
   assert.deepEqual(validate(schema, {}), []);
   assert.ok(validate(schema, { neighbors: [{ access: 'admin' }] }).length >= 2);
   assert.ok(validate(schema, { pr: { commentMarker: { mode: 'loud' } } }).length >= 1);
@@ -208,12 +208,12 @@ test('--repo by slug: this project, a neighbor (read-only unless access is write
 });
 
 test('a long comment-marker banner is elided by default and shown with --full', () => {
-  const p = join(fx.root, 'project/.ai-toolkit/project.json');
+  const p = join(fx.root, 'project/.agents/factory-metadata/project.json');
   const good = readFileSync(p, 'utf8');
   const banner = { reply: 'r'.repeat(300), annotation: 'a'.repeat(300), review: 'v'.repeat(300) };
   write(p, { ...JSON.parse(good), pr: { commentMarker: { mode: 'banner', text: 'm', banner } } });
   try {
-    const raw = execFileSync(process.execPath, [RESOLVE, '--no-cache'], { cwd: join(fx.root, 'project'), encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: fx.home, AI_TOOLKIT_CONFIG: '' } });
+    const raw = execFileSync(process.execPath, [RESOLVE, '--no-cache'], { cwd: join(fx.root, 'project'), encoding: 'utf8', env: { ...process.env, FACTORY_HOME: fx.home, FACTORY_CONFIG: '' } });
     assert.ok(Buffer.byteLength(raw) <= 1024, `${Buffer.byteLength(raw)} B`);
     assert.equal(JSON.parse(raw).adapters.commentMarker.mode, 'banner');
     assert.deepEqual(run(join(fx.root, 'project'), ['--full']).adapters.commentMarker.banner, banner);
@@ -222,12 +222,12 @@ test('a long comment-marker banner is elided by default and shown with --full', 
 
 test('project.json with "workspace" keeps workspace mode and lays its settings over the registry', () => {
   const hub = join(fx.root, 'hub');
-  write(join(hub, '.ai-toolkit/project.json'), { version: 1, name: 'hub', workspace: '.claude/repos.json',
+  write(join(hub, '.agents/factory-metadata/project.json'), { version: 1, name: 'hub', workspace: '.claude/repos.json',
     pr: { commentMarker: { mode: 'off' } }, adapters: { tracker: 'some-tracker' }, review: { personas: ['hub-persona'] } });
   try {
     const o = run(hub);
     assert.equal(o.mode, 'workspace');
-    assert.equal(o.source, '.ai-toolkit/project.json');
+    assert.equal(o.source, '.agents/factory-metadata/project.json');
     assert.deepEqual(o.neighbors.map((n) => n.name), ['project', 'lib']);
     assert.equal(o.adapters.tracker, 'some-tracker');
     assert.deepEqual(o.adapters.commentMarker, { mode: 'off' });
@@ -239,7 +239,7 @@ test('project.json with "workspace" keeps workspace mode and lays its settings o
     assert.equal(r.project.root, join(fx.root, 'project'));
     assert.deepEqual(r.adapters.personas, ['general']);
     // A pointer to a file that isn't a registry is an error, not a silent fallback.
-    write(join(hub, '.ai-toolkit/project.json'), { version: 1, workspace: 'nope.json' });
+    write(join(hub, '.agents/factory-metadata/project.json'), { version: 1, workspace: 'nope.json' });
     assert.throws(() => run(hub), (e) => e.status === 2 && /"workspace" names/.test(e.stderr));
-  } finally { rmSync(join(hub, '.ai-toolkit'), { recursive: true }); }
+  } finally { rmSync(join(hub, '.agents/factory-metadata'), { recursive: true }); }
 });

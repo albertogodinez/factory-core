@@ -10,7 +10,7 @@
 //   url | env | list | down [--all] [--purge] | gc [--dry-run]
 //   check [--url URL]       exit 0 only if URL is served by this worktree
 //   host  [--release] [--timeout S]  no Docker: wait for the app's own port, then hold its lock
-// App config: <project>/.ai-toolkit/dev-slot.json or an installed companion's apps/<app>.json, shape
+// App config: <project>/.agents/factory-metadata/dev-slot.json or an installed companion's apps/<app>.json, shape
 // ../schemas/app.schema.json. app defaults to the project name from toolkit-context.
 // Env profile: adapters.envProfile names profiles/<name>.json in an installed skill (see SKILL.md).
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -63,7 +63,7 @@ const skillsDirs = (worktree) => [...new Set([join(worktree, '.agents/skills'), 
 
 // Where an app config can live: the project's own file, then each installed companion's apps/ dir.
 export function appCandidates(name, worktree) {
-  const own = [join(worktree, '.ai-toolkit/dev-slot.json')];
+  const own = [join(worktree, '.agents/factory-metadata/dev-slot.json')];
   const companions = skillsDirs(worktree).flatMap((d) => existsSync(d)
     ? readdirSync(d).filter((e) => e.startsWith('toolkit-dev-slot-')).map((e) => join(d, e, 'apps', `${name}.json`)) : []);
   return [...own, ...companions];
@@ -88,12 +88,12 @@ export function loadApp(name, worktree = process.cwd()) {
   const tried = [];
   for (const file of appCandidates(name, worktree)) {
     if (!existsSync(file)) { tried.push(file); continue; }
-    const own = file.endsWith('/.ai-toolkit/dev-slot.json');
+    const own = file.endsWith('/.agents/factory-metadata/dev-slot.json');
     const app = JSON.parse(readFileSync(file, 'utf8'));
     if (own && app.name !== name) { tried.push(`${file} (names "${app.name}")`); continue; }
     return loadAppFile(file, name);
   }
-  throw new Error(`no app config for "${name}". Looked in:\n  ${tried.join('\n  ')}\nAdd .ai-toolkit/dev-slot.json (copy examples/astro.json) or install a toolkit-dev-slot-* companion that ships apps/${name}.json.`);
+  throw new Error(`no app config for "${name}". Looked in:\n  ${tried.join('\n  ')}\nAdd .agents/factory-metadata/dev-slot.json (copy examples/astro.json) or install a toolkit-dev-slot-* companion that ships apps/${name}.json.`);
 }
 
 // --- env profiles -----------------------------------------------------------------------------

@@ -15,9 +15,9 @@ const T0 = Date.parse('2026-06-01T00:00:00Z');
 
 function sandbox() {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'af-lessons-')));
-  const env = { AI_TOOLKIT_HOME: join(dir, 'home') };
+  const env = { FACTORY_HOME: join(dir, 'home') };
   const rec = (project, fp, at, scope = 'core') => run('record', {
-    scope, fingerprint: fp, summary: `summary of ${fp}`, project, root: join(dir, project), 'state-root': join(dir, project, '.ai-toolkit', 'state', 'main'),
+    scope, fingerprint: fp, summary: `summary of ${fp}`, project, root: join(dir, project), 'state-root': join(dir, project, '.agents/factory-metadata', 'state', 'main'),
   }, env, at);
   return { dir, env, rec, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
@@ -36,9 +36,9 @@ test('the 3rd occurrence across 2 repos makes a fingerprint due, with the prompt
     assert.equal(due.due[0].prompt, 'We\'ve seen "summary of Browser reauth after restart" 3 times across 2 repos (repo-a, repo-b). Promote it to core? [promote / not now / never]');
     // The local log got every lesson; repo scope never reaches the index.
     s.rec('repo-a', 'repo-only-thing', T0, 'repo');
-    const local = readFileSync(join(s.dir, 'repo-a', '.ai-toolkit', 'state', 'main', 'lessons.jsonl'), 'utf8').trim().split('\n');
+    const local = readFileSync(join(s.dir, 'repo-a', '.agents/factory-metadata', 'state', 'main', 'lessons.jsonl'), 'utf8').trim().split('\n');
     assert.equal(local.length, 3);
-    assert.ok(!readFileSync(join(s.env.AI_TOOLKIT_HOME, 'lessons-index.jsonl'), 'utf8').includes('repo-only-thing'));
+    assert.ok(!readFileSync(join(s.env.FACTORY_HOME, 'lessons-index.jsonl'), 'utf8').includes('repo-only-thing'));
   } finally { s.done(); }
 });
 

@@ -14,7 +14,7 @@ const PREFIX = 'toolkit-verify-';
 const args = process.argv.slice(2);
 const VALUE_FLAGS = new Set(['--repo', '--pr', '--diff', '--worktree', '--root']);
 const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-// --root points at another project (its .ai-toolkit/project.json and .agents/skills); the tests use it.
+// --root points at another project (its .agents/factory-metadata/project.json and .agents/skills); the tests use it.
 const TOOLKIT_ROOT = flag('--root') ? path.resolve(flag('--root')) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const SKILLS_DIR = path.join(TOOLKIT_ROOT, '.agents/skills');
 const strict = args.includes('--strict');

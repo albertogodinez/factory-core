@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // register.mjs: verify a repo's facts and write only what zero-config detection doesn't already give
-// into .ai-toolkit/project.json. node: imports only, no network.
+// into .agents/factory-metadata/project.json. node: imports only, no network.
 //
 //   register.mjs [--cwd <dir>] [--dry-run | --write] [--refresh] [--neighbor <name>[:read|write]]...
 //                [--persona <name>]...
@@ -159,7 +159,7 @@ function detection(root) {
 export function propose(cwd, { neighbors = [], personas = [], refresh = false, skills = SKILLS } = {}) {
   const v = verify(cwd);
   const det = detection(v.root);
-  const file = join(v.root, '.ai-toolkit', 'project.json');
+  const file = join(v.root, '.agents/factory-metadata', 'project.json');
   const existing = readJson(file);
   if (existsSync(file) && !existing) throw new Error(`${file} exists but is not valid JSON; fix it first`);
   const config = existing ? structuredClone(existing) : { version: 1 };

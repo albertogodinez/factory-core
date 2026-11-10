@@ -4,7 +4,7 @@ Read this when a persona is missing, when you add a persona or rule, or when you
 
 ## Where a persona comes from
 
-The project names its personas in `review.personas` in `.ai-toolkit/project.json` (the resolver reports them as `adapters.personas`). `scripts/resolve-personas.mjs` does the rest:
+The project names its personas in `review.personas` in `.agents/factory-metadata/project.json` (the resolver reports them as `adapters.personas`). `scripts/resolve-personas.mjs` does the rest:
 
 1. `general` always runs.
 2. With no personas configured, the default set is every persona whose frontmatter has `default: true`. In core that is `fix-root-causes`, `test-behavior` and `no-comments`. A configured list is used as written.

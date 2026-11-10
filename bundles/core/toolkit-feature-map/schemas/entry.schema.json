@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "agent-factory/toolkit-feature-map/entry.schema.json",
+  "$id": "factory-core/toolkit-feature-map/entry.schema.json",
   "title": "Feature Map Entry Frontmatter",
   "description": "Frontmatter of one feature file in a repo's feature map (.agents/skills/toolkit-features-<project>/features/<id>.md). The checker resolves every code and test anchor against the project root or a neighbor. Unknown keys are ignored with a warning.",
   "type": "object",

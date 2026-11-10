@@ -25,7 +25,7 @@ after(() => t.cleanup());
 
 function factory(args, cwd, env = {}) {
   const r = spawnSync(process.execPath, [FACTORY, ...args], { cwd, encoding: 'utf8',
-    env: { ...process.env, AI_TOOLKIT_HOME: home, AI_TOOLKIT_CONFIG: '', AI_TOOLKIT_HARNESSES: 'none', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    env: { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '', FACTORY_HARNESSES: 'none', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
   return { status: r.status, out: r.stdout, err: r.stderr };
 }
 const json = (p) => JSON.parse(readFileSync(p, 'utf8'));
@@ -65,15 +65,15 @@ test('committed install: replaces another installer\'s copy and its lock entry, 
   const third = json(join(d, 'skills-lock.json'));
   assert.equal(third.skills.handoff, undefined); assert.ok(third.skills.tdd, 'unrelated entries stay');
   assert.equal(readFileSync(join(d, '.agents/skills/my-skill/SKILL.md'), 'utf8'), own);
-  const lock = json(join(d, '.ai-toolkit/skills-lock.json'));
+  const lock = json(join(d, '.agents/factory-metadata/skills-lock.json'));
   assert.equal(lock.mode, 'commit');
   for (const n of ['toolkit-context', 'toolkit-pr-comment', 'handoff']) assert.ok(lock.skills[n]?.computedHash, n);
   assert.equal(readlinkSync(join(d, '.claude/skills/toolkit-context')), join('..', '..', '.agents', 'skills', 'toolkit-context'));
-  assert.deepEqual(json(join(d, '.ai-toolkit/project.json')).pr, { commentMarker: { mode: 'off' } });
-  assert.match(readFileSync(join(d, '.git/info/exclude'), 'utf8'), /\/\.ai-toolkit\/state\//);
+  assert.deepEqual(json(join(d, '.agents/factory-metadata/project.json')).pr, { commentMarker: { mode: 'off' } });
+  assert.match(readFileSync(join(d, '.git/info/exclude'), 'utf8'), /\/\.agents\/factory-metadata\/state\//);
   assert.ok(json(join(home, 'installs.json')).repos[d]);
   // The resolver works from the installed copy.
-  const ctx = spawnSync(process.execPath, [join(d, '.agents/skills/toolkit-context/scripts/resolve.mjs')], { cwd: d, encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: home, AI_TOOLKIT_CONFIG: '' } });
+  const ctx = spawnSync(process.execPath, [join(d, '.agents/skills/toolkit-context/scripts/resolve.mjs')], { cwd: d, encoding: 'utf8', env: { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '' } });
   assert.equal(JSON.parse(ctx.stdout).mode, 'project');
   const doc = factory(['doctor'], d);
   assert.equal(doc.status, 0, doc.out + doc.err);
@@ -82,12 +82,12 @@ test('committed install: replaces another installer\'s copy and its lock entry, 
 test('bundle defaults: the marker default is kept without a TTY, and later bundles only add missing keys', () => {
   const d = personalRepo('p2');
   assert.equal(factory(['install', 'core', 'extra', '--commit'], d).status, 0);
-  const p = json(join(d, '.ai-toolkit/project.json'));
+  const p = json(join(d, '.agents/factory-metadata/project.json'));
   assert.equal(p.pr.commentMarker.text, 'org-marker');
   assert.equal(p.adapters.tracker, 'org-tracker');
   const d2 = personalRepo('p3');
   assert.equal(factory(['install', 'core', 'extra', '--commit', '--marker', 'off'], d2).status, 0);
-  assert.deepEqual(json(join(d2, '.ai-toolkit/project.json')).pr.commentMarker, { mode: 'off' });
+  assert.deepEqual(json(join(d2, '.agents/factory-metadata/project.json')).pr.commentMarker, { mode: 'off' });
 });
 
 test('a skill name the repo already owns is a conflict, not an overwrite', () => {
@@ -129,13 +129,13 @@ test('local-only install: git status stays clean, the team\'s tracked skill is u
   assert.doesNotMatch(factory(['status'], d).out, /can't see/, 'the main checkout never gets the hint');
   assert.ok(existsSync(join(wt, '.agents/skills/toolkit-context/SKILL.md')));
   assert.equal(porcelain(wt), '', 'links are excluded too');
-  const ctx = spawnSync(process.execPath, [join(wt, '.agents/skills/toolkit-context/scripts/resolve.mjs'), '--field', 'stateRoot'], { cwd: wt, encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: home, AI_TOOLKIT_CONFIG: '' } });
-  assert.equal(ctx.stdout.trim(), join(d, '.ai-toolkit', 'state', 'x'));
+  const ctx = spawnSync(process.execPath, [join(wt, '.agents/skills/toolkit-context/scripts/resolve.mjs'), '--field', 'stateRoot'], { cwd: wt, encoding: 'utf8', env: { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '' } });
+  assert.equal(ctx.stdout.trim(), join(d, '.agents/factory-metadata', 'state', 'x'));
   // remove cleans the exclude entries
   assert.equal(factory(['remove', 'core', '--purge'], d).status, 0);
   const excl = readFileSync(join(d, '.git/info/exclude'), 'utf8');
-  assert.doesNotMatch(excl, /agent-factory/);
-  assert.ok(!existsSync(join(d, '.ai-toolkit')) && !existsSync(join(d, '.agents/skills/toolkit-context')));
+  assert.doesNotMatch(excl, /factory-core/);
+  assert.ok(!existsSync(join(d, '.agents/factory-metadata')) && !existsSync(join(d, '.agents/skills/toolkit-context')));
   assert.ok(existsSync(join(d, '.agents/skills/team-skill/SKILL.md')));
 });
 
@@ -178,7 +178,7 @@ test('--dry-run changes nothing', () => {
   const r = factory(['install', 'core', '--commit', '--dry-run'], d);
   assert.equal(r.status, 0, r.err); assert.match(r.out, /\[dry run\]/);
   assert.equal(porcelain(d), '');
-  assert.ok(!existsSync(join(d, '.ai-toolkit')));
+  assert.ok(!existsSync(join(d, '.agents/factory-metadata')));
 });
 
 test('update from a linked worktree finds a committed install made in that worktree', () => {
@@ -266,8 +266,8 @@ test('install into a hub with a registry writes a workspace pointer, so the regi
   const r = factory(['install', 'core', '--commit'], d);
   assert.equal(r.status, 0, r.err);
   assert.match(r.out, /workspace \.claude\/repos\.json/);
-  assert.equal(json(join(d, '.ai-toolkit/project.json')).workspace, '.claude/repos.json');
-  const ctx = spawnSync(process.execPath, [join(d, '.agents/skills/toolkit-context/scripts/resolve.mjs'), '--no-cache'], { cwd: d, encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: home, AI_TOOLKIT_CONFIG: '' } });
+  assert.equal(json(join(d, '.agents/factory-metadata/project.json')).workspace, '.claude/repos.json');
+  const ctx = spawnSync(process.execPath, [join(d, '.agents/skills/toolkit-context/scripts/resolve.mjs'), '--no-cache'], { cwd: d, encoding: 'utf8', env: { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '' } });
   const o = JSON.parse(ctx.stdout);
   assert.equal(o.mode, 'workspace');
   assert.deepEqual(o.neighbors.map((n) => n.name), ['other']);
@@ -282,7 +282,7 @@ test('tests are not installed; an install from before (hash v1) is not "edited",
   const skills = join(d, '.agents/skills');
   assert.deepEqual(walk(skills).filter((f) => /\.(test|guard)\.mjs$/.test(f)), [], 'no test files installed');
   assert.ok(existsSync(join(skills, 'toolkit-context/scripts/resolve.mjs')), 'the scripts themselves are');
-  const lockPath = join(d, '.ai-toolkit/skills-lock.json');
+  const lockPath = join(d, '.agents/factory-metadata/skills-lock.json');
   assert.equal(json(lockPath).hashVersion, 2);
   // Rebuild what an older factory left: test files copied in, hashes over everything, no hashVersion.
   const lock = json(lockPath); delete lock.hashVersion;
@@ -308,11 +308,11 @@ test('update after a bundle moves to another repo relocks the entries without co
   const oldRepo = join(t.root, 'old-src'), newRepo = join(t.root, 'new-src');
   makeRepo(oldRepo, { files: { 'bundles/moved/moved-skill/SKILL.md': skill } });
   makeRepo(newRepo, { files: { 'bundles/moved/moved-skill/SKILL.md': skill } });
-  const env = { AI_TOOLKIT_HOME: h };
+  const env = { FACTORY_HOME: h };
   write(join(h, 'sources.json'), { core: CORE, moved: join(oldRepo, 'bundles', 'moved') });
   const d = personalRepo('pmove');
   assert.equal(factory(['install', 'core', 'moved', '--commit'], d, env).status, 0);
-  const lockPath = join(d, '.ai-toolkit', 'skills-lock.json');
+  const lockPath = join(d, '.agents/factory-metadata', 'skills-lock.json');
   assert.equal(json(lockPath).skills['moved-skill'].source, 'old-src');
   const installed = join(d, '.agents/skills/moved-skill/SKILL.md');
   const mtime = lstatSync(installed).mtimeMs;
@@ -338,7 +338,7 @@ test('status: silent when current; one line naming changed and new skills; silen
   const src = join(t.root, 'status-src');
   const skill = (n) => `---\nname: ${n}\ndescription: A ${n} skill.\n---\n# ${n}\n`;
   makeRepo(src, { files: { 'bundles/b/one/SKILL.md': skill('one'), 'bundles/b/two/SKILL.md': skill('two'), 'other/file.txt': 'x\n' } });
-  const env = { AI_TOOLKIT_HOME: h };
+  const env = { FACTORY_HOME: h };
   write(join(h, 'sources.json'), { core: CORE, b: join(src, 'bundles', 'b') });
   const d = personalRepo('pstatus');
   assert.equal(factory(['install', 'core', 'b', '--commit'], d, env).status, 0);
@@ -354,7 +354,7 @@ test('status: silent when current; one line naming changed and new skills; silen
   git(src, 'add', '-A'); git(src, 'commit', '-qm', 'change one, add three');
   r = factory(['status'], d, env);
   assert.equal(r.status, 0);
-  assert.match(r.out, /^agent-factory: skills 1 \(b: one\) changed upstream, 1 \(b: three\) new\. Update: node .*factory\.mjs update\n$/);
+  assert.match(r.out, /^factory: skills 1 \(b: one\) changed upstream, 1 \(b: three\) new\. Update: node .*factory\.mjs update\n$/);
   assert.equal(factory(['status'], d, env).out, r.out, 'the cached answer is the same');
 
   assert.equal(factory(['update'], d, env).status, 0);
@@ -378,14 +378,14 @@ test('status --hook: a running session hears once about an update or an edited c
   const src = join(t.root, 'hook-src');
   const skill = (n) => `---\nname: ${n}\ndescription: A ${n} skill.\n---\n# ${n}\n`;
   makeRepo(src, { files: { 'bundles/hb/alpha/SKILL.md': skill('alpha'), 'bundles/hb/beta/SKILL.md': skill('beta') } });
-  const env = { AI_TOOLKIT_HOME: h };
+  const env = { FACTORY_HOME: h };
   write(join(h, 'sources.json'), { core: CORE, hb: join(src, 'bundles', 'hb') });
   const d = personalRepo('phook');
   assert.equal(factory(['install', 'core', 'hb', '--commit'], d, env).status, 0);
   const hook = (sid, event) => {
     const r = spawnSync(process.execPath, [FACTORY, 'status', '--hook'], { cwd: d, encoding: 'utf8',
       input: JSON.stringify({ session_id: sid, hook_event_name: event, cwd: d }),
-      env: { ...process.env, AI_TOOLKIT_HOME: h, AI_TOOLKIT_CONFIG: '', AI_TOOLKIT_HARNESSES: 'none' } });
+      env: { ...process.env, FACTORY_HOME: h, FACTORY_CONFIG: '', FACTORY_HARNESSES: 'none' } });
     assert.equal(r.status, 0, r.stderr);
     return r.stdout;
   };
@@ -419,7 +419,7 @@ test('setup on a new machine: adds or repoints the status hooks, keeps other hoo
   const machine = join(t.root, 'machine'), repos = join(machine, 'repos'), h = join(machine, 'toolkit');
   const claude = join(machine, 'claude'), codex = join(machine, 'codex');
   mkdirSync(h, { recursive: true }); write(join(h, 'sources.json'), { core: CORE });
-  const env = { AI_TOOLKIT_HOME: h, CLAUDE_CONFIG_DIR: claude, CODEX_HOME: codex };
+  const env = { FACTORY_HOME: h, CLAUDE_CONFIG_DIR: claude, CODEX_HOME: codex };
   const mine = makeRepo(join(repos, 'mine'), { remote: 'git@github.com:me/mine.git' });
   makeRepo(join(repos, 'team'), { remote: 'git@github.com:org/team.git' });
   assert.equal(factory(['install', 'core', '--commit', '--to', mine, '--marker', 'off'], mine, env).status, 0);
@@ -458,7 +458,7 @@ test('setup leaves a hook file it cannot parse alone, and --dry-run writes nothi
   const machine = join(t.root, 'machine2'), claude = join(machine, 'claude'), codex = join(machine, 'codex');
   write(join(claude, 'settings.json'), '{ not json');
   mkdirSync(codex, { recursive: true });
-  const env = { AI_TOOLKIT_HOME: join(machine, 'toolkit'), CLAUDE_CONFIG_DIR: claude, CODEX_HOME: codex };
+  const env = { FACTORY_HOME: join(machine, 'toolkit'), CLAUDE_CONFIG_DIR: claude, CODEX_HOME: codex };
   const r = factory(['setup', '--root', machine, '--dry-run'], machine, env);
   assert.equal(r.status, 1);
   assert.match(r.err, /settings\.json isn't valid JSON; left alone/);

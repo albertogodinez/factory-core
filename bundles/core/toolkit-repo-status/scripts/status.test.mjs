@@ -8,7 +8,7 @@ import { parseWorktrees } from './status.mjs';
 
 const STATUS = join(dirname(fileURLToPath(import.meta.url)), 'status.mjs');
 const run = (f, cwd, ...args) => {
-  const r = spawnSync(process.execPath, [STATUS, '--json', '--cwd', cwd, ...args], { encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: f.home, HOME: f.home } });
+  const r = spawnSync(process.execPath, [STATUS, '--json', '--cwd', cwd, ...args], { encoding: 'utf8', env: { ...process.env, FACTORY_HOME: f.home, HOME: f.home } });
   assert.equal(r.status, 0, r.stderr);
   return JSON.parse(r.stdout);
 };
@@ -50,7 +50,7 @@ test('workspace mode: every registered repo is a neighbor of the hub', () => {
 test('a missing neighbor is reported, not fatal', () => {
   const f = makeFixtures();
   try {
-    write(join(f.root, 'project/.ai-toolkit/project.json'), { version: 1, neighbors: [{ name: 'lib' }, { name: 'nowhere' }] });
+    write(join(f.root, 'project/.agents/factory-metadata/project.json'), { version: 1, neighbors: [{ name: 'lib' }, { name: 'nowhere' }] });
     const out = run(f, join(f.root, 'project'));
     assert.equal(out.repos.find((r) => r.name === 'nowhere').status, 'missing');
   } finally { f.cleanup(); }

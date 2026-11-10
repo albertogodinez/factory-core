@@ -1,14 +1,14 @@
 ---
 name: toolkit-repo-register
-description: Onboard or refresh a repo's .ai-toolkit/project.json by checking each field against the repo itself (trunk, remote host and slug, package manager, commands, PR template, worktree convention) and writing only what zero-config detection doesn't already give. Can add a neighbor repo. Use when setting up a repo for the toolkit, when its toolchain or trunk changed, or when a skill reports a wrong trunk, host or command.
+description: Onboard or refresh a repo's .agents/factory-metadata/project.json by checking each field against the repo itself (trunk, remote host and slug, package manager, commands, PR template, worktree convention) and writing only what zero-config detection doesn't already give. Can add a neighbor repo. Use when setting up a repo for the toolkit, when its toolchain or trunk changed, or when a skill reports a wrong trunk, host or command.
 user_invocable: true
 ---
 
 # Repo register
 
-`.ai-toolkit/project.json` holds one repo's settings. Zero-config detection already reads trunk, host, package manager, a few commands and the PR template from git, so the file should hold only what detection gets wrong or can't know. This skill checks each field against the repo and writes the difference.
+`.agents/factory-metadata/project.json` holds one repo's settings. Zero-config detection already reads trunk, host, package manager, a few commands and the PR template from git, so the file should hold only what detection gets wrong or can't know. This skill checks each field against the repo and writes the difference.
 
-It never edits anything but `.ai-toolkit/project.json`.
+It never edits anything but `.agents/factory-metadata/project.json`.
 
 ## Run it
 
@@ -70,6 +70,6 @@ Report every `check` line and anything you judged. The register cannot know:
 - whether `writeAllowed: false` should be set for a team repo;
 - reviewer cohorts and bot policy for `toolkit-pr-mining` (`mining`; see that skill).
 
-Do not commit the file. A local-only install keeps `.ai-toolkit/` out of git through `.git/info/exclude`; leave that as it is.
+Do not commit the file. A local-only install keeps `.agents/factory-metadata/` out of git through `.git/info/exclude`; leave that as it is.
 
 Test: `node --test bundles/core/toolkit-repo-register/scripts/register.test.mjs`.

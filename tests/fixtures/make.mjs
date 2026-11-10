@@ -46,13 +46,13 @@ export function tempRoot(prefix = 'af-') {
 }
 
 // The standard layout used by the resolver tests:
-//   <root>/project/      .ai-toolkit/project.json (untracked), neighbor `lib`, worktree .worktrees/feat/x
+//   <root>/project/      .agents/factory-metadata/project.json (untracked), neighbor `lib`, worktree .worktrees/feat/x
 //   <root>/lib/          neighbor; origin/HEAD → develop
 //   <root>/zero-config/  no config, no origin/HEAD
 //   <root>/hub/          .claude/repos.json (legacy registry listing project and lib)
 //   <root>/explicit.json a config selected with --config
 //   <root>/clone/        a second checkout of `project` (same remote, different directory)
-//   <root>/home/         AI_TOOLKIT_HOME
+//   <root>/home/         FACTORY_HOME
 export function makeFixtures() {
   const t = tempRoot();
   const r = t.root;
@@ -61,7 +61,7 @@ export function makeFixtures() {
     remote: 'https://github.com/acme/project.git',
     files: { 'pnpm-lock.yaml': '', 'package.json': { scripts: { build: 'x', test: 'y' } }, '.github/PULL_REQUEST_TEMPLATE.md': '## Summary\n' },
   });
-  write(join(r, 'project/.ai-toolkit/project.json'), {
+  write(join(r, 'project/.agents/factory-metadata/project.json'), {
     version: 1, name: 'project',
     commands: { lint: 'pnpm lint' },
     neighbors: [{ name: 'lib' }],

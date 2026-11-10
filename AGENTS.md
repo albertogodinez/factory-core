@@ -1,6 +1,6 @@
 # AGENTS.md
 
-agent-factory holds the `core` skill bundle and the `factory` CLI that installs bundles into other repos. Read `README.md` for how the system works.
+factory-core holds the `core` skill bundle and the `factory` CLI that installs bundles into other repos. Read `README.md` for how the system works.
 
 ## Design rules
 

@@ -1,4 +1,4 @@
-# agent-factory
+# factory-core
 
 Each `##` section stands on its own, so you can lift it into another repo's README as is.
 
@@ -17,24 +17,24 @@ Design rules:
 
 | Bundle | Holds | Lives in |
 |---|---|---|
-| `core` | Principles, writing, review, PR, plan, CI watch, recording, feature-map, formal-verify, dev-slot, registry/status, PR mining, the resolver, and the factory kit (reflect, ask, docs-validate, tool-sync, writing-for-agents) | `agent-factory` |
-| `expedia` | Tracker adapter (Jira link, `In Review` transition, Confluence), GHE host, the `cc-autoreply` marker policy, dev-slot's `eg-corporate` env profile, the EGDS persona, and the tarmac skills (deploy-preflight, oncall, telemetry, design-capture) | `eg-agent-kit` |
-| `trips` | Trip Expert auth, prototype and feature maps, CCUI and shared-ui testing, tarball linking, template blocks, RUM, dev-slot app configs, trips reviewer personas, trips data (mining cohorts, experiment map) | `eg-agent-kit` |
+| `core` | Principles, writing, review, PR, plan, CI watch, recording, feature-map, formal-verify, dev-slot, registry/status, PR mining, the resolver, and the factory kit (reflect, ask, docs-validate, tool-sync, writing-for-agents) | `factory-core` |
+| `expedia` | Tracker adapter (Jira link, `In Review` transition, Confluence), GHE host, the `cc-autoreply` marker policy, dev-slot's `eg-corporate` env profile, the EGDS persona, and the tarmac skills (deploy-preflight, oncall, telemetry, design-capture) | `factory-org` |
+| `trips` | Trip Expert auth, prototype and feature maps, CCUI and shared-ui testing, tarball linking, template blocks, RUM, dev-slot app configs, trips reviewer personas, trips data (mining cohorts, experiment map) | `factory-org` |
 
 Core carries no internal data: no repo names, reviewer logins, hosts or paths. A core skill gets that data from the resolver, which reads it from the consumer's config or from an adapter bundle.
 
 There's no hub bundle. Working across several repos is a mode of core (see [Neighbors](#neighbors-cross-repo-work)).
 
-Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-architecture`, `wait-what`, `writing-for-agents`, originally from `mattpocock/skills`) ship as our versions. When the factory installs core into a repo, they replace any copies already there. `toolkit-upstream-sync` (in this repo's own `.agents/skills`, not a bundle) pulls upstream improvements into our versions. It runs only in agent-factory; the pre-commit hook runs its offline check.
+Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-architecture`, `wait-what`, `writing-for-agents`, originally from `mattpocock/skills`) ship as our versions. When the factory installs core into a repo, they replace any copies already there. `toolkit-upstream-sync` (in this repo's own `.agents/skills`, not a bundle) pulls upstream improvements into our versions. It runs only in factory-core; the pre-commit hook runs its offline check.
 
 ## Directory layout
 
 ```
 ~/Documents/repos/
-├── agent-factory/                  # core + factory CLI · local git, no remote
+├── factory-core/                  # core + factory CLI · local git, no remote
 │   ├── bin/factory.mjs
 │   └── bundles/core/<skill>/SKILL.md
-├── eg-agent-kit/                   # expedia + trips bundles, registry, checks, hooks · the EG hub (was trips-ai-toolkit)
+├── factory-org/                   # expedia + trips bundles, registry, checks, hooks · the EG hub (was trips-ai-toolkit)
 │   ├── bundles/expedia/<skill>/SKILL.md
 │   └── bundles/trips/<skill>/SKILL.md
 ├── ai-shopping-pwa/                # team repo → LOCAL-ONLY install
@@ -42,7 +42,7 @@ Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-archite
 │   │   ├── migrate-ai-shopping-playground/   # the team's tracked skill, never touched
 │   │   └── toolkit-review/ …                 # installed copies, untracked
 │   ├── .claude/skills -> ../.agents/skills   # symlink on macOS/Linux; a copy on Windows
-│   ├── .ai-toolkit/
+│   ├── .agents/factory-metadata/
 │   │   ├── project.json                      # config: neighbors, marker policy, cohort, commands
 │   │   ├── skills-lock.json                  # what factory installed, with hashes
 │   │   └── state/<worktree-id>/              # resolver cache, lessons.jsonl, recordings, handoffs
@@ -50,11 +50,11 @@ Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-archite
 └── ccui-components-web/            # same local-only layout
 
 ~/Documents/playground-repos/       # repos you own → COMMITTED install
-├── personal-website/   .agents/skills/ (core) · .ai-toolkit/project.json
+├── personal-website/   .agents/skills/ (core) · .agents/factory-metadata/project.json
 ├── obsidian-harness/   .agents/skills/ (its own + core)
 └── herdr-mods/         .agents/skills/ (core) · zero-config until `factory init`
 
-~/.ai-toolkit/                      # machine-wide, outside every repo
+~/.agents/factory/                      # machine-wide, outside every repo
 ├── installs.json                   # onboarded repos, bundles, versions → `factory update --all`
 ├── lessons-index.jsonl             # lesson fingerprints across repos → promotion prompt
 └── cache/<repo-id>/                # state for zero-config repos
@@ -77,9 +77,9 @@ Every skill asks one script, `toolkit-context`, "which project am I in, and what
 
 Sources, first match wins:
 
-1. `--config <file>` or `AI_TOOLKIT_CONFIG`
-2. The nearest `.ai-toolkit/project.json`, searching from the cwd up to the git root. In a hub, its `workspace` field points at the registry (3 or 4), which keeps workspace mode and the registry's repos; `factory install` sets it
-3. The nearest ancestor `.ai-toolkit/workspace.json` (a legacy form; a hub uses `project.json` with a `workspace` pointer)
+1. `--config <file>` or `FACTORY_CONFIG`
+2. The nearest `.agents/factory-metadata/project.json`, searching from the cwd up to the git root. In a hub, its `workspace` field points at the registry (3 or 4), which keeps workspace mode and the registry's repos; `factory install` sets it
+3. The nearest ancestor `.agents/factory-metadata/workspace.json` (a legacy form; a hub uses `project.json` with a `workspace` pointer)
 4. Legacy `.claude/repos.json` (read-only, used only during migration)
 5. Zero-config detection from git: trunk from `origin/HEAD` or the current branch, the remote host, the package manager from the lockfile, the PR template
 
@@ -90,7 +90,7 @@ Output, the same whichever source matched:
 ```json
 {
   "mode": "zero-config | project | workspace",
-  "source": ".ai-toolkit/project.json",
+  "source": ".agents/factory-metadata/project.json",
   "project": { "name": "", "root": "", "trunk": "", "packageManager": "", "prTemplate": "",
                "remote": { "host": "", "slug": "" }, "commands": { "build": "", "test": "", "lint": "" } },
   "neighbors": [ { "name": "", "root": "", "trunk": "", "access": "read | write" } ],
@@ -108,8 +108,8 @@ Budget: one file, `node:` imports only, no network. A cached call adds under 15 
 
 | Mode | stateRoot | Plans | Lessons |
 |---|---|---|---|
-| Zero-config | `~/.ai-toolkit/cache/<repo-id>/` | a path you choose | printed to you; nothing is written into the repo |
-| Project | `<repo>/.ai-toolkit/state/<worktree-id>/` | `planHome` in config, default `<repo>/plans/` | that repo |
+| Zero-config | `~/.agents/factory/cache/<repo-id>/` | a path you choose | printed to you; nothing is written into the repo |
+| Project | `<repo>/.agents/factory-metadata/state/<worktree-id>/` | `planHome` in config, default `<repo>/plans/` | that repo |
 | Workspace (migration) | `<hub>/tmp/` | `<hub>/plans/` | by scope |
 
 ## Neighbors (cross-repo work)
@@ -143,8 +143,8 @@ Every accepted reflect lesson has a scope:
 | Scope | Example | Lands in |
 |---|---|---|
 | repo | "this Astro build needs `pnpm build` before `verify:site`" | that repo: a check, test or `AGENTS.md` line |
-| core | "dev-slot must re-auth the browser after a restart" | a core skill in agent-factory |
-| org | "tarmac needs `--web` when there's no TTY" | eg-agent-kit |
+| core | "dev-slot must re-auth the browser after a restart" | a core skill in factory-core |
+| org | "tarmac needs `--web` when there's no TTY" | factory-org |
 
 The flow:
 
@@ -152,25 +152,25 @@ The flow:
 reflect run (≤3 accepted) → fix in the repo now
         │ generic?
         ▼
-fingerprint → ~/.ai-toolkit/lessons-index.jsonl
+fingerprint → ~/.agents/factory/lessons-index.jsonl
         │ 3rd occurrence (any repos)
         ▼
 "We've seen 'X' 3 times across 2 repos. Promote to core?"  promote / not now / never
         │ promote
         ▼
-commit on a local branch in agent-factory → you review → factory update --all
+commit on a local branch in factory-core → you review → factory update --all
 ```
 
 - There's no schedule. The prompt appears at the end of a reflect run, at most 3 per session.
 - "Never" is remembered per fingerprint. Backlog entries expire after 90 days without a new occurrence.
 - A lesson that edits a core skill is labeled core immediately. It still needs 3 occurrences, or you can say "promote now".
-- The only writes outside the current repo go to `~/.ai-toolkit/` and, when you promote, your local agent-factory.
+- The only writes outside the current repo go to `~/.agents/factory/` and, when you promote, your local factory-core.
 
 PR mining works the same way. Each repo's `project.json` holds its reviewer cohort. Patterns found in several repos reach core through the same prompt.
 
 ## The factory CLI
 
-`agent-factory/bin/factory.mjs`: one file, `node:` imports only, copies from local paths.
+`factory-core/bin/factory.mjs`: one file, `node:` imports only, copies from local paths.
 
 ```
 node factory.mjs install core [expedia] [trips] [--to <repo>] [--local | --commit]
@@ -185,31 +185,31 @@ node factory.mjs setup [--root <dir>] # a new machine: the status hooks, and ins
 ```
 
 `status --hook` reads the hook's JSON from stdin (`session_id`, `hook_event_name`, `cwd`). It answers the session-start check the same way, and on later prompts it tells a running session, once, what changed since it last checked:
-- Skills `factory update` copied in. `update` appends each copy to `~/.ai-toolkit/updates.jsonl`.
+- Skills `factory update` copied in. `update` appends each copy to `~/.agents/factory/updates.jsonl`.
 - Installed copies someone edited in place, found by a file newer than the lock and then confirmed by hash.
 
-A skill read earlier in a session stays in that session's context, so the notice says to read its SKILL.md again. Per-session state lives in `~/.ai-toolkit/sessions/` and is pruned after a week. It runs on every prompt with no git spawns, and `status.guard.mjs` holds its overhead limit.
+A skill read earlier in a session stays in that session's context, so the notice says to read its SKILL.md again. Per-session state lives in `~/.agents/factory/sessions/` and is pruned after a week. It runs on every prompt with no git spawns, and `status.guard.mjs` holds its overhead limit.
 
 `status` is the session-start drift check. User-level `SessionStart` and `UserPromptSubmit` hooks run it in Claude Code (`~/.claude/settings.json`) and Codex (`~/.codex/hooks.json`), so no team repo's tracked settings change:
 
 ```json
-{ "type": "command", "command": "node '<agent-factory>/bin/factory.mjs' status --hook 2>/dev/null || true", "timeout": 5 }
+{ "type": "command", "command": "node '<factory-core>/bin/factory.mjs' status --hook 2>/dev/null || true", "timeout": 5 }
 ```
 
-`factory setup` adds these entries, or repoints them when agent-factory moved. It keeps every other hook, backs up a file before writing it, and writes nothing when the hooks are already set.
+`factory setup` adds these entries, or repoints them when factory-core moved. It keeps every other hook, backs up a file before writing it, and writes nothing when the hooks are already set.
 
-Both harnesses pass the hook's stdout to the model on `UserPromptSubmit` (checked live in each, 2026-11-09). In Codex, two things differ. `codex exec` runs no user hooks, so only interactive sessions hear about updates. And hooks don't inherit `AI_TOOLKIT_HOME`, so a hook always reads `~/.ai-toolkit`.
+Both harnesses pass the hook's stdout to the model on `UserPromptSubmit` (checked live in each, 2026-11-09). In Codex, two things differ. `codex exec` runs no user hooks, so only interactive sessions hear about updates. And hooks don't inherit `FACTORY_HOME`, so a hook always reads `~/.agents/factory`.
 
-It checks only the repo the session starts in. A skill is behind when a commit after its `sourceRev` touched its directory in the bundle's repo, and a bundle skill the repo lacks counts as new. There's no hashing. When a source repo's HEAD or the lock changed, it runs one `git log` per source repo. Otherwise it answers from `~/.ai-toolkit/status-cache.json` without spawning git. `tests/guardrails/status.guard.mjs` holds those limits. Uncommitted bundle edits don't count, and `doctor`'s hash check still catches them. In a linked worktree of a local-only install, it also says when the worktree has no links to the installed skills yet (a new worktree never does) and gives the `factory link` command.
+It checks only the repo the session starts in. A skill is behind when a commit after its `sourceRev` touched its directory in the bundle's repo, and a bundle skill the repo lacks counts as new. There's no hashing. When a source repo's HEAD or the lock changed, it runs one `git log` per source repo. Otherwise it answers from `~/.agents/factory/status-cache.json` without spawning git. `tests/guardrails/status.guard.mjs` holds those limits. Uncommitted bundle edits don't count, and `doctor`'s hash check still catches them. In a linked worktree of a local-only install, it also says when the worktree has no links to the installed skills yet (a new worktree never does) and gives the `factory link` command.
 
 `install` does the following:
 
 - copies the bundles into `.agents/skills`, leaving out test files (`*.test.mjs`, `*.guard.mjs`): they run in the bundle's own repo, where their fixtures live
 - replaces same-named skills and their lock entries, and reports what it replaced
 - creates the `.claude/skills` link (a copy on Windows)
-- writes `.ai-toolkit/project.json`, asking once about the PR comment marker (keep, change or off)
-- hides `.ai-toolkit/`, plus the copies and the plan directory (`planHome`, default `plans/`, unless the team already tracks it) in local-only mode, through `.git/info/exclude`
-- records the repo in `~/.ai-toolkit/installs.json`
+- writes `.agents/factory-metadata/project.json`, asking once about the PR comment marker (keep, change or off)
+- hides `.agents/factory-metadata/`, plus the copies and the plan directory (`planHome`, default `plans/`, unless the team already tracks it) in local-only mode, through `.git/info/exclude`
+- records the repo in `~/.agents/factory/installs.json`
 
 The lock keeps the `skills-lock.json` shape (`source`, `skillPath`, `computedHash`).
 
@@ -232,7 +232,7 @@ Codex may be the daily driver on another machine. `factory doctor` therefore run
 
 ## Onboarding a repo
 
-1. `node ~/Documents/repos/agent-factory/bin/factory.mjs install core --to . --commit` (use `--local` for a team repo, and add `expedia` for an EG repo).
+1. `node ~/Documents/repos/factory-core/bin/factory.mjs install core --to . --commit` (use `--local` for a team repo, and add `expedia` for an EG repo).
 2. Answer the PR-marker question.
 3. For `--commit`, commit the install (`install` prints the command). Doctor's worktree check reads `HEAD`, so it fails until then. A `--local` install has nothing to commit.
 4. `node … factory.mjs doctor` checks:
@@ -248,15 +248,15 @@ Codex may be the daily driver on another machine. `factory doctor` therefore run
 
 ## A new machine
 
-Clone agent-factory, eg-agent-kit and your repos as siblings, then:
+Clone factory-core, factory-org and your repos as siblings, then:
 
 ```bash
-node ~/Documents/repos/agent-factory/bin/factory.mjs setup            # --root <dir> for repos kept elsewhere
+node ~/Documents/repos/factory-core/bin/factory.mjs setup            # --root <dir> for repos kept elsewhere
 ```
 
 It does what a clone can't bring:
 - **The user hooks.** It adds the `status --hook` entries to `~/.claude/settings.json` and `~/.codex/hooks.json` (`CLAUDE_CONFIG_DIR` and `CODEX_HOME` move them). Trust them in the next interactive Codex session.
-- **installs.json.** A `--commit` repo's skills and lock arrive with the clone, but this machine's `~/.ai-toolkit/installs.json` doesn't list it, so `update --all` would skip it. `setup` records each repo under `--root` (default: agent-factory's parent directory) that carries a lock.
+- **installs.json.** A `--commit` repo's skills and lock arrive with the clone, but this machine's `~/.agents/factory/installs.json` doesn't list it, so `update --all` would skip it. `setup` records each repo under `--root` (default: factory-core's parent directory) that carries a lock.
 - **Team repos.** A `--local` install is never tracked, so a clone has none. `setup` lists the repos with no install. Run `install … --local` in the ones you work in, then `/toolkit-repo-register`, because `project.json` was untracked too.
 
 Keep the resolver and scripts fast, small and free of dependencies. On Windows, `factory` copies skills instead of linking them, and every script runs without a shell.

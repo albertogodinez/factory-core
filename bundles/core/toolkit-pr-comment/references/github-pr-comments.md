@@ -11,7 +11,7 @@ Comments post under the user's own credentials, so GitHub records them as that p
 (`user.type: "User"`). Through the API they look exactly like the user's own review comments. If
 the user mines their review comments into rules (`toolkit-pr-mining`), an unmarked comment puts the
 bot's words into that corpus. So a project can require a marker, set as `pr.commentMarker` in
-`.ai-toolkit/project.json` (the resolver reports it as `adapters.commentMarker`):
+`.agents/factory-metadata/project.json` (the resolver reports it as `adapters.commentMarker`):
 
 | `mode` | The body starts with |
 | --- | --- |

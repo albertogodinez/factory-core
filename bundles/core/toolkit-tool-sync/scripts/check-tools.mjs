@@ -138,7 +138,7 @@ function resolveContext(o) {
     return r.status === 0 ? r.stdout.trim() : null;
   };
   const root = ask('project.root') ?? cwd;
-  const stateRoot = o.state ? path.resolve(o.state) : (ask('stateRoot') ?? path.join(tmpdir(), 'ai-toolkit-tool-sync'));
+  const stateRoot = o.state ? path.resolve(o.state) : (ask('stateRoot') ?? path.join(tmpdir(), 'factory-tool-sync'));
   return { root, skillsDir: path.resolve(o.skills ?? path.join(root, '.agents', 'skills')), stateRoot };
 }
 

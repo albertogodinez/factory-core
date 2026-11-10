@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Checks a .ai-toolkit/project.json against schemas/project.schema.json.
+// Checks a .agents/factory-metadata/project.json against schemas/project.schema.json.
 // A small JSON Schema subset (type, const, enum, pattern, minLength, required,
 // properties, additionalProperties, items, $ref to #/$defs, oneOf), enough for
 // the schemas this skill ships. node: imports only.
-// Usage: validate.mjs [path/to/project.json]   (default: ./.ai-toolkit/project.json)
+// Usage: validate.mjs [path/to/project.json]   (default: ./.agents/factory-metadata/project.json)
 import { readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,7 +52,7 @@ export function loadSchema() {
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
-  const file = resolve(process.argv[2] || '.ai-toolkit/project.json');
+  const file = resolve(process.argv[2] || '.agents/factory-metadata/project.json');
   let data;
   try { data = JSON.parse(readFileSync(file, 'utf8')); } catch (e) {
     console.error(`validate: cannot read ${file}: ${e.message}`); process.exit(2);

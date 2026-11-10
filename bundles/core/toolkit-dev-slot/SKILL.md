@@ -29,7 +29,7 @@ The step is complete when `slot check` exits 0 for the URL your browser session 
 
 An app config says how to run one app. `slot` looks for it, first match wins:
 
-1. `<worktree>/.ai-toolkit/dev-slot.json`, whose `name` must equal the app name (the project name).
+1. `<worktree>/.agents/factory-metadata/dev-slot.json`, whose `name` must equal the app name (the project name).
 2. `.agents/skills/toolkit-dev-slot-*/apps/<app>.json`, shipped by an installed companion.
 
 No match is an error that lists both places. The shape is `schemas/app.schema.json`:
@@ -52,7 +52,7 @@ The worktree is bind-mounted at `/app` and `/app/node_modules` is a per-slot nam
 `examples/astro.json` is the whole config for a site that runs `pnpm dev` on port 4321. Copy it to the project, rename it, and `slot up`:
 
 ```bash
-cp .agents/skills/toolkit-dev-slot/examples/astro.json .ai-toolkit/dev-slot.json   # then set "name" to the project name
+cp .agents/skills/toolkit-dev-slot/examples/astro.json .agents/factory-metadata/dev-slot.json   # then set "name" to the project name
 ```
 
 ```json

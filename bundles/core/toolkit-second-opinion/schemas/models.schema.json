@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://agent-factory/schemas/second-opinion-models.schema.json",
+  "$id": "https://factory-core/schemas/second-opinion-models.schema.json",
   "title": "Second-opinion reviewer models",
   "description": "The model each CLI runs when toolkit-second-opinion asks it for a review. check-models.mjs compares each pin against the CLI's catalog.",
   "type": "object",

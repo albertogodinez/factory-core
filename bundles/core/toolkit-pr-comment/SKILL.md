@@ -47,12 +47,12 @@ node .agents/skills/toolkit-pr-comment/scripts/post-comment.mjs \
   [--expect-head <SHA>] [--model <ID>] [--yes] [--dry-run]
 ```
 
-Pass `--model` with your own model id. It goes into the marker, and the fallback is `$AI_TOOLKIT_MODEL`, then `unknown`.
+Pass `--model` with your own model id. It goes into the marker, and the fallback is `$FACTORY_MODEL`, then `unknown`.
 
 What the script does:
 
 - Asks `toolkit-context` for the host, the marker policy and `writeAllowed`, for this project or a neighbor named by `--repo`. It sets `GH_HOST`, because `gh pr` takes no `--hostname`.
-- **Refuses to post when the marker policy isn't configured.** Set `pr.commentMarker` in `.ai-toolkit/project.json` (`{"mode":"off"}` for none).
+- **Refuses to post when the marker policy isn't configured.** Set `pr.commentMarker` in `.agents/factory-metadata/project.json` (`{"mode":"off"}` for none).
 - **Refuses to post when `writeAllowed` is false**, which is always the case in a zero-config repo, and when `--repo` isn't this project or a writable neighbor. Ask the user to confirm the comment, then rerun with `--yes`.
 - Fetches the head SHA fresh and writes it into the marker metadata, with `model`, `pr`, `in_reply_to` or `path`/`line`, and a UTC `ts`.
 - For an inline comment, checks every line is on the requested side of the PR's diff hunks. If one isn't, it fails and suggests a file-level comment (GitHub would return `422`).
@@ -66,4 +66,4 @@ What the script does:
 
 For each comment: the kind, `path:line` or the thread, the outcome (posted, added to pending review, skipped, or dropped), and the URL. Remind the user when anything is waiting in their pending review.
 
-Tests: `node --test .agents/skills/toolkit-pr-comment/scripts/post-comment.test.mjs` (in agent-factory; it uses a fake `gh`).
+Tests: `node --test .agents/skills/toolkit-pr-comment/scripts/post-comment.test.mjs` (in factory-core; it uses a fake `gh`).

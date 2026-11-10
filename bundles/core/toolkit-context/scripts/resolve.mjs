@@ -27,7 +27,12 @@ function fail(msg, code = 2) {
   process.exit(code);
 }
 export function toolkitHome(env = process.env) {
-  return env.AI_TOOLKIT_HOME ? resolve(env.AI_TOOLKIT_HOME) : join(homedir(), '.ai-toolkit');
+  return env.FACTORY_HOME ? resolve(env.FACTORY_HOME) : join(homedir(), '.agents/factory');
+}
+// The repo root a config file belongs to: <root>/.agents/factory-metadata/<file> or <root>/.claude/<file>.
+function configRoot(p) {
+  const d = dirname(p);
+  return d.endsWith(`${sep}.agents${sep}factory-metadata`) ? dirname(dirname(d)) : dirname(d);
 }
 function hash(s) { // FNV-1a 32-bit, hex. Enough for cache file names and ids.
   let h = 0x811c9dc5;
@@ -258,7 +263,7 @@ export function resolveContext(opts = {}) {
   const cwd = resolve(opts.cwd || process.cwd());
   const deps = []; // every path whose existence or mtime affects the result
   const git = findGit(cwd, deps, true);
-  const configArg = opts.neighborOf ? null : (opts.config || env.AI_TOOLKIT_CONFIG || null);
+  const configArg = opts.neighborOf ? null : (opts.config || env.FACTORY_CONFIG || null);
 
   let source = null, mode = 'zero-config', configPath = null, config = null;
   if (configArg) {
@@ -269,18 +274,18 @@ export function resolveContext(opts = {}) {
     source = configPath; mode = Array.isArray(config.repos) ? 'workspace' : 'project';
   } else {
     const stop = git ? git.toplevel : null;
-    configPath = findUp(cwd, stop, join('.ai-toolkit', 'project.json'), deps);
+    configPath = findUp(cwd, stop, join('.agents/factory-metadata', 'project.json'), deps);
     // A local-only install lives untracked in the main checkout, so a linked
     // worktree inherits the main checkout's project.json.
     if (!configPath && git && git.mainRoot !== git.toplevel) {
-      const p = join(git.mainRoot, '.ai-toolkit', 'project.json'); deps.push(p);
+      const p = join(git.mainRoot, '.agents/factory-metadata', 'project.json'); deps.push(p);
       if (exists(p)) configPath = p;
     }
     if (configPath) { mode = 'project'; }
     else {
       const wsStop = git ? git.mainRoot : null;
       const wsFrom = git ? git.mainRoot === git.toplevel ? cwd : git.mainRoot : cwd;
-      configPath = findUp(wsFrom, wsStop, join('.ai-toolkit', 'workspace.json'), deps)
+      configPath = findUp(wsFrom, wsStop, join('.agents/factory-metadata', 'workspace.json'), deps)
         || findUp(wsFrom, wsStop, join('.claude', 'repos.json'), deps);
       if (configPath) mode = 'workspace';
     }
@@ -292,7 +297,7 @@ export function resolveContext(opts = {}) {
   // (pr marker, adapters, personas, writeAllowed) are laid over it.
   let overlay = null;
   if (mode === 'project' && typeof config?.workspace === 'string') {
-    const wsPath = resolve(dirname(dirname(configPath)), config.workspace);
+    const wsPath = resolve(configRoot(configPath), config.workspace);
     deps.push(wsPath);
     const registry = readJson(wsPath);
     if (!registry || !Array.isArray(registry.repos)) fail(`${configPath}: "workspace" names ${wsPath}, which is not a registry with a repos list`);
@@ -305,7 +310,7 @@ export function resolveContext(opts = {}) {
   let project, neighbors = [], adapters = {}, stateRoot, writeAllowed;
 
   if (mode === 'workspace') {
-    const base = dirname(dirname(configPath)); // <hub>/.claude/repos.json → <hub>
+    const base = configRoot(configPath); // <hub>/.claude/repos.json → <hub>
     const entries = config.repos.map((e) => fromRegistryEntry(e, base));
     let match = null;
     if (opts.repo) {
@@ -342,7 +347,7 @@ export function resolveContext(opts = {}) {
   } else if (mode === 'project') {
     const det = git ? hereProject(git, cwd, remoteHere, deps) : { name: basename(cwd), root: cwd };
     const c = config;
-    const projectRoot = configArg ? (git ? git.toplevel : cwd) : dirname(dirname(configPath));
+    const projectRoot = configArg ? (git ? git.toplevel : cwd) : configRoot(configPath);
     project = {
       name: c.name || det.name,
       root: git ? git.toplevel : projectRoot,
@@ -358,7 +363,7 @@ export function resolveContext(opts = {}) {
     adapters = { ...(c.adapters || {}) };
     if (c.pr && 'commentMarker' in c.pr) adapters.commentMarker = c.pr.commentMarker;
     if (c.review?.personas) adapters.personas = c.review.personas;
-    const stateBase = configArg ? join(home, 'cache', repoId(project, git)) : join(projectRoot, '.ai-toolkit', 'state');
+    const stateBase = configArg ? join(home, 'cache', repoId(project, git)) : join(projectRoot, '.agents/factory-metadata', 'state');
     stateRoot = join(stateBase, git ? git.worktreeId : 'main');
     writeAllowed = c.writeAllowed !== false;
   } else {
@@ -411,7 +416,7 @@ function neighbor(n, base, deps) {
   const root = resolve(base, n.root || join('..', n.name));
   let trunk = n.trunk;
   if (!trunk) {
-    const nc = join(root, '.ai-toolkit', 'project.json'); deps.push(nc);
+    const nc = join(root, '.agents/factory-metadata', 'project.json'); deps.push(nc);
     trunk = safeJson(nc)?.trunk;
     if (!trunk) { const g = findGit(root, null); if (g) trunk = detectTrunk(g, deps); }
   }
@@ -424,7 +429,7 @@ function repoId(project, git) {
 // ---------- cache ----------
 function cacheFile(home, key) { return join(home, 'cache', 'resolver', `${hash(key)}.json`); }
 function cacheKey(opts, env) {
-  return JSON.stringify([SCHEMA_VERSION, resolve(opts.cwd || process.cwd()), opts.config || env.AI_TOOLKIT_CONFIG || '', opts.repo || '']);
+  return JSON.stringify([SCHEMA_VERSION, resolve(opts.cwd || process.cwd()), opts.config || env.FACTORY_CONFIG || '', opts.repo || '']);
 }
 function headStamp(git) { return git ? (read(join(git.gitDir, 'HEAD')) || '') : ''; }
 

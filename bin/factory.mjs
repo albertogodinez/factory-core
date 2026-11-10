@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// factory: install agent-factory bundles into a repo, keep them current, and check them.
+// factory: install factory-core bundles into a repo, keep them current, and check them.
 // One file, node: imports only, copies from local paths, never touches the network.
 //
 //   factory install <bundle...> [--to <repo>] (--commit | --local) [--marker keep|off|text:<tag>]
@@ -15,8 +15,8 @@
 //   factory setup [--root <dir>] [--dry-run]   a new machine: add the status hooks to Claude Code and
 //                                         Codex, and record the repos under <dir> that carry an install
 //
-// Bundles: core (this repo), expedia and trips (../eg-agent-kit). Override
-// a bundle's path in ~/.ai-toolkit/sources.json: {"expedia": "/path/to/bundles/expedia"}.
+// Bundles: core (this repo), expedia and trips (../factory-org). Override
+// a bundle's path in ~/.agents/factory/sources.json: {"expedia": "/path/to/bundles/expedia"}.
 import {
   readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, lstatSync, rmSync,
   cpSync, symlinkSync, readlinkSync, realpathSync, renameSync, appendFileSync, openSync, fstatSync, readSync, closeSync,
@@ -31,10 +31,10 @@ import { findGit, toolkitHome, parseRemote } from '../bundles/core/toolkit-conte
 const FACTORY = dirname(dirname(realpathSync(import.meta.filename)));
 const RESOLVE = join(FACTORY, 'bundles', 'core', 'toolkit-context', 'scripts', 'resolve.mjs');
 const IS_WIN = process.platform === 'win32';
-const LOCK = join('.ai-toolkit', 'skills-lock.json');
-const PROJECT = join('.ai-toolkit', 'project.json');
-const BLOCK_START = '# >>> agent-factory (managed by factory; `factory remove` deletes this block)';
-const BLOCK_END = '# <<< agent-factory';
+const LOCK = join('.agents/factory-metadata', 'skills-lock.json');
+const PROJECT = join('.agents/factory-metadata', 'project.json');
+const BLOCK_START = '# >>> factory-core (managed by factory; `factory remove` deletes this block)';
+const BLOCK_END = '# <<< factory-core';
 const LIMITS = { descriptionChars: 600, listingChars: 14000, skillMdBytes: 24 * 1024 };
 
 // ---------- output ----------
@@ -89,8 +89,8 @@ function git(cwd, ...args) {
 export function bundleSources(home = toolkitHome()) {
   const def = {
     core: join(FACTORY, 'bundles', 'core'),
-    expedia: join(dirname(FACTORY), 'eg-agent-kit', 'bundles', 'expedia'),
-    trips: join(dirname(FACTORY), 'eg-agent-kit', 'bundles', 'trips'),
+    expedia: join(dirname(FACTORY), 'factory-org', 'bundles', 'expedia'),
+    trips: join(dirname(FACTORY), 'factory-org', 'bundles', 'trips'),
   };
   return { ...def, ...readJson(join(home, 'sources.json'), {}) };
 }
@@ -204,8 +204,8 @@ function planDirToHide(root) {
   return git(root, 'ls-files', '--', home) ? null : home;
 }
 function excludeLinesFor(lock, root) {
-  if (lock.mode !== 'local') return ['/.ai-toolkit/state/'];
-  const lines = ['/.ai-toolkit/'];
+  if (lock.mode !== 'local') return ['/.agents/factory-metadata/state/'];
+  const lines = ['/.agents/factory-metadata/'];
   const plans = planDirToHide(root);
   if (plans) lines.push(`/${plans}/`);
   for (const n of Object.keys(lock.skills).sort()) lines.push(`/.agents/skills/${n}`);
@@ -400,7 +400,7 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
     proj = { version: 1, name };
     // A hub already resolving through a multi-repo registry stays in workspace mode:
     // without this pointer, the new project.json would outrank the registry and drop its repos.
-    const registry = ['.ai-toolkit/workspace.json', '.claude/repos.json']
+    const registry = ['.agents/factory-metadata/workspace.json', '.claude/repos.json']
       .find((r) => Array.isArray(readJson(join(root, ...r.split('/')), null)?.repos));
     if (registry) proj.workspace = registry;
     const marker = await chooseMarker(opts.marker, markerDefault);
@@ -431,7 +431,7 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
   for (const c of conflicts) warn(c);
   for (const l of lintersCoveringSkills(root)) warn(`${l.tool} (${l.file}) will lint the installed skills' scripts under this repo's rules: ${l.fix}.`);
   if (mode === 'commit' && !opts.dryRun && report.length) {
-    out(`\nCommit the install: git -C ${root} add .agents/skills .claude/skills .ai-toolkit skills-lock.json && git -C ${root} commit -m "chore: install agent-factory ${bundleNames.join(' ')}"`);
+    out(`\nCommit the install: git -C ${root} add .agents/skills .claude/skills .agents/factory-metadata skills-lock.json && git -C ${root} commit -m "chore: install factory-core ${bundleNames.join(' ')}"`);
   }
   return { edited, conflicts };
 }
@@ -481,14 +481,14 @@ function remove(names, opts) {
   if (empty && lock.claudeLink === 'dir' && isLink(join(root, '.claude', 'skills'))) rmSync(join(root, '.claude', 'skills'));
   if (empty) {
     rmSync(join(root, LOCK), { force: true });
-    if (opts.purge) rmSync(join(root, '.ai-toolkit'), { recursive: true, force: true });
-    setExcludeBlock(t0.git, opts.purge || lock.mode !== 'local' ? [] : ['/.ai-toolkit/']);
+    if (opts.purge) rmSync(join(root, '.agents/factory-metadata'), { recursive: true, force: true });
+    setExcludeBlock(t0.git, opts.purge || lock.mode !== 'local' ? [] : ['/.agents/factory-metadata/']);
   } else {
     writeJson(join(root, LOCK), lock);
     setExcludeBlock(t0.git, excludeLinesFor(lock, root));
   }
   if (root === t0.git.mainRoot) recordInstall(root, empty ? { skills: {} } : lock);
-  out(`remove ${names.join(' ')} → ${root}: ${drop.length} skill(s)${empty ? '; install fully removed' + (opts.purge ? ' with .ai-toolkit/' : ' (.ai-toolkit/project.json kept; --purge deletes it)') : ''}`);
+  out(`remove ${names.join(' ')} → ${root}: ${drop.length} skill(s)${empty ? '; install fully removed' + (opts.purge ? ' with .agents/factory-metadata/' : ' (.agents/factory-metadata/project.json kept; --purge deletes it)') : ''}`);
 }
 
 // ---------- link (local installs, new worktrees) ----------
@@ -530,9 +530,9 @@ function list(opts) {
 }
 
 // ---------- doctor ----------
-// AI_TOOLKIT_HARNESSES=claude-code,codex limits the check to those harnesses ("none" for none).
+// FACTORY_HARNESSES=claude-code,codex limits the check to those harnesses ("none" for none).
 function harnessesPresent() {
-  const only = process.env.AI_TOOLKIT_HARNESSES ? process.env.AI_TOOLKIT_HARNESSES.split(',') : null;
+  const only = process.env.FACTORY_HARNESSES ? process.env.FACTORY_HARNESSES.split(',') : null;
   const which = (b) => spawnSync(IS_WIN ? 'where' : 'sh', IS_WIN ? [b] : ['-c', `command -v ${b}`], { encoding: 'utf8' }).status === 0;
   return [
     { name: 'claude-code', bin: 'claude', dir: join('.claude', 'skills') },
@@ -561,7 +561,7 @@ async function doctor(opts) {
   const results = [];
   const check = (name, ok, detail = '', level = 'fail') => results.push({ name, status: ok ? 'ok' : level, detail });
   const names = Object.keys(lock.skills || {});
-  check('install', !!lock.mode, lock.mode ? `${lock.mode}, ${names.length} skills, bundles ${(lock.bundles || []).join(', ')}` : 'no .ai-toolkit/skills-lock.json');
+  check('install', !!lock.mode, lock.mode ? `${lock.mode}, ${names.length} skills, bundles ${(lock.bundles || []).join(', ')}` : 'no .agents/factory-metadata/skills-lock.json');
 
   // resolver
   const r = spawnSync(process.execPath, [join(root, '.agents', 'skills', 'toolkit-context', 'scripts', 'resolve.mjs'), '--no-cache'], { cwd: t0.git.toplevel, encoding: 'utf8' });
@@ -603,7 +603,7 @@ async function doctor(opts) {
   // local-only: nothing shows in git status
   if (lock.mode === 'local') {
     const st = git(root, 'status', '--porcelain', '--untracked-files=all') || '';
-    const ours = st.split('\n').filter((l) => /\.ai-toolkit\/|\.agents\/skills\/|\.claude\/skills/.test(l) && names.some((n) => l.includes(n) || l.includes('.ai-toolkit')));
+    const ours = st.split('\n').filter((l) => /\.agents\/factory-metadata\/|\.agents\/skills\/|\.claude\/skills/.test(l) && names.some((n) => l.includes(n) || l.includes('.agents/factory-metadata')));
     check('local-only install is invisible to git', ours.length === 0, ours.slice(0, 3).join(' | '));
   }
 
@@ -682,7 +682,7 @@ async function doctor(opts) {
 
 // ---------- status: the session-start drift check ----------
 // Cheap enough for a SessionStart hook: no hashing, and one `git log` per source repo only when that
-// repo's HEAD or the lock changed since the last run (the answer is cached under ~/.ai-toolkit). A
+// repo's HEAD or the lock changed since the last run (the answer is cached under ~/.agents/factory). A
 // skill is behind when a commit after its sourceRev touched its directory; a bundle skill missing
 // from the lock is new (update would add it). Uncommitted bundle edits don't count. Silent when the
 // repo has no install or a bundle's source isn't on this machine; always exits 0.
@@ -754,7 +754,7 @@ function statusLine(root) {
   const bits = [];
   if (Object.keys(behind).length) bits.push(`${list(behind)} changed upstream`);
   if (Object.keys(added).length) bits.push(`${list(added)} new`);
-  const line = bits.length ? `agent-factory: skills ${bits.join(', ')}. Update: node ${join(FACTORY, 'bin', 'factory.mjs')} update` : '';
+  const line = bits.length ? `factory: skills ${bits.join(', ')}. Update: node ${join(FACTORY, 'bin', 'factory.mjs')} update` : '';
   try { cache[root] = { key, line }; writeJson(cacheFile, cache); } catch {}
   return line;
 }
@@ -768,7 +768,7 @@ function status(opts) {
   // A linked worktree of a local-only install sees the skills only after `factory link`.
   if (root === g.mainRoot && g.toplevel !== g.mainRoot && lockOf(root).mode === 'local') {
     const missing = Object.keys(lockOf(root).skills).filter((n) => !existsSync(join(g.toplevel, '.agents', 'skills', n, 'SKILL.md')));
-    if (missing.length) out(`agent-factory: this worktree can't see ${missing.length} installed skill(s). Link them: node ${join(FACTORY, 'bin', 'factory.mjs')} link`);
+    if (missing.length) out(`factory: this worktree can't see ${missing.length} installed skill(s). Link them: node ${join(FACTORY, 'bin', 'factory.mjs')} link`);
   }
 }
 
@@ -851,12 +851,12 @@ function hookStatus(opts) {
     if (names.length) {
       const revs = [...new Set(ups.flatMap((e) => e.skills.map((x) => `${x.source} ${x.rev}`)))].join(', ');
       const shown = names.slice(0, 6).join(', ') + (names.length > 6 ? ` +${names.length - 6}` : '');
-      lines.push(`agent-factory: updated since this session last checked: ${shown} (${revs}). If you read one of them earlier in this session, read its SKILL.md again before following it.`);
+      lines.push(`factory: updated since this session last checked: ${shown} (${revs}). If you read one of them earlier in this session, read its SKILL.md again before following it.`);
     }
   }
   const told = new Set(state?.edited || []);
   const edited = editedCopies(root, lock).filter((e) => !told.has(e.name));
-  for (const e of edited) lines.push(`agent-factory: the installed copy of ${e.name} was edited here, but it's owned by ${e.source} (${e.skillPath}). Move the edit there, commit, then run factory update; the next update won't overwrite this copy until you do.`);
+  for (const e of edited) lines.push(`factory: the installed copy of ${e.name} was edited here, but it's owned by ${e.source} (${e.skillPath}). Move the edit there, commit, then run factory update; the next update won't overwrite this copy until you do.`);
   for (const l of lines) out(l);
   if (file) {
     try { writeJson(file, { root: g.mainRoot, seen: now, edited: [...told, ...edited.map((e) => e.name)] }); } catch {}

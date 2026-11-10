@@ -32,7 +32,7 @@ before(() => {
 });
 after(() => fx.cleanup());
 
-const baseEnv = (extra = {}) => ({ ...process.env, AI_TOOLKIT_CONFIG: '', AI_TOOLKIT_HOME: fx.home, ...extra });
+const baseEnv = (extra = {}) => ({ ...process.env, FACTORY_CONFIG: '', FACTORY_HOME: fx.home, ...extra });
 function timed(cwd, args = [], env = baseEnv()) {
   const t0 = process.hrtime.bigint();
   const r = spawnSync(process.execPath, [RESOLVE, ...args], { cwd, env, encoding: 'utf8' });
@@ -70,7 +70,7 @@ test(`cold: overhead < ${LIMITS.coldOverheadMs} ms and total < ${LIMITS.coldMs} 
   ['project', 'zero-config', 'hub', 'project', 'zero-config'].forEach((d, i) => {
     const cwd = join(fx.root, d);
     base.push(baseline(cwd));
-    runs.push(timed(cwd, [], baseEnv({ AI_TOOLKIT_HOME: join(fx.root, `cold-home-${i}`) })).ms);
+    runs.push(timed(cwd, [], baseEnv({ FACTORY_HOME: join(fx.root, `cold-home-${i}`) })).ms);
   });
   const detail = `resolver median ${median(runs).toFixed(1)} ms, bare node ${median(base).toFixed(1)} ms (runs: ${fmt(runs)})`;
   assert.ok(median(runs) - median(base) < LIMITS.coldOverheadMs, `overhead ${(median(runs) - median(base)).toFixed(1)} ms; ${detail}`);
@@ -78,7 +78,7 @@ test(`cold: overhead < ${LIMITS.coldOverheadMs} ms and total < ${LIMITS.coldMs} 
 });
 
 test(`git spawns: ≤ ${LIMITS.coldSpawns} cold, ${LIMITS.cachedSpawns} cached`, () => {
-  const env = baseEnv({ PATH: `${fakeBin}:${process.env.PATH}`, AI_TOOLKIT_HOME: join(fx.root, 'spawn-home') });
+  const env = baseEnv({ PATH: `${fakeBin}:${process.env.PATH}`, FACTORY_HOME: join(fx.root, 'spawn-home') });
   for (const d of ['project', 'zero-config', 'hub', join('project', '.worktrees', 'feat', 'x')]) {
     const cwd = join(fx.root, d);
     assert.ok(spawns(() => timed(cwd, [], env)) <= LIMITS.coldSpawns, `${d} cold`);
@@ -100,7 +100,7 @@ test(`output: ≤ ${LIMITS.outBytes} B + ${LIMITS.perNeighborBytes} B per neighb
   const names = Array.from({ length: 10 }, (_, i) => `registered-repository-name-${i}`);
   write(join(big, '.claude/repos.json'), { version: 2, repos: names.map((n) => ({ name: n, localPath: `../${n}`,
     remote: { org: 'some-org', repo: n, ghHost: 'github.com', sshAlias: 'github-work' }, primaryBranch: 'master', commands: {} })) });
-  write(join(big, '.ai-toolkit/project.json'), { version: 1, name: 'big-hub', workspace: '.claude/repos.json',
+  write(join(big, '.agents/factory-metadata/project.json'), { version: 1, name: 'big-hub', workspace: '.claude/repos.json',
     pr: { commentMarker: { mode: 'banner', text: 'cc-autoreply', banner: { reply: 'x'.repeat(200), review: 'y'.repeat(200) } } },
     adapters: { tracker: 'toolkit-tracker-jira', envProfile: 'eg-corporate' } });
   for (const [d, args] of [['project', []], ['zero-config', []], ['hub', []], ['hub', ['--repo', 'project']], ['project/.worktrees/feat/x', []], ['big-hub', []]]) {

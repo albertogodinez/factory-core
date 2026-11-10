@@ -38,7 +38,7 @@ Apply every criterion to every finding:
   `CLAUDE.md` pointer), never to a free-standing lessons document.
 - **Scope**: `repo` when only this repo needs it; `core` when it's true in any repo or changes a
   skill installed from the core bundle; `org` when it's specific to the company (its internal
-  tools, hosts, trackers) or changes a skill from an org bundle. `.ai-toolkit/skills-lock.json`
+  tools, hosts, trackers) or changes a skill from an org bundle. `.agents/factory-metadata/skills-lock.json`
   lists each installed skill's bundle. An installed copy is never edited in place: a lesson that
   changes one is `core` or `org`.
 - **At most three Accepted.** Rank by how much each prevents, keep the top three, and move the

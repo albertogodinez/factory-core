@@ -25,10 +25,11 @@ before(() => {
   for (const b of ['x', 'y']) for (let i = 0; i < 15; i++) files[`bundles/${b}/${b}-skill-${i}/SKILL.md`] = `---\nname: ${b}-skill-${i}\ndescription: d\n---\n`;
   makeRepo(src, { files });
   for (let i = 0; i < 50; i++) { write(join(src, 'log.txt'), `${i}\n`); git(src, 'add', '-A'); git(src, 'commit', '-qm', `c${i}`); }
-  write(join(home, 'sources.json'), { core: CORE, x: join(src, 'bundles', 'x'), y: join(src, 'bundles', 'y') });
+  // expedia and trips are pinned too, so the default sibling hub checkout never affects the cache.
+  write(join(home, 'sources.json'), { core: CORE, x: join(src, 'bundles', 'x'), y: join(src, 'bundles', 'y'), expedia: join(src, 'bundles', 'x'), trips: join(src, 'bundles', 'y') });
   repo = join(t.root, 'consumer');
   makeRepo(repo, { remote: 'git@github.com:me/consumer.git' });
-  const env = { ...process.env, AI_TOOLKIT_HOME: home, AI_TOOLKIT_CONFIG: '', AI_TOOLKIT_HARNESSES: 'none' };
+  const env = { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '', FACTORY_HARNESSES: 'none' };
   execFileSync(process.execPath, [FACTORY, 'install', 'core', 'x', 'y', '--commit', '--marker', 'off'], { cwd: repo, env, stdio: 'ignore' });
   fakeBin = join(t.root, 'fakebin'); counter = join(t.root, 'git-calls'); mkdirSync(fakeBin);
   const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
@@ -37,7 +38,7 @@ before(() => {
 });
 after(() => t.cleanup());
 
-const env = () => ({ ...process.env, AI_TOOLKIT_HOME: home, AI_TOOLKIT_CONFIG: '', PATH: `${fakeBin}:${process.env.PATH}` });
+const env = () => ({ ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '', PATH: `${fakeBin}:${process.env.PATH}` });
 function timed(args) {
   const s = performance.now();
   const r = spawnSync(process.execPath, args, { cwd: repo, env: env(), encoding: 'utf8' });

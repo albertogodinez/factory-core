@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "agent-factory/toolkit-tool-sync/tools.schema.json",
+  "$id": "factory-core/toolkit-tool-sync/tools.schema.json",
   "title": "CLI pins (tools.json)",
   "description": "Each CLI a skill shells out to, the lowest version the skills need, and the version they were last checked against. Any installed skill may ship a tools.json beside its SKILL.md; check-tools.mjs merges them. It validates these rules itself (it has no JSON Schema library); this file is for editors.",
   "type": "object",

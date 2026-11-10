@@ -62,7 +62,7 @@ Pick the highest row that works. Mechanical beats judgement. Judgement goes to r
 | The agent couldn't find a file, doc or command | One-line navigation pointer | The closest scoped `AGENTS.md` or `CLAUDE.md` |
 | A decision with lasting rationale | Rationale, not structure | The PR body, the commit message, or the repo's wiki |
 
-**Installed copies are never edited in place.** A skill listed in `.ai-toolkit/skills-lock.json` came from a bundle. An edit to that copy blocks `factory update`, and it never reaches other repos. Such a lesson has scope `core` or `org`: record it (§6) and change the skill at its source. A skill missing from the lock is the repo's own, so edit it here.
+**Installed copies are never edited in place.** A skill listed in `.agents/factory-metadata/skills-lock.json` came from a bundle. An edit to that copy blocks `factory update`, and it never reaches other repos. Such a lesson has scope `core` or `org`: record it (§6) and change the skill at its source. A skill missing from the lock is the repo's own, so edit it here.
 
 Repo-local knowledge stays in its repo. In a local-only install, where the repo belongs to a team, an edit to a tracked file is a product change: it goes through the repo's normal branch and PR. The lesson log itself lives in `stateRoot`, which is never committed.
 
@@ -77,7 +77,7 @@ For each approved row:
    node .agents/skills/toolkit-reflect/scripts/lessons.mjs record --scope repo|core|org \
      --fingerprint <slug> --summary "<one line>" --destination <path> --status applied|proposed
    ```
-   Every lesson goes to `<stateRoot>/lessons.jsonl`. A `core` or `org` lesson also goes to the machine-wide index at `~/.ai-toolkit/lessons-index.jsonl`, and the output reports how often it has been seen and in which repos.
+   Every lesson goes to `<stateRoot>/lessons.jsonl`. A `core` or `org` lesson also goes to the machine-wide index at `~/.agents/factory/lessons-index.jsonl`, and the output reports how often it has been seen and in which repos.
 2. **Apply the repo-scope ones here.**
    - **Check**: build it, then prove it goes red on the real past mistake (make the mistake, see it fail, revert). A check that never fails protects nothing.
    - **Skill, rule, AGENTS.md or glossary edit**: read `writing-for-agents` first. A one-line fix is done directly; a new section or a new skill follows its full guidance.
@@ -99,7 +99,7 @@ node .agents/skills/toolkit-reflect/scripts/lessons.mjs decide --fingerprint <sl
 - **never** is remembered, and that fingerprint is never offered again.
 - **not now** waits for another occurrence.
 - Entries expire after 90 days without a new occurrence.
-- **promote**: write it as a lesson branch (below). Writes outside this repo go only to `~/.ai-toolkit/` and, on promote, to that source repo.
+- **promote**: write it as a lesson branch (below). Writes outside this repo go only to `~/.agents/factory/` and, on promote, to that source repo.
 
 ### Landing a lesson branch
 

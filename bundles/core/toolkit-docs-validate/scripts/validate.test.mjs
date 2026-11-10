@@ -34,7 +34,7 @@ before(() => {
   });
   broken = makeRepo(join(t.root, 'broken'), {
     files: {
-      '.ai-toolkit/project.json': { version: 1, planHome: 'work/plans' },
+      '.agents/factory-metadata/project.json': { version: 1, planHome: 'work/plans' },
       '.agents/skills/alpha/SKILL.md': skill('wrong-name'),
       '.agents/skills/beta/SKILL.md': skill('beta', 'x'.repeat(601)),
       '.agents/skills/beta/scripts/go.mjs': guard(false),

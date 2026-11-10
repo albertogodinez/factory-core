@@ -50,7 +50,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (f === '-h' || f === '--help') usage();
   else die(`unknown argument: ${f} (see --help)`);
 }
-a.model ??= process.env.AI_TOOLKIT_MODEL || process.env.CC_AUTOREPLY_MODEL || process.env.ANTHROPIC_MODEL || 'unknown';
+a.model ??= process.env.FACTORY_MODEL || process.env.CC_AUTOREPLY_MODEL || process.env.ANTHROPIC_MODEL || 'unknown';
 
 // ---------- project context ----------
 function resolveCtx(extra = []) {
@@ -91,7 +91,7 @@ for (const n of [a.line, a.startLine, a.inReplyTo]) {
 const marker = ctx.error ? undefined : (ctx.adapters ? ctx.adapters.commentMarker : undefined);
 const markerConfigured = !ctx.error && ctx.adapters && 'commentMarker' in ctx.adapters;
 if (!markerConfigured && !a.dryRun) {
-  die(`no comment-marker policy for this project. Set pr.commentMarker in .ai-toolkit/project.json ` +
+  die(`no comment-marker policy for this project. Set pr.commentMarker in .agents/factory-metadata/project.json ` +
     `({"mode":"off"} for none), or run factory install, which asks once`);
 }
 const mode = marker?.mode || 'off';
@@ -120,7 +120,7 @@ if (mode === 'banner' && !banner) die(`commentMarker.mode is banner but has no b
 const writeAllowed = !ctx.error && ctx.writeAllowed === true && !ctx.otherRepo;
 if (!writeAllowed && !a.yes && !a.dryRun) {
   const why = ctx.error ? ctx.error : ctx.otherRepo ? `${a.repo} is not this project or a writable neighbor`
-    : ctx.mode === 'zero-config' ? 'this repo has no .ai-toolkit/project.json (zero-config)' : 'writeAllowed is false';
+    : ctx.mode === 'zero-config' ? 'this repo has no .agents/factory-metadata/project.json (zero-config)' : 'writeAllowed is false';
   die(`refusing to post: ${why}. Ask the user to confirm this comment, then rerun with --yes (or --dry-run to preview)`);
 }
 

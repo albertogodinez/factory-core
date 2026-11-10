@@ -1,6 +1,6 @@
 # Adapter contracts
 
-An adapter is an installed skill that supplies company- or tool-specific behavior to core skills. `.ai-toolkit/project.json` names it under `adapters`, and the resolver passes the value through. Core skills call adapters only through the contracts below. When an adapter isn't set, a core skill skips that step and says it skipped it.
+An adapter is an installed skill that supplies company- or tool-specific behavior to core skills. `.agents/factory-metadata/project.json` names it under `adapters`, and the resolver passes the value through. Core skills call adapters only through the contracts below. When an adapter isn't set, a core skill skips that step and says it skipped it.
 
 ## tracker
 

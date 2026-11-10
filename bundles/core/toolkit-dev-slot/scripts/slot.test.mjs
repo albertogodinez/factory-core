@@ -93,13 +93,13 @@ test('an app config is found in the project, then in an installed companion', ()
   write(join(wt, '.agents/skills/toolkit-dev-slot-acme/apps/site.json'), app);
   assert.equal(loadApp('site', wt).name, 'site');
   assert.ok(appCandidates('site', wt).some((f) => f.endsWith('toolkit-dev-slot-acme/apps/site.json')));
-  write(join(wt, '.ai-toolkit/dev-slot.json'), { ...app, memoryGiB: 3 });
+  write(join(wt, '.agents/factory-metadata/dev-slot.json'), { ...app, memoryGiB: 3 });
   assert.equal(loadApp('site', wt).memoryGiB, 3, 'the project file wins');
 });
 
 test('a project file for another app name is skipped, and an invalid one is an error naming the file', () => {
   const wt = tmp();
-  write(join(wt, '.ai-toolkit/dev-slot.json'), { name: 'other', image: 'x', containerPort: 1, healthPath: '/', portRange: [2000, 2001], memoryGiB: 1 });
+  write(join(wt, '.agents/factory-metadata/dev-slot.json'), { name: 'other', image: 'x', containerPort: 1, healthPath: '/', portRange: [2000, 2001], memoryGiB: 1 });
   assert.throws(() => loadApp('site', wt), /names "other"/);
   write(join(wt, '.agents/skills/toolkit-dev-slot-acme/apps/site.json'), { name: 'site', image: 'x' });
   assert.throws(() => loadApp('site', wt), /site\.json:[\s\S]*containerPort: required/);

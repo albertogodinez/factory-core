@@ -9,14 +9,14 @@ import { classify } from './classify-interlocutor.mjs';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const scope = (f, cwd, ...args) => spawnSync(process.execPath, [join(DIR, 'scope.mjs'), '--cwd', cwd, ...args], {
-  encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: f.home, HOME: f.home },
+  encoding: 'utf8', env: { ...process.env, FACTORY_HOME: f.home, HOME: f.home },
 });
 
 test('scope: cohort, bots floor, paths and marker come from project.json', () => {
   const f = makeFixtures();
   try {
     const p = join(f.root, 'project');
-    write(join(p, '.ai-toolkit/project.json'), {
+    write(join(p, '.agents/factory-metadata/project.json'), {
       version: 1, name: 'project', neighbors: [{ name: 'lib' }],
       pr: { commentMarker: { mode: 'text', text: 'acme-bot' } },
       mining: { cohort: ['ann', 'bo'], loginSuffix: '_corp', bots: { mine: true, minOccurrenceUnits: 2, minVerified: 3 }, paths: { include: ['src', 'app/'], exclude: ['src/gen/'] } },
@@ -31,7 +31,7 @@ test('scope: cohort, bots floor, paths and marker come from project.json', () =>
     assert.equal(s.canonicalRepo, 'acme/project');
     assert.equal(s.ghHost, 'github.com');
     assert.equal(s.marker, 'acme-bot');
-    assert.match(s.stateRoot, /\.ai-toolkit\/state\/main$/);
+    assert.match(s.stateRoot, /\.agents\/factory-metadata\/state\/main$/);
     assert.equal(s.notes.length, 1);
     // flags replace for this run
     const o = JSON.parse(scope(f, p, '--reviewers', 'zed', '--no-mine-bots').stdout);
@@ -47,7 +47,7 @@ test('scope: a neighbor uses its own config; no mining block is exit 1 with the 
     let r = scope(f, p);
     assert.equal(r.status, 1);
     assert.match(r.stderr, /no "mining" block/);
-    write(join(f.root, 'lib/.ai-toolkit/project.json'), { version: 1, mining: { cohort: ['cy'] } });
+    write(join(f.root, 'lib/.agents/factory-metadata/project.json'), { version: 1, mining: { cohort: ['cy'] } });
     r = scope(f, p, '--neighbor', 'lib');
     assert.equal(r.status, 0, r.stderr);
     const s = JSON.parse(r.stdout);
@@ -61,7 +61,7 @@ test('scope: a fork mines its upstream; a workspace registry has no mining', () 
   const f = makeFixtures();
   try {
     const p = join(f.root, 'project');
-    write(join(p, '.ai-toolkit/project.json'), { version: 1, remote: { host: 'github.com', slug: 'me/project', upstream: 'acme/project' }, mining: { cohort: ['ann'] } });
+    write(join(p, '.agents/factory-metadata/project.json'), { version: 1, remote: { host: 'github.com', slug: 'me/project', upstream: 'acme/project' }, mining: { cohort: ['ann'] } });
     assert.equal(JSON.parse(scope(f, p).stdout).canonicalRepo, 'acme/project');
     assert.equal(scope(f, join(f.root, 'hub')).status, 1);
   } finally { f.cleanup(); }
@@ -96,13 +96,13 @@ test('learn dir: <stateRoot>/pr-mining/learn by default; mining.learnDir (repo-r
   const f = makeFixtures();
   try {
     const p = join(f.root, 'project');
-    write(join(p, '.ai-toolkit/project.json'), { version: 1, name: 'project', mining: { cohort: ['ann'] } });
+    write(join(p, '.agents/factory-metadata/project.json'), { version: 1, name: 'project', mining: { cohort: ['ann'] } });
     const d = scope(f, p, '--learn-dir');
     assert.equal(d.status, 0, d.stderr);
-    assert.match(d.stdout.trim(), /\.ai-toolkit\/state\/main\/pr-mining\/learn$/);
+    assert.match(d.stdout.trim(), /\.agents\/factory-metadata\/state\/main\/pr-mining\/learn$/);
     assert.equal(JSON.parse(scope(f, p).stdout).learnDir, d.stdout.trim());
     // A durable ledger: learnDir alone, without a cohort, is enough for --learn-dir.
-    write(join(p, '.ai-toolkit/project.json'), { version: 1, name: 'project', mining: { learnDir: 'decisions/pr-mining-learn' } });
+    write(join(p, '.agents/factory-metadata/project.json'), { version: 1, name: 'project', mining: { learnDir: 'decisions/pr-mining-learn' } });
     const w = scope(f, p, '--learn-dir');
     assert.equal(w.status, 0, w.stderr);
     assert.equal(w.stdout.trim(), join(p, 'decisions', 'pr-mining-learn'));

@@ -61,7 +61,7 @@ before(() => {
     files: {
       'src/checkout.js': 'export const renderCheckout = 1;\n',
       'test/checkout.test.js': 'test\n',
-      '.ai-toolkit/project.json': JSON.stringify({ version: 1, name: 'app', neighbors: [{ name: 'lib' }] }),
+      '.agents/factory-metadata/project.json': JSON.stringify({ version: 1, name: 'app', neighbors: [{ name: 'lib' }] }),
     },
   });
   const map = join(app, '.agents/skills/toolkit-features-app');
@@ -76,7 +76,7 @@ before(() => {
 after(() => t.cleanup());
 
 const run = (...args) => {
-  const r = spawnSync(process.execPath, [CHECK, '--cwd', app, ...args], { encoding: 'utf8', env: { ...process.env, AI_TOOLKIT_HOME: home } });
+  const r = spawnSync(process.execPath, [CHECK, '--cwd', app, ...args], { encoding: 'utf8', env: { ...process.env, FACTORY_HOME: home } });
   return { status: r.status, out: r.stdout + r.stderr };
 };
 const entry = () => join(app, '.agents/skills/toolkit-features-app/features/checkout.md');

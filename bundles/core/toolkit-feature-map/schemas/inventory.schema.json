@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "agent-factory/toolkit-feature-map/inventory.schema.json",
+  "$id": "factory-core/toolkit-feature-map/inventory.schema.json",
   "title": "Feature Map Inventory Output",
   "description": "stdout of a map's scripts/inventory.mjs. check-map.mjs rejects any other shape. Authoring types: ../scripts/inventory.d.ts",
   "oneOf": [

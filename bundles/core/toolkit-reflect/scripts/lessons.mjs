@@ -9,7 +9,7 @@
 //   lessons.mjs target --skill <name>        the source repo to promote an edit of an installed skill into
 //
 // Every lesson goes to <stateRoot>/lessons.jsonl. A core or org lesson also goes to
-// ~/.ai-toolkit/lessons-index.jsonl (or $AI_TOOLKIT_HOME), which spans every repo. A fingerprint
+// ~/.agents/factory/lessons-index.jsonl (or $FACTORY_HOME), which spans every repo. A fingerprint
 // is due when it has 3+ occurrences in the last 90 days, hasn't been promoted or marked never,
 // and, if snoozed ("not now"), has a new occurrence since. Prints JSON. node: imports only.
 import { readFileSync, appendFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, renameSync } from 'node:fs';
@@ -20,7 +20,7 @@ import { spawnSync } from 'node:child_process';
 export const THRESHOLD = 3, EXPIRY_DAYS = 90, PROMPTS_PER_SESSION = 3;
 const DAY = 86400000;
 
-const home = (env = process.env) => (env.AI_TOOLKIT_HOME ? resolve(env.AI_TOOLKIT_HOME) : join(homedir(), '.ai-toolkit'));
+const home = (env = process.env) => (env.FACTORY_HOME ? resolve(env.FACTORY_HOME) : join(homedir(), '.agents/factory'));
 const indexFile = (env) => join(home(env), 'lessons-index.jsonl');
 const decisionsFile = (env) => join(home(env), 'lessons-decisions.json');
 const readJsonl = (f) => (existsSync(f) ? readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean) : []);
@@ -128,12 +128,12 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     const ctx = context();
     if (ctx.error) fail(ctx.error);
     // The lock sits at the project root (committed install) or the main checkout (local-only);
-    // stateRoot is <that root>/.ai-toolkit/state/<worktree>.
-    const roots = [ctx.project?.root, dirname(dirname(dirname(ctx.stateRoot || '')))].filter(Boolean);
-    const lockPath = roots.map((r) => join(r, '.ai-toolkit', 'skills-lock.json')).find(existsSync);
+    // stateRoot is <that root>/.agents/factory-metadata/state/<worktree>.
+    const roots = [ctx.project?.root, dirname(dirname(dirname(dirname(ctx.stateRoot || ''))))].filter(Boolean);
+    const lockPath = roots.map((r) => join(r, '.agents/factory-metadata', 'skills-lock.json')).find(existsSync);
     const s = lockPath ? readJson(lockPath, { skills: {} }).skills?.[o.skill] : null;
     if (!s) return { skill: o.skill, installed: false, note: 'not installed by factory: the skill belongs to this repo, so edit it here (repo scope)' };
-    // Bundle source paths are machine-specific, so factory keeps them in ~/.ai-toolkit/installs.json.
+    // Bundle source paths are machine-specific, so factory keeps them in ~/.agents/factory/installs.json.
     const bundleDir = readJson(join(home(env), 'installs.json'), {}).sources?.[s.bundle];
     const sourceDir = bundleDir && join(bundleDir, o.skill);
     if (!sourceDir || !existsSync(sourceDir)) return { skill: o.skill, installed: true, bundle: s.bundle, note: `the ${s.bundle} bundle's source isn't on this machine; record the lesson and promote it where that bundle lives` };

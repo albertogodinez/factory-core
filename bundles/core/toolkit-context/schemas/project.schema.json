@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "agent-factory/toolkit-context/project.schema.json",
-  "title": "Project config (.ai-toolkit/project.json)",
-  "description": "One repo's settings for agent-factory skills. Every field is optional: what's missing is detected from git and the working tree.",
+  "$id": "factory-core/toolkit-context/project.schema.json",
+  "title": "Project config (.agents/factory-metadata/project.json)",
+  "description": "One repo's settings for factory-core skills. Every field is optional: what's missing is detected from git and the working tree.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -35,7 +35,7 @@
       }
     },
     "worktreeConvention": { "enum": ["dot-worktrees", "sibling-directory", "none"] },
-    "workspace": { "type": "string", "minLength": 1, "description": "Repo-relative path to a multi-repo registry (.ai-toolkit/workspace.json or a legacy .claude/repos.json). Keeps workspace mode: the registry lists the repos, and this file's settings apply on top." },
+    "workspace": { "type": "string", "minLength": 1, "description": "Repo-relative path to a multi-repo registry (.agents/factory-metadata/workspace.json or a legacy .claude/repos.json). Keeps workspace mode: the registry lists the repos, and this file's settings apply on top." },
     "planHome": { "type": "string", "description": "Repo-relative directory for plans. Default: plans" },
     "writeAllowed": { "type": "boolean", "description": "false makes every posting, pushing or ticket-moving skill ask first. Default: true" },
     "neighbors": {

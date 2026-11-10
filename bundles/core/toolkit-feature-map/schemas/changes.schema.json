@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "agent-factory/toolkit-feature-map/changes.schema.json",
+  "$id": "factory-core/toolkit-feature-map/changes.schema.json",
   "title": "PR file changes",
   "description": "The file changes of one PR or diff, as check-pr.mjs reads them (from gh api pulls/<N>/files, git diff --name-status, or --changes <file>).",
   "type": "array",

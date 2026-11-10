@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://agent-factory/schemas/upstreams.schema.json",
+  "$id": "https://factory-core/schemas/upstreams.schema.json",
   "title": "Adopted upstream skills",
   "description": "Where each adopted skill, persona or rule came from, and the upstream state last reviewed. check-upstreams.mjs compares upstream against itself, never against our edited copy.",
   "type": "object",
