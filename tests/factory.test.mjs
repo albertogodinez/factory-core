@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync, lstatSync, readlinkSync, appendFileSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync, lstatSync, readlinkSync, appendFileSync, rmSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tempRoot, makeRepo, write, git } from './fixtures/make.mjs';
@@ -413,4 +413,56 @@ test('status --hook: a running session hears once about an update or an edited c
   assert.match(hook('s1', 'UserPromptSubmit'), /the installed copy of beta was edited here, but it's owned by hook-src \(bundles\/hb\/beta\/SKILL\.md\)\. Move the edit there/);
   assert.equal(hook('s1', 'UserPromptSubmit'), '', 'the edit is reported once a session');
   assert.match(hook('s3', 'SessionStart'), /installed copy of beta was edited/, 'a new session hears about it too');
+});
+
+test('setup on a new machine: adds or repoints the status hooks, keeps other hooks, records committed installs, then is a no-op', () => {
+  const machine = join(t.root, 'machine'), repos = join(machine, 'repos'), h = join(machine, 'toolkit');
+  const claude = join(machine, 'claude'), codex = join(machine, 'codex');
+  mkdirSync(h, { recursive: true }); write(join(h, 'sources.json'), { core: CORE });
+  const env = { AI_TOOLKIT_HOME: h, CLAUDE_CONFIG_DIR: claude, CODEX_HOME: codex };
+  const mine = makeRepo(join(repos, 'mine'), { remote: 'git@github.com:me/mine.git' });
+  makeRepo(join(repos, 'team'), { remote: 'git@github.com:org/team.git' });
+  assert.equal(factory(['install', 'core', '--commit', '--to', mine, '--marker', 'off'], mine, env).status, 0);
+  rmSync(join(h, 'installs.json')); // a fresh clone on a new machine: the lock came with it, installs.json didn't
+
+  const other = { type: 'command', command: 'bash other.sh', timeout: 10 };
+  write(join(claude, 'settings.json'), { model: 'x', hooks: {
+    SessionStart: [{ hooks: [other] }],
+    UserPromptSubmit: [{ hooks: [{ type: 'command', command: "node '/old/place/bin/factory.mjs' status --hook 2>/dev/null || true", timeout: 5 }] }] } });
+  mkdirSync(codex);
+
+  const r = factory(['setup', '--root', repos], machine, env);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, /claude-code: SessionStart: added, UserPromptSubmit: repointed at this checkout/);
+  assert.match(r.out, /codex: SessionStart: added, UserPromptSubmit: added/);
+  assert.match(r.out, /recorded: mine \(commit\)/);
+  assert.match(r.out, /no install: team/);
+  const cfg = json(join(claude, 'settings.json'));
+  const cmd = `node '${FACTORY}' status --hook 2>/dev/null || true`;
+  assert.equal(cfg.model, 'x');
+  assert.deepEqual(cfg.hooks.SessionStart[0].hooks, [other], 'other hooks are kept');
+  assert.equal(cfg.hooks.SessionStart[1].hooks[0].command, cmd);
+  assert.equal(cfg.hooks.UserPromptSubmit.length, 1);
+  assert.equal(cfg.hooks.UserPromptSubmit[0].hooks[0].command, cmd);
+  assert.equal(json(join(codex, 'hooks.json')).hooks.UserPromptSubmit[0].hooks[0].command, cmd);
+  assert.ok(readdirSync(claude).some((f) => /^settings\.json\.bak-\d{14}$/.test(f)), 'the old file is backed up');
+  assert.ok(json(join(h, 'installs.json')).repos[mine], 'update --all now reaches it');
+
+  const again = factory(['setup', '--root', repos], machine, env);
+  assert.match(again.out, /claude-code: already set/);
+  assert.match(again.out, /already recorded: mine/);
+  assert.equal(readdirSync(claude).filter((f) => f.includes('.bak-')).length, 1, 'a no-op run writes nothing');
+});
+
+test('setup leaves a hook file it cannot parse alone, and --dry-run writes nothing', () => {
+  const machine = join(t.root, 'machine2'), claude = join(machine, 'claude'), codex = join(machine, 'codex');
+  write(join(claude, 'settings.json'), '{ not json');
+  mkdirSync(codex, { recursive: true });
+  const env = { AI_TOOLKIT_HOME: join(machine, 'toolkit'), CLAUDE_CONFIG_DIR: claude, CODEX_HOME: codex };
+  const r = factory(['setup', '--root', machine, '--dry-run'], machine, env);
+  assert.equal(r.status, 1);
+  assert.match(r.err, /settings\.json isn't valid JSON; left alone/);
+  assert.equal(readFileSync(join(claude, 'settings.json'), 'utf8'), '{ not json');
+  assert.match(r.out, /codex: SessionStart: added, UserPromptSubmit: added \(dry run\)/);
+  assert.equal(existsSync(join(codex, 'hooks.json')), false);
 });

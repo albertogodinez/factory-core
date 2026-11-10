@@ -181,6 +181,7 @@ node factory.mjs doctor               # onboarding tests
 node factory.mjs list
 node factory.mjs status               # one line when installed skills are behind their source; else silent
 node factory.mjs status --hook        # as a hook: also tells a running session about updates and edited copies
+node factory.mjs setup [--root <dir>] # a new machine: the status hooks, and installs.json for repos already cloned
 ```
 
 `status --hook` reads the hook's JSON from stdin (`session_id`, `hook_event_name`, `cwd`). It answers the session-start check the same way, and on later prompts it tells a running session, once, what changed since it last checked:
@@ -194,6 +195,8 @@ A skill read earlier in a session stays in that session's context, so the notice
 ```json
 { "type": "command", "command": "node '<agent-factory>/bin/factory.mjs' status --hook 2>/dev/null || true", "timeout": 5 }
 ```
+
+`factory setup` adds these entries, or repoints them when agent-factory moved. It keeps every other hook, backs up a file before writing it, and writes nothing when the hooks are already set.
 
 Both harnesses pass the hook's stdout to the model on `UserPromptSubmit` (checked live in each, 2026-11-09). In Codex, two things differ. `codex exec` runs no user hooks, so only interactive sessions hear about updates. And hooks don't inherit `AI_TOOLKIT_HOME`, so a hook always reads `~/.ai-toolkit`.
 
@@ -242,5 +245,18 @@ Codex may be the daily driver on another machine. `factory doctor` therefore run
    - the context budget
    - host linters: a warning when the repo's oxlint, ESLint or Biome would lint the installed skills' scripts under its own rules, with the ignore line to add (install prints the same warning)
 5. Start sessions in the repo.
+
+## A new machine
+
+Clone agent-factory, eg-agent-kit and your repos as siblings, then:
+
+```bash
+node ~/Documents/repos/agent-factory/bin/factory.mjs setup            # --root <dir> for repos kept elsewhere
+```
+
+It does what a clone can't bring:
+- **The user hooks.** It adds the `status --hook` entries to `~/.claude/settings.json` and `~/.codex/hooks.json` (`CLAUDE_CONFIG_DIR` and `CODEX_HOME` move them). Trust them in the next interactive Codex session.
+- **installs.json.** A `--commit` repo's skills and lock arrive with the clone, but this machine's `~/.ai-toolkit/installs.json` doesn't list it, so `update --all` would skip it. `setup` records each repo under `--root` (default: agent-factory's parent directory) that carries a lock.
+- **Team repos.** A `--local` install is never tracked, so a clone has none. `setup` lists the repos with no install. Run `install … --local` in the ones you work in, then `/toolkit-repo-register`, because `project.json` was untracked too.
 
 Keep the resolver and scripts fast, small and free of dependencies. On Windows, `factory` copies skills instead of linking them, and every script runs without a shell.

@@ -12,6 +12,8 @@
 //   factory status [--to <repo>]          one line when installed skills are behind; else silent
 //   factory status --hook                 the same as a hook: also says, once per session, which skills
 //                                         were updated or edited in place after the session started
+//   factory setup [--root <dir>] [--dry-run]   a new machine: add the status hooks to Claude Code and
+//                                         Codex, and record the repos under <dir> that carry an install
 //
 // Bundles: core (this repo), expedia and trips (../eg-agent-kit). Override
 // a bundle's path in ~/.ai-toolkit/sources.json: {"expedia": "/path/to/bundles/expedia"}.
@@ -23,6 +25,7 @@ import { join, dirname, resolve, relative, basename, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { homedir } from 'node:os';
 import { findGit, toolkitHome, parseRemote } from '../bundles/core/toolkit-context/scripts/resolve.mjs';
 
 const FACTORY = dirname(dirname(realpathSync(import.meta.filename)));
@@ -860,12 +863,82 @@ function hookStatus(opts) {
   }
 }
 
+// ---------- setup ----------
+// A new machine. Committed installs arrive with a clone, but the user hooks and installs.json don't,
+// so sessions never hear about updates and `update --all` skips those repos. A hook file is backed up
+// before it's written; a run that changes nothing writes nothing.
+const hookCommand = () => `node '${join(FACTORY, 'bin', 'factory.mjs')}' status --hook 2>/dev/null || true`;
+const IS_STATUS_HOOK = /factory\.mjs'? status --hook/;
+export function addStatusHooks(cfg, harness, command = hookCommand()) {
+  cfg.hooks ||= {};
+  const changes = [];
+  for (const ev of ['SessionStart', 'UserPromptSubmit']) {
+    const groups = (cfg.hooks[ev] ||= []);
+    const found = groups.flatMap((g) => g.hooks || []).filter((h) => IS_STATUS_HOOK.test(h.command || ''));
+    for (const h of found) if (h.command !== command) { h.command = command; changes.push(`${ev}: repointed at this checkout`); }
+    if (found.length) continue;
+    const group = { hooks: [{ type: 'command', command, timeout: 5 }] };
+    if (harness === 'claude-code' && ev === 'SessionStart') group.matcher = '^(startup|clear)$';
+    groups.push(group);
+    changes.push(`${ev}: added`);
+  }
+  return changes;
+}
+function hookFiles(env = process.env) {
+  return [
+    { harness: 'claude-code', dir: env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), file: 'settings.json' },
+    { harness: 'codex', dir: env.CODEX_HOME || join(homedir(), '.codex'), file: 'hooks.json' },
+  ].map((h) => ({ ...h, path: join(h.dir, h.file) }));
+}
+function setup(opts) {
+  const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+  out('hooks');
+  let codexChanged = false;
+  for (const h of hookFiles()) {
+    if (!existsSync(h.dir)) { out(`  ${h.harness}: skipped (no ${h.dir})`); continue; }
+    let cfg = {};
+    if (existsSync(h.path)) {
+      try { cfg = JSON.parse(readFileSync(h.path, 'utf8')); } catch { warn(`${h.path} isn't valid JSON; left alone. Add the hook by hand (README).`); process.exitCode = 1; continue; }
+    }
+    const changes = addStatusHooks(cfg, h.harness);
+    if (!changes.length) { out(`  ${h.harness}: already set (${h.path})`); continue; }
+    if (!opts.dryRun) {
+      if (existsSync(h.path)) cpSync(h.path, `${h.path}.bak-${stamp}`);
+      writeJson(h.path, cfg);
+    }
+    if (h.harness === 'codex') codexChanged = true;
+    out(`  ${h.harness}: ${changes.join(', ')}${opts.dryRun ? ' (dry run)' : ` (${h.path}${existsSync(`${h.path}.bak-${stamp}`) ? `, backup .bak-${stamp}` : ''})`}`);
+  }
+  if (codexChanged) out('  codex: trust the new hooks in the next interactive session (codex exec runs no user hooks)');
+
+  const root = resolve(opts.root || dirname(FACTORY));
+  const known = readJson(join(toolkitHome(), 'installs.json'), { repos: {} }).repos;
+  const recorded = [], already = [], none = [];
+  for (const n of readdirSync(root).sort()) {
+    const d = join(root, n);
+    try { if (!statSync(join(d, '.git')).isDirectory()) continue; } catch { continue; } // main checkouts only
+    const lock = lockOf(d);
+    if (!lock.mode) { if (d !== FACTORY) none.push(n); continue; }
+    if (known[d]) { already.push(n); continue; }
+    if (!opts.dryRun) recordInstall(d, lock);
+    recorded.push(`${n} (${lock.mode})`);
+  }
+  out(`repos under ${root}`);
+  if (recorded.length) out(`  recorded${opts.dryRun ? ' (dry run)' : ''}: ${recorded.join(', ')}`);
+  if (already.length) out(`  already recorded: ${already.join(', ')}`);
+  if (none.length) {
+    out(`  no install: ${none.join(', ')}`);
+    out('  A team repo keeps its install out of git, so a clone has none. For each one you work in:');
+    out('    factory install core [expedia] [trips] --local --to <repo>, then /toolkit-repo-register there');
+  }
+}
+
 // ---------- CLI ----------
 function parse(argv) {
   const o = { _: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--to' || a === '--marker') { o[a.slice(2)] = argv[++i]; if (o[a.slice(2)] == null) die(`${a} needs a value`, 2); }
+    if (a === '--to' || a === '--marker' || a === '--root') { o[a.slice(2)] = argv[++i]; if (o[a.slice(2)] == null) die(`${a} needs a value`, 2); }
     else if (['--commit', '--local', '--force', '--dry-run', '--all', '--purge', '--live', '--json', '--hook'].includes(a)) o[a.slice(2).replace(/-(.)/g, (_, c) => c.toUpperCase())] = true;
     else if (a === '-h' || a === '--help') o.help = true;
     else if (a.startsWith('--')) die(`unknown flag ${a}`, 2);
@@ -876,7 +949,7 @@ function parse(argv) {
 }
 function help() {
   const src = readFileSync(import.meta.filename, 'utf8').split('\n');
-  out(src.slice(1, 15).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+  out(src.slice(1, src.findIndex((l) => l.startsWith('// Bundles:'))).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.meta.filename)) {
@@ -889,6 +962,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.met
   else if (cmd === 'link') link(o);
   else if (cmd === 'doctor') await doctor(o);
   else if (cmd === 'list') list(o);
+  else if (cmd === 'setup') setup(o);
   else if (cmd === 'status') { try { o.hook ? hookStatus(o) : status(o); } catch {} process.exitCode = 0; }
   else die(`unknown command ${cmd} (see factory help)`, 2);
 }
