@@ -7,7 +7,7 @@
   "required": ["repo", "syncCommit", "checks"],
   "additionalProperties": false,
   "properties": {
-    "repo": { "type": "string", "minLength": 1, "description": "Registry name from .claude/repos.json" },
+    "repo": { "type": "string", "minLength": 1, "description": "The repo's name as the project registry (toolkit-context --repo) lists it" },
     "syncCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$", "description": "Trunk commit at which the model was last confirmed to describe every covered file" },
     "checks": {
       "type": "array",

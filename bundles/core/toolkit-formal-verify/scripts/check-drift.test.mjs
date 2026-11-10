@@ -23,7 +23,9 @@ function fixture(covers) {
   const skill = path.join(root, '.agents/skills/toolkit-verify-app-toggle');
   fs.mkdirSync(path.join(skill, 'model'), { recursive: true });
   fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
-  fs.writeFileSync(path.join(root, '.claude/repos.json'), JSON.stringify({ repos: [{ name: 'app', localPath: repo, primaryBranch: 'main', remote: {} }] }));
+  fs.mkdirSync(path.join(root, '.ai-toolkit'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.ai-toolkit/project.json'), JSON.stringify({ version: 1, name: 'toolkit', workspace: '.claude/repos.json' }));
+  fs.writeFileSync(path.join(root, '.claude/repos.json'), JSON.stringify({ repos: [{ name: 'toolkit', localPath: '.', primaryBranch: 'main', remote: { org: 'o', repo: 'toolkit', ghHost: 'github.com' } }, { name: 'app', localPath: repo, primaryBranch: 'main', remote: { org: 'o', repo: 'app', ghHost: 'github.com' } }] }));
   for (const f of ['M.tla', 'M.cfg']) fs.writeFileSync(path.join(skill, 'model', f), '');
   const check = { id: 'no-jump', property: 'NoJump', rule: 'The pane keeps its layout.', model: 'model/M.tla', config: 'model/M.cfg', covers };
   fs.writeFileSync(path.join(skill, 'coverage.json'), JSON.stringify({ repo: 'app', syncCommit: git('rev-parse', 'HEAD'), checks: [check] }));

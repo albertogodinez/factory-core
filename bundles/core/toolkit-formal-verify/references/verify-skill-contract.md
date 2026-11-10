@@ -4,7 +4,7 @@ A verify skill is read cold, mid-change, by an agent that has never seen the mod
 
 ## Directory
 
-`.agents/skills/toolkit-verify-<repo>-<subsystem>/`, where `<repo>` is the name in `.claude/repos.json` and `<subsystem>` is the noun the repo uses for that part (`map-toggle`, not `layout-state`).
+`.agents/skills/toolkit-verify-<repo>-<subsystem>/`, where `<repo>` is its name in the project registry (`resolve.mjs --repo`) and `<subsystem>` is the noun the repo uses for that part (`map-toggle`, not `layout-state`).
 
 ## `coverage.json`
 

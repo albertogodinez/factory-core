@@ -14,7 +14,7 @@ const PREFIX = 'toolkit-verify-';
 const args = process.argv.slice(2);
 const VALUE_FLAGS = new Set(['--repo', '--pr', '--diff', '--worktree', '--root']);
 const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-// --root points at another toolkit checkout (its .claude/repos.json and .agents/skills); the tests use it.
+// --root points at another project (its .ai-toolkit/project.json and .agents/skills); the tests use it.
 const TOOLKIT_ROOT = flag('--root') ? path.resolve(flag('--root')) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const SKILLS_DIR = path.join(TOOLKIT_ROOT, '.agents/skills');
 const strict = args.includes('--strict');
@@ -35,7 +35,23 @@ const tryGit = (cwd, gitArgs) => {
   }
 };
 
-const registry = new Map(JSON.parse(fs.readFileSync(path.join(TOOLKIT_ROOT, '.claude/repos.json'), 'utf8')).repos.map((r) => [r.name, r]));
+// A repo's root, trunk and remote come from the toolkit-context resolver, so the project's registry
+// can live anywhere its project.json points.
+const RESOLVER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../toolkit-context/scripts/resolve.mjs');
+const resolved = new Map();
+function lookup(name) {
+  if (!resolved.has(name)) {
+    let repo = null;
+    try {
+      const out = execFileSync(process.execPath, [RESOLVER, '--cwd', TOOLKIT_ROOT, '--repo', name, '--no-cache'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      repo = JSON.parse(out).project;
+    } catch {
+      repo = null;
+    }
+    resolved.set(name, repo);
+  }
+  return resolved.get(name);
+}
 
 const skills = (named.length ? named : fs.readdirSync(SKILLS_DIR).filter((d) => d.startsWith(PREFIX))).map((name) => {
   const file = path.join(SKILLS_DIR, name, 'coverage.json');
@@ -48,7 +64,7 @@ const skills = (named.length ? named : fs.readdirSync(SKILLS_DIR).filter((d) => 
   }
   const errors = validateCoverage(cov);
   if (errors.length) fail(`${name}/coverage.json:\n  ${errors.join('\n  ')}`);
-  if (!registry.has(cov.repo)) fail(`${name}: repo ${cov.repo} is not in .claude/repos.json`);
+  if (!lookup(cov.repo)) fail(`${name}: repo ${cov.repo} is not a registered repo of this project (toolkit-context --repo)`);
   for (const check of cov.checks)
     for (const rel of [check.model, check.config, check.view, ...(check.findings ?? []).map((f) => f.replay)].filter(Boolean))
       if (!fs.existsSync(path.join(SKILLS_DIR, name, rel))) fail(`${name}: ${check.id} names ${rel}, which is not in the skill`);
@@ -60,17 +76,16 @@ const warnings = [];
 
 if (flag('--pr') || flag('--diff')) {
   const repoName = flag('--repo') ?? fail('--pr and --diff need --repo <repo>');
-  const repo = registry.get(repoName) ?? fail(`${repoName} is not in .claude/repos.json`);
+  const repo = lookup(repoName) ?? fail(`${repoName} is not a registered repo of this project (toolkit-context --repo)`);
   let files;
   if (flag('--pr')) {
-    const { org, repo: name, ghHost } = repo.remote;
-    const out = execFileSync('gh', ['api', '--paginate', `repos/${org}/${name}/pulls/${flag('--pr')}/files`, '--jq', '.[] | .filename, (.previous_filename // empty)'], {
+    const out = execFileSync('gh', ['api', '--paginate', `repos/${repo.remote.slug}/pulls/${flag('--pr')}/files`, '--jq', '.[] | .filename, (.previous_filename // empty)'], {
       encoding: 'utf8',
-      env: { ...process.env, GH_HOST: ghHost },
+      env: { ...process.env, GH_HOST: repo.remote.host },
     });
     files = out.split('\n').filter(Boolean);
   } else {
-    const root = flag('--worktree') ? path.resolve(flag('--worktree')) : path.resolve(TOOLKIT_ROOT, repo.localPath);
+    const root = flag('--worktree') ? path.resolve(flag('--worktree')) : repo.root;
     files = git(root, ['diff', '--name-only', '--no-renames', flag('--diff')]).split('\n').filter(Boolean);
   }
   for (const { name, cov } of skills.filter((s) => s.cov.repo === repoName)) {
@@ -79,15 +94,15 @@ if (flag('--pr') || flag('--diff')) {
   }
 } else {
   for (const { name, cov } of skills) {
-    const repo = registry.get(cov.repo);
-    const root = path.resolve(TOOLKIT_ROOT, repo.localPath);
+    const repo = lookup(cov.repo);
+    const root = repo.root;
     if (!fs.existsSync(path.join(root, '.git'))) {
-      warnings.push(`${name}: ${cov.repo} is not cloned at ${repo.localPath}; skipped`);
+      warnings.push(`${name}: ${cov.repo} is not cloned at ${root}; skipped`);
       continue;
     }
-    const trunk = `origin/${repo.primaryBranch}`;
-    if (args.includes('--fetch') && tryGit(root, ['fetch', '-q', 'origin', repo.primaryBranch]) === null) fail(`${name}: git fetch origin ${repo.primaryBranch} failed in ${repo.localPath}`);
-    if (tryGit(root, ['cat-file', '-e', `${cov.syncCommit}^{commit}`]) === null) fail(`${name}: syncCommit ${cov.syncCommit.slice(0, 12)} is not in ${repo.localPath}; rerun with --fetch`);
+    const trunk = `origin/${repo.trunk}`;
+    if (args.includes('--fetch') && tryGit(root, ['fetch', '-q', 'origin', repo.trunk]) === null) fail(`${name}: git fetch origin ${repo.trunk} failed in ${root}`);
+    if (tryGit(root, ['cat-file', '-e', `${cov.syncCommit}^{commit}`]) === null) fail(`${name}: syncCommit ${cov.syncCommit.slice(0, 12)} is not in ${root}; rerun with --fetch`);
     // An old ref that predates syncCommit gives an empty range, which would read as in sync.
     if (tryGit(root, ['merge-base', '--is-ancestor', cov.syncCommit, trunk]) === null) fail(`${name}: ${trunk} does not contain syncCommit ${cov.syncCommit.slice(0, 12)}; rerun with --fetch`);
     const trunkAt = git(root, ['log', '-1', '--format=%h %cs', trunk]).trim();
