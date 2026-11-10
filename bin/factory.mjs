@@ -790,6 +790,27 @@ function worktreeHint(g, root) {
   return missing.length ? `factory: this worktree can't see ${missing.length} installed skill(s). Link them: node ${join(FACTORY, 'bin', 'factory.mjs')} link --to '${g.toplevel}'` : '';
 }
 
+// Lesson branches factory-reflect started (lessons.mjs start records each in
+// <home>/lesson-branches.jsonl) whose ref still exists. Read from the ref files, so a session start
+// spawns no git; a landed or deleted branch drops out by itself.
+export function lessonBranches(home = toolkitHome()) {
+  const seen = new Set(), found = [];
+  const lines = (readText(join(home, 'lesson-branches.jsonl')) || '').split('\n').filter(Boolean);
+  for (const l of lines) {
+    let e;
+    try { e = JSON.parse(l); } catch { continue; }
+    if (!e?.root || !e?.branch || seen.has(`${e.root}\0${e.branch}`)) continue;
+    seen.add(`${e.root}\0${e.branch}`);
+    const g = existsSync(e.root) ? findGit(e.root, null) : null;
+    if (!g) continue;
+    const live = existsSync(join(g.commonDir, 'refs', 'heads', ...e.branch.split('/')))
+      || (readText(join(g.commonDir, 'packed-refs')) || '').split('\n').some((p) => p.endsWith(` refs/heads/${e.branch}`));
+    if (live) found.push({ repo: basename(g.mainRoot), root: g.mainRoot, branch: e.branch, worktree: e.worktree || null });
+  }
+  return found;
+}
+function readText(f) { try { return readFileSync(f, 'utf8'); } catch { return null; } }
+
 // ---------- the update log and per-session notices ----------
 // update appends what it copied; `status --hook` tells a running session about it at its next prompt.
 // A skill read earlier in a session is still in that session's context, so the notice says to re-read it.
@@ -856,6 +877,11 @@ function hookStatus(opts) {
   const lines = [];
   if (!state || event === 'SessionStart') {
     status({ ...opts, to: opts.to || input.cwd, hint: false }); // the drift line, as at any session start
+    const waiting = lessonBranches();
+    if (waiting.length) {
+      const shown = waiting.slice(0, 4).map((w) => `${w.repo} ${w.branch}`).join(', ') + (waiting.length > 4 ? ` +${waiting.length - 4}` : '');
+      out(`factory: ${waiting.length} lesson branch(es) wait for review: ${shown}. factory-reflect lists and lands them (lessons.mjs open).`);
+    }
     if (file) {
       try { // forget sessions untouched for a week
         for (const f of readdirSync(SESSIONS())) if (now - statSync(join(SESSIONS(), f)).mtimeMs > 7 * 864e5) rmSync(join(SESSIONS(), f), { force: true });

@@ -443,6 +443,27 @@ test('status --hook: a session that moves into an unlinked worktree hears the li
   assert.doesNotMatch(hook('w2', 'SessionStart', wt) + hook('w2', 'UserPromptSubmit', wt), /can't see/, 'linked: no hint');
 });
 
+test('status --hook: a session start names the lesson branches that still wait for review', () => {
+  const h = join(t.root, 'home-lessons'); mkdirSync(h);
+  write(join(h, 'sources.json'), { core: CORE });
+  const d = personalRepo('plessons');
+  assert.equal(factory(['install', 'core', '--commit'], d, { FACTORY_HOME: h }).status, 0);
+  const src = makeRepo(join(t.root, 'lesson-src'), {});
+  git(src, 'branch', 'lesson/2026-11-10-a');
+  git(src, 'branch', 'lesson/2026-11-10-b');
+  git(src, 'pack-refs', '--all'); // one branch packed, one loose
+  git(src, 'branch', '-f', 'lesson/2026-11-10-a');
+  const reg = ['a', 'b', 'gone'].map((n) => JSON.stringify({ root: src, branch: `lesson/2026-11-10-${n}` })).join('\n') + '\n';
+  writeFileSync(join(h, 'lesson-branches.jsonl'), reg);
+  const hook = (sid, event) => spawnSync(process.execPath, [FACTORY, 'status', '--hook'], { cwd: d, encoding: 'utf8',
+    input: JSON.stringify({ session_id: sid, hook_event_name: event, cwd: d }),
+    env: { ...process.env, FACTORY_HOME: h, FACTORY_CONFIG: '', FACTORY_HARNESSES: 'none' } }).stdout;
+  assert.match(hook('l1', 'SessionStart'), /factory: 2 lesson branch\(es\) wait for review: lesson-src lesson\/2026-11-10-a, lesson-src lesson\/2026-11-10-b\./);
+  assert.doesNotMatch(hook('l1', 'UserPromptSubmit'), /lesson branch/, 'only at a session start');
+  git(src, 'branch', '-D', 'lesson/2026-11-10-a', 'lesson/2026-11-10-b');
+  assert.doesNotMatch(hook('l2', 'SessionStart'), /lesson branch/, 'landed or deleted branches drop out');
+});
+
 test('setup on a new machine: adds or repoints the status hooks, keeps other hooks, records committed installs, then is a no-op', () => {
   const machine = join(t.root, 'machine'), repos = join(machine, 'repos'), h = join(machine, 'toolkit');
   const claude = join(machine, 'claude'), codex = join(machine, 'codex');
