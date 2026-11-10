@@ -73,6 +73,14 @@ test('with no personas configured, the default cross-cutting set applies behind 
   assert.equal(by['react-patterns'], undefined);
 });
 
+test('--only resolves exactly the named personas, gates still applied, and drops general', () => {
+  const r = run('resolve-personas.mjs', ['--cwd', repo, '--run', join(t.root, 'run-only'), '--diff', join(t.root, 'py.diff'), '--packs', pack, '--only', 'acme-conv,react-patterns']);
+  assert.equal(r.status, 0, r.stderr);
+  const j = JSON.parse(r.stdout);
+  assert.equal(j.personaSource, 'only');
+  assert.deepEqual(j.personas.map((p) => [p.name, p.status]), [['acme-conv', 'dispatch'], ['react-patterns', 'skipped']]);
+});
+
 test('a pack rule file replaces the core file of the same name, and repos: scoping applies', () => {
   const c = run('compile-rules.mjs', ['no-comments', 'proj', join(t.root, 'compiled'), '--packs', pack]);
   assert.equal(c.status, 0, c.stderr);

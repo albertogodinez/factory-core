@@ -53,7 +53,7 @@ Do not create a worktree. Reviewers read any file at any commit with `git -C <re
 - `skipped`: a gate was not met, or the persona has zero rules for this project. Record `skipped (<reason>)` in the Coverage table. Do not dispatch it.
 - `gap`: the project configures the persona but no installed file provides it. Record it in the Coverage table as a coverage gap and say which pack to install.
 
-Personas come from `review.personas` (`adapters.personas`). With none configured the run is `general` plus the default cross-cutting personas whose gates apply. A persona is found in this skill's `personas/`, then in sibling `factory-review-*` packs; rules are merged from the same places. Gates are frontmatter in the persona file: `paths`, `sweep`, `diff`. A repo can be polyglot, so gates look at the languages in the diff, not the repo. `references/packs.md` has the rules, the gate table, and how to write a pack. If every rule persona skips, dispatch `general` alone and say so.
+Personas come from `review.personas` (`adapters.personas`). With none configured the run is `general` plus the default cross-cutting personas whose gates apply. A persona is found in this skill's `personas/`, then in sibling `factory-review-*` packs; rules are merged from the same places. Gates are frontmatter in the persona file: `paths`, `sweep`, `diff`. A repo can be polyglot, so gates look at the languages in the diff, not the repo. `references/packs.md` has the rules, the gate table, and how to write a pack. If every rule persona skips, dispatch `general` alone and say so. `--only a,b` resolves just those personas, without `general`, for a single-purpose screen such as `factory-reflect`'s internal-data check.
 
 ## Phase 2: Dispatch all reviewers in one batch
 

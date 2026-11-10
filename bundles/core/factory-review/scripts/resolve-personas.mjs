@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// resolve-personas.mjs --run <dir> --diff <diff.txt> [--repo <name|owner/name>] [--cwd <dir>] [--packs a:b]
+// resolve-personas.mjs --run <dir> --diff <diff.txt> [--repo <name|owner/name>] [--cwd <dir>] [--packs a:b] [--only a,b]
 // Decides which reviewer personas to dispatch for this project and compiles their rules.
+// --only names the personas to consider instead of the configured or default set, without general.
 // 1. Asks factory-context for the project and adapters.personas (review.personas in the config).
 //    With none configured, the default set is every persona whose frontmatter says `default: true`.
 //    `general` always runs.
@@ -17,7 +18,7 @@ import { allPersonas, compileRules, findPersona, parseArgs, parseFrontmatter, re
 
 const o = parseArgs(process.argv.slice(2));
 if (!o.run || !o.diff) {
-  console.error('Usage: resolve-personas.mjs --run <dir> --diff <diff.txt> [--repo <name>] [--cwd <dir>] [--packs a:b]');
+  console.error('Usage: resolve-personas.mjs --run <dir> --diff <diff.txt> [--repo <name>] [--cwd <dir>] [--packs a:b] [--only a,b]');
   process.exit(2);
 }
 let ctx;
@@ -36,9 +37,13 @@ const sweepSignals = new Set(existsSync(sweepFile) ? readFileSync(sweepFile, 'ut
 const diffLines = diffText.split('\n');
 
 const configured = ctx.adapters?.personas ?? [];
+const only = typeof o.only === 'string' ? o.only.split(',').map((s) => s.trim()).filter(Boolean) : [];
 let names;
 let source;
-if (configured.length) {
+if (only.length) {
+  names = only;
+  source = 'only';
+} else if (configured.length) {
   names = configured;
   source = 'configured';
 } else {
@@ -46,7 +51,8 @@ if (configured.length) {
   names = defaults;
   source = 'default';
 }
-names = ['general', ...names.filter((n) => n !== 'general')];
+// --only runs exactly what it names; otherwise general always runs.
+if (!only.length) names = ['general', ...names.filter((n) => n !== 'general')];
 
 const asList = (v) => (Array.isArray(v) ? v : v ? String(v).split(',').map((s) => s.trim()).filter(Boolean) : []);
 function gate(fm) {
