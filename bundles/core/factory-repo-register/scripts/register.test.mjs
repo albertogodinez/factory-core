@@ -11,7 +11,7 @@ const REG = join(dirname(fileURLToPath(import.meta.url)), 'register.mjs');
 function env(root) {
   mkdirSync(join(root, 'home/.ssh'), { recursive: true });
   write(join(root, 'home/.ssh/config'), 'Host work-gh\n  HostName github.corp.example\n');
-  return { ...process.env, HOME: join(root, 'home'), FACTORY_HOME: join(root, 'toolkit-home') };
+  return { ...process.env, HOME: join(root, 'home'), USERPROFILE: join(root, 'home'), FACTORY_HOME: join(root, 'toolkit-home') };
 }
 const run = (root, cwd, ...args) => spawnSync(process.execPath, [REG, '--cwd', cwd, ...args], { encoding: 'utf8', env: env(root) });
 

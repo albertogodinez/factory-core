@@ -132,9 +132,16 @@ if (!host) {
 }
 const ghEnv = { ...process.env, GH_HOST: host };
 const [owner, name] = a.repo.split('/');
+const ghBin = process.env.FACTORY_GH_BIN || 'gh';
+let ghPrefix = [];
+if (process.env.FACTORY_GH_BIN_ARGS) {
+  try { ghPrefix = JSON.parse(process.env.FACTORY_GH_BIN_ARGS); }
+  catch { die('FACTORY_GH_BIN_ARGS must be a JSON array'); }
+  if (!Array.isArray(ghPrefix) || ghPrefix.some((x) => typeof x !== 'string')) die('FACTORY_GH_BIN_ARGS must be a JSON array of strings');
+}
 
 function gh(args, { allowFail = false } = {}) {
-  const r = spawnSync('gh', args, { encoding: 'utf8', env: ghEnv, maxBuffer: 64 << 20 });
+  const r = spawnSync(ghBin, [...ghPrefix, ...args], { encoding: 'utf8', env: ghEnv, maxBuffer: 64 << 20 });
   if (r.error) die(`cannot run gh: ${r.error.message}`);
   if (r.status !== 0 && !allowFail) die(`gh ${args.slice(0, 2).join(' ')} failed: ${(r.stderr || r.stdout).trim()}`);
   return allowFail ? { ok: r.status === 0, out: (r.stdout || '').trim(), err: (r.stderr || '').trim() } : r.stdout.trim();

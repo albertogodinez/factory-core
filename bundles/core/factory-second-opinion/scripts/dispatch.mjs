@@ -23,6 +23,18 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(readFileSync(path.join(here, '../references/models.json'), 'utf8'));
 const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
 
+function runCli(cli, args, options = {}) {
+  const key = `FACTORY_${cli.toUpperCase()}_BIN`;
+  const bin = process.env[key] || cli;
+  let prefix = [];
+  const raw = process.env[`${key}_ARGS`];
+  if (raw) {
+    try { prefix = JSON.parse(raw); } catch { return { status: null, error: new Error(`${key}_ARGS must be a JSON array`) }; }
+    if (!Array.isArray(prefix) || prefix.some((x) => typeof x !== 'string')) return { status: null, error: new Error(`${key}_ARGS must be a JSON array of strings`) };
+  }
+  return spawnSync(bin, [...prefix, ...args], options);
+}
+
 function emit(code, payload) {
   console.log(JSON.stringify(payload));
   process.exit(code);
@@ -36,7 +48,7 @@ function detectHarness() {
   let pid = process.ppid;
   for (let i = 0; i < 12 && pid > 1; i++) {
     const r = spawnSync('ps', ['-o', 'ppid=,comm=', '-p', String(pid)], { encoding: 'utf8' });
-    const m = r.stdout.trim().match(/^(\d+)\s+(.*)$/);
+    const m = (r.stdout || '').trim().match(/^(\d+)\s+(.*)$/);
     if (!m) break;
     const name = path.basename(m[2]).toLowerCase();
     if (name === 'claude' || name.startsWith('claude-')) return 'claude';
@@ -49,11 +61,13 @@ function detectHarness() {
 }
 
 function ready(cli) {
-  if (spawnSync('sh', ['-c', `command -v ${cli}`]).status !== 0) return `${cli} is not installed`;
   if (cli === 'codex') {
-    return spawnSync('codex', ['login', 'status'], { timeout: 15000 }).status === 0 ? null : 'codex is not signed in (`codex login`)';
+    const r = runCli('codex', ['login', 'status'], { timeout: 15000 });
+    if (r.error?.code === 'ENOENT') return 'codex is not installed';
+    return r.status === 0 ? null : 'codex is not signed in (`codex login`)';
   }
-  const r = spawnSync('claude', ['auth', 'status'], { encoding: 'utf8', timeout: 15000 });
+  const r = runCli('claude', ['auth', 'status'], { encoding: 'utf8', timeout: 15000 });
+  if (r.error?.code === 'ENOENT') return 'claude is not installed';
   try {
     return JSON.parse(r.stdout).loggedIn ? null : 'claude is not signed in (`claude auth login`)';
   } catch {
@@ -89,11 +103,11 @@ for (const k of ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SESSION_ID
 let r;
 let model = requested;
 if (target === 'codex') {
-  r = spawnSync('codex', ['exec', '-m', requested, '-c', `model_reasoning_effort="${pin.effort}"`,
+  r = runCli('codex', ['exec', '-m', requested, '-c', `model_reasoning_effort="${pin.effort}"`,
     '-s', 'read-only', '--ephemeral', '--skip-git-repo-check', '-C', cwd, '-o', outFile, '-'],
   { input: prompt, encoding: 'utf8', env, timeout: config.reviewTimeoutSeconds * 1000, maxBuffer: 64 << 20 });
 } else {
-  r = spawnSync('claude', ['-p', '--model', requested, '--effort', pin.effort, '--output-format', 'json',
+  r = runCli('claude', ['-p', '--model', requested, '--effort', pin.effort, '--output-format', 'json',
     '--no-session-persistence', '--max-budget-usd', String(config.claudeMaxBudgetUsd),
     '--permission-mode', 'dontAsk', '--tools', 'Read', 'Grep', 'Glob', 'Bash',
     '--allowedTools', 'Read', 'Grep', 'Glob', 'Bash(git diff:*)', 'Bash(git log:*)', 'Bash(git show:*)', 'Bash(git blame:*)'],

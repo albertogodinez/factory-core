@@ -1,7 +1,7 @@
 // Unit tests for the resolver. Fixtures are built fresh in a temp directory.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { join, dirname } from 'node:path';
+import { basename, join, dirname, relative, sep } from 'node:path';
 import { readFileSync, rmSync, renameSync, utimesSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +24,7 @@ function run(cwd, args = [], env = {}) {
 test('source 1: --config wins over a project.json', () => {
   const o = run(join(fx.root, 'project'), ['--config', join(fx.root, 'explicit.json')]);
   assert.equal(o.mode, 'project');
-  assert.equal(o.source, join(fx.root, 'explicit.json'));
+  assert.equal(o.source, join(fx.root, 'explicit.json').split(sep).join('/'));
   assert.equal(o.project.name, 'explicit-name');
   assert.equal(o.project.trunk, 'release');
   assert.ok(o.stateRoot.startsWith(join(fx.home, 'cache')), 'explicit config keeps state out of the repo');
@@ -91,7 +91,10 @@ test('source 5: zero-config with no origin/HEAD falls back to main and refuses w
   assert.equal(o.project.trunk, 'main');
   assert.deepEqual(o.project.remote, { host: 'example.org', slug: 'me/zero-config' });
   assert.equal(o.writeAllowed, false);
-  assert.match(o.stateRoot, new RegExp(`^${fx.home}/cache/zero-config-[0-9a-f]{8}/main$`));
+  const stateParts = relative(fx.home, o.stateRoot).split(sep);
+  assert.deepEqual(stateParts.slice(0, 1), ['cache']);
+  assert.match(stateParts[1], /^zero-config-[0-9a-f]{8}$/);
+  assert.equal(stateParts[2], 'main');
 });
 
 test('zero-config on a detached HEAD with no trunk-named branch uses null trunk safely', () => {
@@ -166,9 +169,9 @@ test('the cache is reused, and invalidated by a config change and by a HEAD chan
   // HEAD change: a checkout in the worktree must not serve the main checkout's cache entry.
   const wt = join(d, '.worktrees', 'feat', 'x');
   const callWt = () => execFileSync(process.execPath, [RESOLVE, '--field', 'stateRoot'], { cwd: wt, encoding: 'utf8', env }).trim();
-  assert.match(callWt(), /state\/x$/);
+  assert.equal(basename(callWt()), 'x');
   git(wt, 'checkout', '-q', '-b', 'feat/y');
-  try { assert.match(callWt(), /state\/x$/); } finally { git(wt, 'checkout', '-q', 'feat/x'); git(wt, 'branch', '-q', '-D', 'feat/y'); }
+  try { assert.equal(basename(callWt()), 'x'); } finally { git(wt, 'checkout', '-q', 'feat/x'); git(wt, 'branch', '-q', '-D', 'feat/y'); }
 });
 
 test('parseRemote normalizes ssh, scp-style, https and aliases', () => {

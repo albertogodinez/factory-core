@@ -1,6 +1,6 @@
 // Shared helpers for the factory-review scripts. Imports only node: modules.
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
@@ -22,9 +22,10 @@ export function parseArgs(argv, switches = []) {
 }
 
 export function parseFrontmatter(text) {
-  const m = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  const normalized = text.replace(/\r\n?/g, '\n');
+  const m = normalized.match(/^---\n([\s\S]*?)\n---\n?/);
   const fm = {};
-  if (!m) return { fm, body: text };
+  if (!m) return { fm, body: normalized };
   for (const line of m[1].split('\n')) {
     const kv = line.match(/^([A-Za-z_][\w-]*):[ \t]*(.*)$/);
     if (!kv) continue;
@@ -33,7 +34,7 @@ export function parseFrontmatter(text) {
     else if (/^(['"]).*\1$/.test(v)) v = v.slice(1, -1);
     fm[kv[1]] = v;
   }
-  return { fm, body: text.slice(m[0].length) };
+  return { fm, body: normalized.slice(m[0].length) };
 }
 
 // Directories searched for personas and rules, in priority order: this skill first, then
@@ -47,7 +48,7 @@ export function searchRoots(o = {}) {
       if (e.startsWith('factory-review-') && statSync(p).isDirectory()) roots.push(p);
     }
   }
-  const extra = [o.packs, process.env.TOOLKIT_REVIEW_PACKS].filter(Boolean).join(':').split(':').filter(Boolean);
+  const extra = [o.packs, process.env.TOOLKIT_REVIEW_PACKS].filter(Boolean).join(delimiter).split(delimiter).filter(Boolean);
   for (const p of extra) if (existsSync(p) && !roots.includes(resolve(p))) roots.push(resolve(p));
   return roots;
 }

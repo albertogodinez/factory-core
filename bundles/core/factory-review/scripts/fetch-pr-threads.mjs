@@ -70,7 +70,14 @@ query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
 class GhError extends Error {}
 
 function gh(host, args) {
-  const r = spawnSync('gh', args, { encoding: 'utf8', env: { ...process.env, GH_HOST: host }, maxBuffer: 512 * 1024 * 1024, shell: process.platform === 'win32' });
+  const bin = process.env.FACTORY_GH_BIN || 'gh';
+  let prefix = [];
+  if (process.env.FACTORY_GH_BIN_ARGS) {
+    try { prefix = JSON.parse(process.env.FACTORY_GH_BIN_ARGS); }
+    catch { throw new GhError('FACTORY_GH_BIN_ARGS must be a JSON array'); }
+    if (!Array.isArray(prefix) || prefix.some((x) => typeof x !== 'string')) throw new GhError('FACTORY_GH_BIN_ARGS must be a JSON array of strings');
+  }
+  const r = spawnSync(bin, [...prefix, ...args], { encoding: 'utf8', env: { ...process.env, GH_HOST: host }, maxBuffer: 512 * 1024 * 1024 });
   if (r.error) throw new GhError(`cannot run gh: ${r.error.message}`);
   if (r.status !== 0) throw new GhError(`gh ${args.slice(0, 3).join(' ')} failed (${r.status}): ${r.stderr.trim()}`);
   return JSON.parse(r.stdout);

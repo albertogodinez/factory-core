@@ -7,14 +7,14 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = realpathSync(path.dirname(fileURLToPath(import.meta.url)));
 const PELE = 'https://cdn.jsdelivr.net/npm/pele@1.9.0/dist/pele.js';
 
 const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** The `css` block of render.md: Pele's theme plus the group, bug and path classes the command writes. */
 export function renderCss(renderMd) {
-  const css = renderMd.match(/```css\n([\s\S]*?)```/)?.[1];
+  const css = renderMd.match(/```css\r?\n([\s\S]*?)```/)?.[1];
   if (!css) throw new Error('references/render.md has no css block');
   return css;
 }

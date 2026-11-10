@@ -7,7 +7,7 @@
 // Repos come from factory-context: the project itself, then every neighbor it lists. In a
 // legacy multi-repo workspace the resolver lists each registered repo as a neighbor.
 import { existsSync, realpathSync } from 'node:fs';
-import { join, dirname, resolve, relative } from 'node:path';
+import { join, dirname, resolve, relative, sep } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -58,7 +58,7 @@ export function inspect(name, root, trunk, { fetch = false } = {}) {
   r.worktrees = wts.slice(1).map((w) => {
     const rel = relative(root, w.path);
     const status = w.prunable ? 'prunable' : !w.branch ? 'detached' : classify(w.branch, w.head);
-    return { path: rel.startsWith('..') ? w.path : rel, branch: w.branch, status };
+    return { path: (rel.startsWith('..') ? w.path : rel).split(sep).join('/'), branch: w.branch, status };
   });
   r.branches = (git(root, 'for-each-ref', '--format=%(refname:short)\t%(objectname)', 'refs/heads') || '').split('\n').filter(Boolean)
     .map((l) => l.split('\t')).filter(([b]) => b !== r.trunk)

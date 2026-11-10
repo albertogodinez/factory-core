@@ -3,7 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
-import { readFileSync, writeFileSync, chmodSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tempRoot, makeRepo, write, git } from '../fixtures/make.mjs';
@@ -15,7 +15,7 @@ const CORE = join(ROOT, 'bundles', 'core');
 // Node run, measured alternately with it.
 const LIMITS = { cachedOverheadMs: 40, cachedSpawns: 0, uncachedOverheadMs: 250, uncachedSpawnsPerRepo: 1, hookOverheadMs: 60, hookSpawns: 0 };
 
-let t, home, repo, fakeBin, counter;
+let t, home, repo, counter;
 before(() => {
   t = tempRoot('af-status-');
   home = join(t.root, 'home'); mkdirSync(home);
@@ -31,14 +31,11 @@ before(() => {
   makeRepo(repo, { remote: 'git@github.com:me/consumer.git' });
   const env = { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '', FACTORY_HARNESSES: 'none' };
   execFileSync(process.execPath, [FACTORY, 'install', 'core', 'x', 'y', '--commit', '--marker', 'off'], { cwd: repo, env, stdio: 'ignore' });
-  fakeBin = join(t.root, 'fakebin'); counter = join(t.root, 'git-calls'); mkdirSync(fakeBin);
-  const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
-  writeFileSync(join(fakeBin, 'git'), `#!/bin/sh\necho x >> "${counter}"\nexec "${realGit}" "$@"\n`);
-  chmodSync(join(fakeBin, 'git'), 0o755);
+  counter = join(t.root, 'git-trace.jsonl');
 });
 after(() => t.cleanup());
 
-const env = () => ({ ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '', PATH: `${fakeBin}:${process.env.PATH}` });
+const env = () => ({ ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '', GIT_TRACE2_EVENT: counter });
 function timed(args) {
   const s = performance.now();
   const r = spawnSync(process.execPath, args, { cwd: repo, env: env(), encoding: 'utf8' });
@@ -47,7 +44,9 @@ function timed(args) {
 function spawns(fn) {
   rmSync(counter, { force: true });
   fn();
-  return existsSync(counter) ? readFileSync(counter, 'utf8').split('\n').filter(Boolean).length : 0;
+  if (!existsSync(counter)) return 0;
+  return readFileSync(counter, 'utf8').trim().split(/\r?\n/).filter(Boolean)
+    .map((line) => JSON.parse(line)).filter((event) => event.event === 'version').length;
 }
 // Median overhead over an empty Node, alternating the two runs.
 function overhead(prep) {

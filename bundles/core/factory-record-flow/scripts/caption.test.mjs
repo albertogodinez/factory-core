@@ -10,14 +10,17 @@ import { bandSize, readCaptions } from './caption.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./caption.mjs', import.meta.url));
 let dir;
+const HAS_MEDIA = ['ffmpeg', 'ffprobe'].every((bin) => spawnSync(bin, ['-version'], { stdio: 'ignore' }).status === 0);
+const mediaTest = HAS_MEDIA ? test : test.skip;
 
 before(() => {
+  if (!HAS_MEDIA) return;
   dir = mkdtempSync(join(tmpdir(), 'caption-test-'));
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=white:s=1440x900:d=3:r=30', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', join(dir, 'take.mp4')]);
 });
-after(() => rmSync(dir, { recursive: true, force: true }));
+after(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
 
-test('reads captions in time order and refuses a malformed line', () => {
+mediaTest('reads captions in time order and refuses a malformed line', () => {
   const ok = join(dir, 'ok.jsonl');
   writeFileSync(ok, '{"at":2,"text":"Results"}\n\n{"at":0.4,"text":"Prompt sent"}\n');
   assert.deepEqual(readCaptions(ok).map((c) => c.text), ['Prompt sent', 'Results']);
@@ -26,7 +29,7 @@ test('reads captions in time order and refuses a malformed line', () => {
   assert.throws(() => readCaptions(bad), /bad\.jsonl:1/);
 });
 
-test('burns a band under the video, sized for the video width', () => {
+mediaTest('burns a band under the video, sized for the video width', () => {
   const caps = join(dir, 'caps.jsonl');
   writeFileSync(caps, '{"at":0,"text":"Nav bar not showing up"}\n{"at":1.5,"text":"Quick replies at 16/22"}\n');
   const out = join(dir, 'out.mp4');
@@ -36,7 +39,7 @@ test('burns a band under the video, sized for the video width', () => {
   assert.deepEqual([w, h], [1440, 900 + bandSize(1440).height]);
 });
 
-test('refuses an empty captions file and writes nothing', () => {
+mediaTest('refuses an empty captions file and writes nothing', () => {
   const caps = join(dir, 'none.jsonl');
   writeFileSync(caps, '\n');
   const out = join(dir, 'none.mp4');

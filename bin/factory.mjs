@@ -227,11 +227,13 @@ function claudeLayout(root) {
 }
 function linkOrCopy(targetAbs, linkPath, relTarget) {
   rmSync(linkPath, { recursive: true, force: true });
-  mkdirSync(dirname(linkPath), { recursive: true });
+  const parent = dirname(linkPath);
+  // mkdirSync({ recursive: true }) still throws EEXIST for a directory symlink on Windows.
+  if (!existsSync(parent)) mkdirSync(parent, { recursive: true });
   if (IS_WIN) cpSync(targetAbs, linkPath, { recursive: true });
   else symlinkSync(relTarget, linkPath);
 }
-function ensureClaudeLinks(root, names, report, { dryRun } = {}) {
+function ensureClaudeLinks(root, names, report, { dryRun, ownedNames = new Set() } = {}) {
   const layout = claudeLayout(root);
   const c = join(root, '.claude', 'skills');
   if (layout === 'absent') {
@@ -243,7 +245,13 @@ function ensureClaudeLinks(root, names, report, { dryRun } = {}) {
     return { mode: 'dir', created: true };
   }
   if (layout === 'dir') {
-    if (IS_WIN && !dryRun) for (const n of names) cpSync(join(root, '.agents', 'skills', n), join(c, n), { recursive: true });
+    // A repository may already track a directory link. On Windows that link resolves
+    // straight back to .agents/skills, so copying into it would copy a directory onto itself.
+    // Only refresh the real directory copy that factory created on Windows.
+    if (IS_WIN && !dryRun && !isLink(c)) {
+      linkOrCopy(join(root, '.agents', 'skills'), c, join('..', '.agents', 'skills'));
+      writeFileSync(join(c, '.factory-copy'), 'copied by factory; refreshed by factory update\n');
+    }
     return { mode: 'dir', created: false };
   }
   const conflicts = [];
@@ -251,6 +259,11 @@ function ensureClaudeLinks(root, names, report, { dryRun } = {}) {
     const p = join(c, n);
     const rel = join('..', '..', '.agents', 'skills', n);
     if (isLink(p) && readlinkSync(p) === rel) continue;
+    if (IS_WIN && ownedNames.has(n)) {
+      report.push(`copy .claude/skills/${n}`);
+      if (!dryRun) linkOrCopy(join(root, '.agents', 'skills', n), p, rel);
+      continue;
+    }
     if (lexists(p) && !isLink(p) && !report.replaced?.has(n)) { conflicts.push(n); continue; }
     report.push(`link .claude/skills/${n}`);
     if (!dryRun) linkOrCopy(join(root, '.agents', 'skills', n), p, rel);
@@ -321,6 +334,7 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
   if (!mode) die('pass --commit (a repo you own: the skills are committed) or --local (a team repo: nothing is committed)', 2);
   const { git: g, root } = target(opts, { forLocal: mode === 'local' });
   const lock = lockOf(root);
+  const ownedClaudeNames = new Set(Object.keys(lock.skills));
   if (lock.mode && lock.mode !== mode) die(`this repo has a ${lock.mode} install; remove it before installing as ${mode}`, 2);
   lock.version = 1; lock.mode = mode;
   lock.bundles = [...new Set([...(lock.bundles || []), ...bundleNames])];
@@ -378,7 +392,7 @@ async function install(bundleNames, opts, { isUpdate = false } = {}) {
     }
   }
   const names = Object.keys(lock.skills).length ? Object.keys(lock.skills) : plan.map((p) => p.n);
-  const claude = ensureClaudeLinks(root, names, report, opts);
+  const claude = ensureClaudeLinks(root, names, report, { ...opts, ownedNames: ownedClaudeNames });
   lock.claudeLink = lock.claudeLink || (claude.created ? 'dir' : claude.mode === 'per-skill' ? 'per-skill' : 'existing');
   for (const n of claude.conflicts || []) conflicts.push(`.claude/skills/${n}: exists and isn't a link to .agents/skills/${n}; left alone`);
 
@@ -507,9 +521,11 @@ export function link(opts) {
   }
   const c = join(wt, '.claude', 'skills');
   if (!lexists(c)) linkOrCopy(join(wt, '.agents', 'skills'), c, join('..', '.agents', 'skills'));
-  else if (!isLink(c)) for (const name of Object.keys(lock.skills)) {
+  else if (claudeLayout(main) !== 'dir' && !isLink(c)) for (const name of Object.keys(lock.skills)) {
     const p = join(c, name);
-    if (!lexists(p)) linkOrCopy(join(main, '.agents', 'skills', name), p, join('..', '..', '.agents', 'skills', name));
+    // A Windows directory link/junction may not report as a symbolic link, but it
+    // already exposes the copy placed in .agents/skills above.
+    if (!existsSync(join(p, 'SKILL.md')) && !lexists(p)) linkOrCopy(join(main, '.agents', 'skills', name), p, join('..', '..', '.agents', 'skills', name));
   }
   if (lock.claudeLink === 'dir' || !lexists(join(main, '.claude', 'skills'))) { /* covered by /.claude/skills */ }
   out(`link: ${n} skill(s) linked into ${wt}`);

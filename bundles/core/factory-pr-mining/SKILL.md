@@ -6,7 +6,7 @@ user_invocable: true
 
 # PR mining
 
-Pull review comments from a repo's reviewer cohort, cluster them by theme, apply evidence bars, and write a curation report. Patterns that pass become `factory-review` rules. Needs `gh`, `jq`, and `factory-review` installed (its `fetch-pr-threads.sh` fetches every PR; its rules directory is where promoted rules go).
+Pull review comments from a repo's reviewer cohort, cluster them by theme, apply evidence bars, and write a curation report. Patterns that pass become `factory-review` rules. Needs `gh`, `jq`, and `factory-review` installed (its `fetch-pr-threads.mjs` fetches every PR; its rules directory is where promoted rules go).
 
 ## Configuration
 
@@ -49,7 +49,7 @@ Mechanics, schemas and commands: `references/extraction-mechanics.md`. In order:
 3. **Bot axis** (§1.4b, only when bot mode is on). `--reviewed-by <human>` can't find bot findings, so run a second independent query that names no reviewer, apply the same completeness and `mergedAt` checks and path gates, and keep only comments whose own author is a Bot. Run both axes in parallel, merge before Phase 2, de-duplicate by comment id keeping `axis: "reviewer"` on collisions, and report per-axis counts. Rationale: `references/evidence-gates.md`.
 4. **PR path gate** (§1.5). Fetch every changed filename; classify each PR `in-scope`, `mixed`, `out-of-scope` (excluded) or `unknown` (excluded, reported). A mixed PR still holds out-of-scope comments, so §1.6 filters each thread by its own path.
 5. **Extract** (§1.6). One call per PR, `xargs -P 16`, in a single foreground script (never background `&` loops; the harness stalls on prompts it can't surface):
-   `bash .agents/skills/factory-review/scripts/fetch-pr-threads.sh <host> <owner/repo> <pr> <marker>`
+   `node .agents/skills/factory-review/scripts/fetch-pr-threads.mjs <host> <owner/repo> <pr> <marker>`
    If that script is missing, stop and say so. The comment gate keeps an inline root only when its path is in scope, lets a pathless reply inherit its root's path, keeps a pathless review body only under the `pathlessBodies` policy, ignores PR conversation comments, and keeps non-cohort human replies only as `context_only` (never counted). Authorship is the posting account: a cohort member's comment is that member's evidence even when it says an AI wrote it. **One exception: a comment carrying the project's own comment marker** (`ours: true`). It is toolkit output posted under the user's account; counting it would feed the toolkit's findings back into its own rules. It is `toolkit-posted`, never human evidence, and `learn` grades it. Skip noise (LGTM, CI status, scanners, comments under 20 characters) and every bot comment unless bot mode is on.
 6. **Reply graph.** Every comment carries `pr_author`, `in_reply_to_id`, `parent_author`, `parent_author_type`; the fetch script resolves them. Don't re-derive them.
 7. **Save** raw payloads in the cache and scoped evidence under `<stateRoot>/pr-mining/raw/`, with `_scope.json`. Report discovered PRs, shards, in-scope, mixed, excluded, raw comments, retained evidence, inherited-path replies, context-only replies, out-of-scope, pathless and noise exclusions, per reviewer and per repo.

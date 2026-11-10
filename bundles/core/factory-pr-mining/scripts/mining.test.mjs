@@ -31,7 +31,7 @@ test('scope: cohort, bots floor, paths and marker come from project.json', () =>
     assert.equal(s.canonicalRepo, 'acme/project');
     assert.equal(s.ghHost, 'github.com');
     assert.equal(s.marker, 'acme-bot');
-    assert.match(s.stateRoot, /\.agents\/factory-metadata\/state\/main$/);
+    assert.ok(s.stateRoot.endsWith(join('.agents', 'factory-metadata', 'state', 'main')));
     assert.equal(s.notes.length, 1);
     // flags replace for this run
     const o = JSON.parse(scope(f, p, '--reviewers', 'zed', '--no-mine-bots').stdout);
@@ -99,7 +99,7 @@ test('learn dir: <stateRoot>/pr-mining/learn by default; mining.learnDir (repo-r
     write(join(p, '.agents/factory-metadata/project.json'), { version: 1, name: 'project', mining: { cohort: ['ann'] } });
     const d = scope(f, p, '--learn-dir');
     assert.equal(d.status, 0, d.stderr);
-    assert.match(d.stdout.trim(), /\.agents\/factory-metadata\/state\/main\/pr-mining\/learn$/);
+    assert.ok(d.stdout.trim().endsWith(join('.agents', 'factory-metadata', 'state', 'main', 'pr-mining', 'learn')));
     assert.equal(JSON.parse(scope(f, p).stdout).learnDir, d.stdout.trim());
     // A durable ledger: learnDir alone, without a cohort, is enough for --learn-dir.
     write(join(p, '.agents/factory-metadata/project.json'), { version: 1, name: 'project', mining: { learnDir: 'decisions/pr-mining-learn' } });

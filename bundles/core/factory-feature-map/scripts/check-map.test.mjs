@@ -117,7 +117,7 @@ test('an unlinked feature file and a wrong id fail', () => {
   assert.equal(r.status, 1);
   assert.match(r.out, /index does not link extra\.md/);
   assert.match(r.out, /id "checkout" does not match the filename/);
-  spawnSync('rm', [join(app, '.agents/skills/factory-features-app/features/extra.md')]);
+  rmSync(join(app, '.agents/skills/factory-features-app/features/extra.md'));
 });
 
 test('--pr audit via --changes flags a PR that deletes an anchored file', () => {

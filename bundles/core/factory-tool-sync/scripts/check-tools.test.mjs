@@ -94,7 +94,7 @@ test('an invalid tools.json exits 2 naming the file', () => {
     write(join(t2.root, 'skills/bad/tools.json'), { tools: [{ id: 'X', version: {}, usage: '(', install: '' }] });
     const r = spawnSync(process.execPath, [SCRIPT, '--skills', join(t2.root, 'skills'), '--state', join(t2.root, 's')], { encoding: 'utf8' });
     assert.equal(r.status, 2);
-    assert.match(r.stderr, /bad\/tools\.json: tools\[0\] \(X\): id must match/);
+    assert.match(r.stderr, /bad[\\/]tools\.json: tools\[0\] \(X\): id must match/);
   } finally { t2.cleanup(); }
 });
 

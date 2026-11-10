@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
-import { readFileSync, writeFileSync, mkdirSync, chmodSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { makeFixtures, write } from '../../../../tests/fixtures/make.mjs';
@@ -13,11 +13,9 @@ const FAKE = join(HERE, '..', '..', '..', '..', 'tests', 'fixtures', 'fake-gh.mj
 const BANNERS = { reply: '> BOT reply', annotation: '> BOT note', review: '> BOT review' };
 const PATCH = '@@ -1,3 +1,4 @@\n line1\n-old2\n+new2\n+new3\n line3';
 
-let fx, bin, log, scenario, body;
+let fx, log, scenario, body;
 before(() => {
   fx = makeFixtures();
-  bin = join(fx.root, 'bin'); mkdirSync(bin);
-  writeFileSync(join(bin, 'gh'), `#!/bin/sh\nexec "${process.execPath}" "${FAKE}" "$@"\n`); chmodSync(join(bin, 'gh'), 0o755);
   log = join(fx.root, 'gh.log'); scenario = join(fx.root, 'scenario.json'); body = join(fx.root, 'body.md');
   writeFileSync(body, 'The body, with `backticks` and ${dollars}.\n');
 });
@@ -39,7 +37,7 @@ function post(args, { cwd = join(fx.root, 'project'), sc = {} } = {}) {
   }));
   const r = spawnSync(process.execPath, [POST, '--body-file', body, '--model', 'm-1', ...args], {
     cwd, encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, FAKE_GH_SCENARIO: scenario, FAKE_GH_LOG: log,
+    env: { ...process.env, FACTORY_GH_BIN: process.execPath, FACTORY_GH_BIN_ARGS: JSON.stringify([FAKE]), FAKE_GH_SCENARIO: scenario, FAKE_GH_LOG: log,
       FACTORY_HOME: fx.home, FACTORY_CONFIG: '', POST_COMMENT_TS: '2026-01-01T00:00:00Z' },
   });
   const calls = existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [];
@@ -153,7 +151,7 @@ test('a body that already carries the marker is refused', () => {
   setMarker({ mode: 'banner', text: 'test-marker', banner: BANNERS });
   const own = join(fx.root, 'marked.md'); writeFileSync(own, '<!-- test-marker {} -->\nhi\n');
   const r = spawnSync(process.execPath, [POST, '--body-file', own, '--pr', '7', '--kind', 'reply', '--in-reply-to', '55'], {
-    cwd: join(fx.root, 'project'), encoding: 'utf8', env: { ...process.env, FACTORY_HOME: fx.home, FACTORY_CONFIG: '', PATH: `${bin}:${process.env.PATH}`, FAKE_GH_SCENARIO: scenario, FAKE_GH_LOG: log },
+    cwd: join(fx.root, 'project'), encoding: 'utf8', env: { ...process.env, FACTORY_HOME: fx.home, FACTORY_CONFIG: '', FACTORY_GH_BIN: process.execPath, FACTORY_GH_BIN_ARGS: JSON.stringify([FAKE]), FAKE_GH_SCENARIO: scenario, FAKE_GH_LOG: log },
   });
   assert.equal(r.status, 1); assert.match(r.stderr, /already contains test-marker/);
 });

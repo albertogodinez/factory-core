@@ -4,8 +4,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
-import { readFileSync, readdirSync, writeFileSync, chmodSync, mkdirSync, rmSync, existsSync } from 'node:fs';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync, readdirSync, rmSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { makeFixtures, write, makeRepo } from '../fixtures/make.mjs';
 
@@ -16,19 +16,17 @@ const RESOLVE = join(SKILL, 'scripts', 'resolve.mjs');
 // are on the resolver's overhead above an empty Node run, measured alternately
 // with it, with absolute caps as a backstop.
 const LIMITS = {
-  cachedOverheadMs: 15, cachedMaxMs: 100, coldOverheadMs: 60, coldMs: 150,
+  // Windows process startup has occasional scheduler spikes even when the paired
+  // resolver overhead stays small; keep the overhead bar and widen only the absolute backstop.
+  cachedOverheadMs: 15, cachedMaxMs: process.platform === 'win32' ? 125 : 100, coldOverheadMs: 60, coldMs: 150,
   coldSpawns: 1, cachedSpawns: 0, outBytes: 1024, perNeighborBytes: 70, fieldBytes: 200,
 };
 
-let fx, fakeBin, counter;
+let fx, counter;
 before(() => {
   fx = makeFixtures();
-  // A `git` that counts its calls, then runs the real one.
-  fakeBin = join(fx.root, 'fakebin'); counter = join(fx.root, 'git-calls');
-  mkdirSync(fakeBin);
-  const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
-  writeFileSync(join(fakeBin, 'git'), `#!/bin/sh\necho x >> "${counter}"\nexec "${realGit}" "$@"\n`);
-  chmodSync(join(fakeBin, 'git'), 0o755);
+  // Trace2 emits one "version" event per git process on every platform.
+  counter = join(fx.root, 'git-trace.jsonl');
 });
 after(() => fx.cleanup());
 
@@ -44,7 +42,9 @@ const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 function spawns(fn) {
   rmSync(counter, { force: true });
   fn();
-  return existsSync(counter) ? readFileSync(counter, 'utf8').trim().split('\n').length : 0;
+  if (!existsSync(counter)) return 0;
+  return readFileSync(counter, 'utf8').trim().split(/\r?\n/).filter(Boolean)
+    .map((line) => JSON.parse(line)).filter((event) => event.event === 'version').length;
 }
 
 function baseline(cwd) {
@@ -78,7 +78,7 @@ test(`cold: overhead < ${LIMITS.coldOverheadMs} ms and total < ${LIMITS.coldMs} 
 });
 
 test(`git spawns: ≤ ${LIMITS.coldSpawns} cold, ${LIMITS.cachedSpawns} cached`, () => {
-  const env = baseEnv({ PATH: `${fakeBin}:${process.env.PATH}`, FACTORY_HOME: join(fx.root, 'spawn-home') });
+  const env = baseEnv({ GIT_TRACE2_EVENT: counter, FACTORY_HOME: join(fx.root, 'spawn-home') });
   for (const d of ['project', 'zero-config', 'hub', join('project', '.worktrees', 'feat', 'x')]) {
     const cwd = join(fx.root, d);
     assert.ok(spawns(() => timed(cwd, [], env)) <= LIMITS.coldSpawns, `${d} cold`);

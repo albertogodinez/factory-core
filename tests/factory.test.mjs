@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { tempRoot, makeRepo, write, git } from './fixtures/make.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const IS_WIN = process.platform === 'win32';
 const FACTORY = join(ROOT, 'bin', 'factory.mjs');
 const CORE = join(ROOT, 'bundles', 'core');
 let t, home, extra;
@@ -68,7 +69,9 @@ test('committed install: replaces another installer\'s copy and its lock entry, 
   const lock = json(join(d, '.agents/factory-metadata/skills-lock.json'));
   assert.equal(lock.mode, 'commit');
   for (const n of ['factory-context', 'factory-pr-comment', 'handoff']) assert.ok(lock.skills[n]?.computedHash, n);
-  assert.equal(readlinkSync(join(d, '.claude/skills/factory-context')), join('..', '..', '.agents', 'skills', 'factory-context'));
+  const claudeContext = join(d, '.claude/skills/factory-context');
+  if (IS_WIN) assert.ok(existsSync(join(claudeContext, 'SKILL.md')), 'Windows gets a copy');
+  else assert.equal(readlinkSync(claudeContext), join('..', '..', '.agents', 'skills', 'factory-context'));
   assert.deepEqual(json(join(d, '.agents/factory-metadata/project.json')).pr, { commentMarker: { mode: 'off' } });
   assert.match(readFileSync(join(d, '.git/info/exclude'), 'utf8'), /\/\.agents\/factory-metadata\/state\//);
   assert.ok(json(join(home, 'installs.json')).repos[d]);
@@ -124,7 +127,8 @@ test('local-only install: git status stays clean, the team\'s tracked skill is u
   let st = factory(['status'], wt);
   assert.equal(st.status, 0);
   assert.match(st.out, /this worktree can't see \d+ installed skill\(s\)\. Link them: node .*factory\.mjs link/);
-  assert.equal(factory(['link'], wt).status, 0);
+  const linked = factory(['link'], wt);
+  assert.equal(linked.status, 0, linked.err);
   assert.doesNotMatch(factory(['status'], wt).out, /can't see/, 'linked: no hint');
   assert.doesNotMatch(factory(['status'], d).out, /can't see/, 'the main checkout never gets the hint');
   assert.ok(existsSync(join(wt, '.agents/skills/factory-context/SKILL.md')));
@@ -188,7 +192,7 @@ test('update from a linked worktree finds a committed install made in that workt
   assert.equal(factory(['install', 'core', '--commit'], wt).status, 0);
   const r = factory(['update'], wt);
   assert.equal(r.status, 0, r.err);
-  assert.match(r.out, new RegExp(`update core → ${wt}`));
+  assert.ok(r.out.includes(`update core → ${wt}`));
 });
 
 test('host linters: install and doctor warn when a linter would lint the installed skills', () => {
@@ -246,7 +250,7 @@ test('installs.json: a committed install from a worktree is recorded under the m
   assert.equal(repos()[wt], undefined, 'not by the worktree');
   // Before the branch merges, the main checkout has no install: update --all says which branch.
   const before = factory(['update', '--all'], d);
-  assert.match(before.err, new RegExp(`${d}: no factory install on the checked-out branch \\(main\\)`));
+  assert.ok(before.err.includes(`${d}: no factory install on the checked-out branch (main)`));
   // A recorded path that no longer exists is dropped, not retried forever.
   const gone = join(t.root, 'deleted-repo');
   const f = join(home, 'installs.json'); const all = json(f);

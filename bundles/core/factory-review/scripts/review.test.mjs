@@ -46,7 +46,7 @@ test('finds a core persona, a pack persona, and reports a missing one as a gap',
   assert.equal(p['react-patterns'].pack, 'core');
   assert.ok(p['react-patterns'].ruleCount > 10);
   assert.equal(p['acme-conv'].status, 'dispatch');
-  assert.match(p['acme-conv'].personaFile, /factory-review-acme\/personas\/acme-conv\.md$/);
+  assert.ok(p['acme-conv'].personaFile.endsWith(join('factory-review-acme', 'personas', 'acme-conv.md')));
   assert.equal(p['acme-conv'].ruleCount, 1);
   assert.equal(p['ghost-conv'].status, 'gap');
   assert.match(readFileSync(p['acme-conv'].rulesFile, 'utf8'), /Rule one/);

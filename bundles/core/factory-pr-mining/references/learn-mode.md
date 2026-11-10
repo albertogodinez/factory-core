@@ -17,7 +17,7 @@ Our comments are the ones carrying the project's comment marker. `scope.mjs` pri
 
 ## Steps, per PR
 
-1. **Fetch and classify.** `fetch-pr-threads.sh <host> <owner/repo> <pr> <marker>` then `scripts/classify-interlocutor.mjs <threads.json> <login> [--suffix <loginSuffix>]`. The `toolkit-posted` comments with `ours_kind: "review"` are what gets graded. `ours_kind` null (replies) and `"annotation"` come from the CI monitor and aren't review findings; skip them.
+1. **Fetch and classify.** `node scripts/fetch-pr-threads.mjs <host> <owner/repo> <pr> <marker>` then `node scripts/classify-interlocutor.mjs <threads.json> <login> [--suffix <loginSuffix>]`. The `toolkit-posted` comments with `ours_kind: "review"` are what gets graded. `ours_kind` null (replies) and `"annotation"` come from the CI monitor and aren't review findings; skip them.
 2. **Grade each against the commit it saw.** The marker's `head` is that commit. Compare the commented line at `head` with the PR's final head (`git -C <localPath> diff <head>..<head_ref_oid> -- <path>`) and read every reply.
 
    | Grade | Evidence |

@@ -36,7 +36,7 @@ Classify each PR: `in-scope` (every file in scope), `mixed`, `out-of-scope` (exc
 One call per PR, from factory-review's script, passing the marker text from `scope.mjs` so our own comments are flagged:
 
 ```bash
-bash .agents/skills/factory-review/scripts/fetch-pr-threads.sh "$ghHost" "$canonicalRepo" "$pr" "$marker"
+node .agents/skills/factory-review/scripts/fetch-pr-threads.mjs "$ghHost" "$canonicalRepo" "$pr" "$marker"
 ```
 
 It returns `pr`, `reviews[]` and `comments[]` with the reply graph already resolved. Fields used here:

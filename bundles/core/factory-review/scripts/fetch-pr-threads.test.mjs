@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
-import { chmodSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tempRoot, write } from '../../../../tests/fixtures/make.mjs';
@@ -43,11 +43,9 @@ function setup(sc = scenario) {
   const t = tempRoot('fpt-');
   const bin = join(t.root, 'bin');
   write(join(bin, 'fake-gh.mjs'), FAKE);
-  writeFileSync(join(bin, 'gh'), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, 'fake-gh.mjs')}" "$@"\n`); chmodSync(join(bin, 'gh'), 0o755);
-  writeFileSync(join(bin, 'gh.cmd'), `@"${process.execPath}" "${join(bin, 'fake-gh.mjs')}" %*\r\n`);
   write(join(t.root, 'sc.json'), sc);
   const run = (args, env = {}) => spawnSync(process.execPath, [SCRIPT, ...args], {
-    encoding: 'utf8', env: { ...process.env, PATH: `${bin}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH}`, FAKE_GH_SCENARIO: join(t.root, 'sc.json'), ...env },
+    encoding: 'utf8', env: { ...process.env, FACTORY_GH_BIN: process.execPath, FACTORY_GH_BIN_ARGS: JSON.stringify([join(bin, 'fake-gh.mjs')]), FAKE_GH_SCENARIO: join(t.root, 'sc.json'), ...env },
   });
   return { t, run };
 }

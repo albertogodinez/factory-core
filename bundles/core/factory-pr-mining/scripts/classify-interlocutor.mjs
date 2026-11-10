@@ -3,7 +3,7 @@
 //
 // Applies the SKILL.md §2.0 buckets to one PR's comments, as seen from one reviewer, and prints
 // the comments array with an `interlocutor` field. Input is the output of factory-review's
-// fetch-pr-threads.sh (run with the project's marker text so `ours` is set).
+// fetch-pr-threads.mjs (run with the project's marker text so `ours` is set).
 //
 // Precedence, first match wins:
 //   T. the comment carries the project's marker (ours)             -> toolkit-posted

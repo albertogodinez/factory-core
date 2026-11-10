@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { after, before, test } from 'node:test';
 
 const LIB = fileURLToPath(new URL('./record-lib.sh', import.meta.url));
+const shellTest = process.platform === 'win32' ? test.skip : test;
 let dir, stub, log;
 
 before(() => {
@@ -29,40 +30,40 @@ const begin = (args, env = {}) => {
   return { status: r.status, stderr: r.stderr.toString(), calls: readFileSync(log, 'utf8').trim().split('\n') };
 };
 
-test('record_begin passes a requested WxH to set viewport', () => {
+shellTest('record_begin passes a requested WxH to set viewport', () => {
   const { status, calls } = begin('out.webm 2560x1300');
   assert.equal(status, 0);
   assert.ok(calls.includes('--session s set viewport 2560 1300'), calls.join('\n'));
 });
 
-test('record_begin falls back to VIEWPORT_W/H, then 1440x900', () => {
+shellTest('record_begin falls back to VIEWPORT_W/H, then 1440x900', () => {
   assert.ok(begin('out.webm', { VIEWPORT_W: '1000', VIEWPORT_H: '700' }).calls.includes('--session s set viewport 1000 700'));
   const plain = begin('out.webm', { VIEWPORT_W: '', VIEWPORT_H: '' });
   assert.ok(plain.calls.includes('--session s set viewport 1440 900'), plain.calls.join('\n'));
 });
 
-test('record_begin hands the daemon an absolute path for a relative one', () => {
+shellTest('record_begin hands the daemon an absolute path for a relative one', () => {
   const { status, calls } = begin('out.webm');
   assert.equal(status, 0);
   const start = calls.find((c) => c.includes(' record start '));
   assert.ok(start?.includes(` record start ${join(realpathSync(dir), 'out.webm')}`), calls.join('\n'));
 });
 
-test('record_begin refuses a path whose directory is missing, before touching the browser', () => {
+shellTest('record_begin refuses a path whose directory is missing, before touching the browser', () => {
   const { status, stderr, calls } = begin('missing/out.webm');
   assert.equal(status, 2);
   assert.match(stderr, /does not exist/);
   assert.deepEqual(calls, ['']);
 });
 
-test('record_begin refuses a malformed size without touching the browser', () => {
+shellTest('record_begin refuses a malformed size without touching the browser', () => {
   const { status, stderr, calls } = begin('out.webm wide');
   assert.equal(status, 2);
   assert.match(stderr, /2560x1300/);
   assert.deepEqual(calls, ['']);
 });
 
-test('record_begin starts an empty marks file beside the take, and mark appends to it', () => {
+shellTest('record_begin starts an empty marks file beside the take, and mark appends to it', () => {
   const r = spawnSync('bash', ['-c', `sleep() { :; }; source "${LIB}"; record_begin take.webm && mark "reply rendered" && cat take.webm.marks`], {
     cwd: dir,
     env: { ...process.env, AGENT_BROWSER_BIN: stub, RECORD_SESSION: 's' },
@@ -71,7 +72,7 @@ test('record_begin starts an empty marks file beside the take, and mark appends 
   assert.match(r.stdout.toString(), /^\d+\.\d{2}\treply rendered\n$/);
 });
 
-test('caption appends what the viewer sees, timed from the start of the take', () => {
+shellTest('caption appends what the viewer sees, timed from the start of the take', () => {
   const out = join(dir, 'cap.webm');
   const r = spawnSync('bash', ['-c', `sleep() { :; }; source "${LIB}"; record_begin "${out}"; caption 'Quick replies at 16/22'; caption "No drawer \\"yet\\""`], {
     env: { ...process.env, AGENT_BROWSER_BIN: stub, RECORD_SESSION: 's' },
@@ -96,18 +97,18 @@ const button = (text, visible, id) => ({
   offsetParent: visible ? {} : null, getBoundingClientRect: () => ({ width: visible ? 40 : 0 }),
 });
 
-test('visible_button skips a hidden duplicate and returns the one visible match', () => {
+shellTest('visible_button skips a hidden duplicate and returns the one visible match', () => {
   const el = pick('See all', [button('See all', false, 'hidden'), button('See all', true, 'drawer')]);
   assert.equal(el.id, 'drawer');
 });
 
-test('visible_button throws on zero or two visible matches, and keeps a quoted name intact', () => {
+shellTest('visible_button throws on zero or two visible matches, and keeps a quoted name intact', () => {
   assert.throws(() => pick('See all', [button('See all', true, 'a'), button('See all', true, 'b')]), /2 visible matches/);
   assert.throws(() => pick('See all', [button('See all', false, 'a')]), /0 visible matches/);
   assert.equal(pick("It's here", [button("It's here", true, 'q')]).id, 'q');
 });
 
-test('highlight returns 1 when the page finds nothing to outline', () => {
+shellTest('highlight returns 1 when the page finds nothing to outline', () => {
   const d = mkdtempSync(join(tmpdir(), 'record-lib-hl-'));
   const bin = join(d, 'agent-browser');
   writeFileSync(bin, '#!/usr/bin/env bash\nif [ "$1" = --version ]; then echo "agent-browser 0.40.0"; exit 0; fi\necho \'"miss"\'\n');
@@ -120,7 +121,7 @@ test('highlight returns 1 when the page finds nothing to outline', () => {
   assert.match(r.stderr.toString(), /highlight 'label'/);
 });
 
-test('record_begin writes the served app commit beside the take', () => {
+shellTest('record_begin writes the served app commit beside the take', () => {
   const repo = fileURLToPath(new URL('.', import.meta.url));
   const sha = spawnSync('git', ['-C', repo, 'rev-parse', 'HEAD']).stdout.toString().trim();
   const r = begin('take.webm', { RECORD_APP_DIR: repo });

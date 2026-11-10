@@ -86,9 +86,10 @@ export function loadAppFile(file, name) {
 // name: the app (default: the project's name). worktree: where to look for the project's own file.
 export function loadApp(name, worktree = process.cwd()) {
   const tried = [];
+  const projectFile = join(worktree, '.agents/factory-metadata/dev-slot.json');
   for (const file of appCandidates(name, worktree)) {
     if (!existsSync(file)) { tried.push(file); continue; }
-    const own = file.endsWith('/.agents/factory-metadata/dev-slot.json');
+    const own = file === projectFile;
     const app = JSON.parse(readFileSync(file, 'utf8'));
     if (own && app.name !== name) { tried.push(`${file} (names "${app.name}")`); continue; }
     return loadAppFile(file, name);
@@ -117,7 +118,7 @@ export function loadProfile(name, worktree) {
 // .worktrees/fix/scrollbar-styling -> fix-scrollbar-styling; the main checkout -> main.
 export function slugFor(worktree, main) {
   const rel = relative(main, worktree);
-  const raw = rel === '' ? 'main' : rel.startsWith('..') ? basename(worktree) : rel.replace(/^\.worktrees\//, '');
+  const raw = rel === '' ? 'main' : rel.startsWith('..') ? basename(worktree) : rel.replace(/^\.worktrees[\\/]/, '');
   return raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'main';
 }
 

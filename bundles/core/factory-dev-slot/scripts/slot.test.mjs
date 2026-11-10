@@ -92,7 +92,7 @@ test('an app config is found in the project, then in an installed companion', ()
   assert.throws(() => loadApp('site', wt), /no app config for "site"[\s\S]*dev-slot\.json/);
   write(join(wt, '.agents/skills/factory-dev-slot-acme/apps/site.json'), app);
   assert.equal(loadApp('site', wt).name, 'site');
-  assert.ok(appCandidates('site', wt).some((f) => f.endsWith('factory-dev-slot-acme/apps/site.json')));
+  assert.ok(appCandidates('site', wt).some((f) => f.endsWith(join('factory-dev-slot-acme', 'apps', 'site.json'))));
   write(join(wt, '.agents/factory-metadata/dev-slot.json'), { ...app, memoryGiB: 3 });
   assert.equal(loadApp('site', wt).memoryGiB, 3, 'the project file wins');
 });
@@ -111,7 +111,7 @@ test('a profile is found in an installed skill by name', () => {
   write(join(wt, '.agents/skills/factory-dev-slot-acme/profiles/corp.json'), { name: 'corp', env: { A: 'b' } });
   const p = loadProfile('corp', wt);
   assert.equal(p.name, 'corp');
-  assert.match(p.file, /factory-dev-slot-acme\/profiles\/corp\.json$/);
+  assert.ok(p.file.endsWith(join('factory-dev-slot-acme', 'profiles', 'corp.json')));
 });
 
 test('a missing profile is a clear error that says where it looked and what to do', () => {
