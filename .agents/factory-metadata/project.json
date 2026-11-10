@@ -1,0 +1,10 @@
+{
+  "$schema": "../../bundles/core/factory-context/schemas/project.schema.json",
+  "version": 1,
+  "name": "factory-core",
+  "adapters": {
+    "reviewUI": "plannotator-review",
+    "lessonInbox": "plannotator-inbox",
+    "lessonLanding": "local-review"
+  }
+}

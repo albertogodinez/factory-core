@@ -57,7 +57,7 @@ Pick the highest row that works. Mechanical beats judgement. Judgement goes to r
 | A skill the session used had a missing step, a stale command or a wrong fact | Edit that skill | Its `SKILL.md` or `references/`; see the installed-copy rule below |
 | A skill existed but didn't trigger | Tune its description | That skill's frontmatter `description` |
 | A recurring workflow with no home | New skill | `.agents/skills/<name>/`, self-contained |
-| A feature gotcha, code anchor or driving step | Feature map entry | `factory-feature-map` |
+| A feature gotcha, code anchor or driving step | Feature map entry | `factory-feature-map`. A map installed from a bundle is scope `org`: its entry lands on the lesson branch now, with no promotion wait |
 | A domain term the agent misread | Glossary term | The layer where it's true (factory-glossary's "Add or change a term"): the repo's `GLOSSARY.md` for a repo-only term, else a shared layer (scope `core` or `org`). A team repo with a local install keeps no glossary file. When `lookup.mjs --dupes` finds the term in two places, propose one entry in the shared layer and deleting the copies |
 | The agent couldn't find a file, doc or command | One-line navigation pointer | The closest scoped `AGENTS.md` or `CLAUDE.md` |
 | A decision with lasting rationale | Rationale, not structure | The PR body, the commit message, or the repo's wiki |
@@ -82,7 +82,7 @@ For each approved row:
    - **Check**: build it, then prove it goes red on the real past mistake (make the mistake, see it fail, revert). A check that never fails protects nothing.
    - **Skill, rule, AGENTS.md or glossary edit**: read `writing-for-agents` first. A one-line fix is done directly; a new section or a new skill follows its full guidance.
    - Run the repo's checks (`project.commands.lint` and `test`). Commit and push only under the user's standing authorization. A commit that touches a review rule names its source (the PR, ticket or `session`) in a `Source:` trailer; the rule itself states the lesson with no PR or ticket numbers.
-3. **Core and org lessons wait for the promotion prompt,** unless the user approves the edit now ("promote now", or picking that row to apply). Then write it as a lesson branch ([Landing a lesson branch](#landing-a-lesson-branch)). The user wants to see the edit before choosing: write the branch, show its diff, and ask then. A branch costs nothing and deletes cleanly. An abstract "record 1, 2, 3?" with no diff behind it stalls.
+3. **Core and org lessons go on a lesson branch** ([Landing a lesson branch](#landing-a-lesson-branch)). A **fact** (a stale command, a wrong path, a feature-map entry) is written now. A **pattern** (a new rule or check that generalizes) waits for the promotion prompt, unless the user approves it now. Either way the user sees the diff before anything merges: an abstract "record 1, 2, 3?" with no diff behind it stalls.
 
 Then ask about whatever is due, at most three prompts per session:
 
@@ -103,14 +103,17 @@ node .agents/skills/factory-reflect/scripts/lessons.mjs decide --fingerprint <sl
 
 ### Landing a lesson branch
 
-1. `lessons.mjs target --skill <name>` names the source repo and bundle of the installed skill. If its source isn't on this machine, record the lesson and say where it has to be promoted. Stop there.
-2. In that repo: `git switch -c lesson/<fingerprint>` from an up-to-date trunk, make the edit (read `writing-for-agents` first), and commit. The repo's pre-commit hook runs its suite. Keep each skill description within the repo's limit, and say when an edit leaves it close.
-3. Show the user `git -C <repo> diff <trunk>...lesson/<fingerprint>` and ask: merge it?
-4. On yes, the route depends on `git -C <repo> remote`:
-   - **No remote** (a local source repo): run the suite on the branch (a merge doesn't run pre-commit), rebase it on trunk if trunk moved (it was never pushed, so that's safe), `git merge --ff-only`, then `git branch -d` it.
-   - **A remote**: push the branch and open the PR with `factory-pr-create`. The merge happens there, under that repo's review.
-5. After the merge: `factory update --all`, then commit the update in each commit-mode repo under that repo's own rules (some want approval for every commit). Local installs need no commit.
-6. A branch the user hasn't decided on stays and goes in the report, so the next session can pick it up. Never leave one unmentioned.
+Core and org changes are upstream changes: they land in the repo that owns the file, never in this one. Each reflect run gets **one lesson branch per source repo**, with **one commit per lesson**, in its own worktree, so the source repo's main checkout never changes branch. Run every command below with `--repo <source repo>`.
+
+1. **Pick the source repo.** For an installed skill, `lessons.mjs target --skill <name>` names it. For new content with no skill yet, write the draft to a file and run `lessons.mjs classify --file <draft>`: `org` means a company bundle (company-wide or product-specific), `core` means the generic core bundle. When a lesson has both parts, the generic rule goes in the core skill and the specifics in its company companion. When the source isn't on this machine, record the lesson, say where it has to land, and stop.
+2. **Bring its trunk up to date** (`git -C <repo> pull --ff-only` in the checkout that has trunk checked out, else `git -C <repo> fetch origin <trunk>:<trunk>`), then `lessons.mjs start --repo <repo> --slug <run slug>`. Use the same slug for every repo in the run. It prints the worktree; make every edit there (read `writing-for-agents` first) and commit each lesson on its own. The repo's pre-commit hook runs its suite.
+3. **Screen a core branch for internal data.** When an `internal-data` persona is installed (a company review pack), run `factory-review` on the core worktree with `resolve-personas.mjs --only internal-data`, and fix what it finds before the review.
+4. **The review gate**, by `adapters.reviewUI` of the source repo (`resolve.mjs --cwd <repo>`). Note the head first: `git -C <worktree> rev-parse HEAD`.
+   - `plannotator-review`: `plannotator review <worktree> --base <trunk> --diff-type merge-base --gate --json` prints `{decision, message}`. `annotated`: apply the feedback as commits, then review again. `dismissed`: leave the branch (step 6).
+   - Unset: show `git -C <worktree> log --oneline <trunk>..` and each commit's diff, one at a time. Ask keep, drop or change for each; drop with `git rebase --onto`, change by amending and showing it again. Then ask once: merge it?
+   - `adapters.lessonLanding: "pr"` (a source repo with other reviewers): push the branch and open the PR with `factory-pr-create` instead. The merge happens there.
+5. **On approval, land it:** `lessons.mjs land --repo <repo> --branch <branch> --reviewed <head>`. It fast-forwards trunk, then removes the worktree and branch. `changed-since-review`: review again. `trunk-moved`: `git -C <worktree> rebase <trunk>`, run the repo's checks, and land again with the same `--reviewed`. Then run its `next` commands: the push needs no second question, because approving was the decision. After `factory update --all`, commit the refreshed copies in each commit-mode repo under that repo's own rules.
+6. **A branch nobody decided on stays.** The factory status hook names it at the next session start, and `lessons.mjs open` lists every one with its commits and worktree. When `adapters.lessonInbox` is `plannotator-inbox`, also send one Inbox message: thread `factory lessons`, `idempotency_key` `<branch>@<head>`, with the repo, branch, worktree, commit subjects and the review command. The Inbox is the notice; the approval is always the review gate.
 
 Backlog items (a check worth building but too large now) go to the user as a list to file.
 
@@ -125,4 +128,4 @@ A short list, no preamble:
 - **Backlog**: one line each, with the suggested mechanism.
 - **Dropped**: one line per rejected finding, with the synthesizer's reason.
 
-Tests: `node --test .agents/skills/factory-reflect/scripts/index.test.mjs`.
+Tests: `node --test .agents/skills/factory-reflect/scripts/index.test.mjs .agents/skills/factory-reflect/scripts/landing.test.mjs`.

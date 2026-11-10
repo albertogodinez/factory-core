@@ -66,7 +66,10 @@
         "tracker": { "type": ["string", "null"], "description": "Name of an installed tracker adapter skill, or null for none." },
         "personas": { "type": "array", "items": { "type": "string" } },
         "commentMarker": { "$ref": "#/$defs/commentMarker" },
-        "envProfile": { "type": ["string", "null"] }
+        "envProfile": { "type": ["string", "null"] },
+        "reviewUI": { "type": ["string", "null"], "description": "How factory-reflect asks the user to approve a lesson branch in this source repo, e.g. plannotator-review. Unset: the diff in chat." },
+        "lessonInbox": { "type": ["string", "null"], "description": "Where factory-reflect leaves a notice about a lesson branch nobody decided on, e.g. plannotator-inbox. Unset: the status hook and the report only." },
+        "lessonLanding": { "enum": ["local-review", "pr"], "description": "local-review (default): approve, fast-forward trunk and push. pr: push the lesson branch and open a PR, for a source repo with other reviewers." }
       }
     },
     "review": {

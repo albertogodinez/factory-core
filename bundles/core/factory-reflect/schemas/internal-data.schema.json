@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "factory-core/factory-reflect/internal-data.schema.json",
+  "title": "internal-data.json",
+  "description": "Patterns of internal data a skill's bundle owns: text matching one of them never lands in a generic, shared bundle. Any installed skill may ship one beside its SKILL.md; lessons.mjs classify merges them all.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["patterns"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pattern", "why"],
+        "properties": {
+          "pattern": { "type": "string", "minLength": 1, "description": "A JavaScript regular expression, tested against each line." },
+          "flags": { "type": "string", "pattern": "^[imsu]*$" },
+          "why": { "type": "string", "minLength": 1, "description": "What the pattern stands for, shown with a hit." }
+        }
+      }
+    }
+  }
+}

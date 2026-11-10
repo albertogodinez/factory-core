@@ -99,7 +99,7 @@ Follow [references/create.md](references/create.md). Short version: interview th
 ## Add or update one feature
 
 1. Run `inventory.mjs`. Pick the ids the feature `covers`.
-2. Write `features/<id>.md` per the contract, and link it from `features/README.md`.
+2. Write `features/<id>.md` per the contract, and link it from `features/README.md`. **Write it where the map's source is.** A map listed in `.agents/factory-metadata/skills-lock.json` came from a bundle: `factory-reflect`'s `lessons.mjs target --skill <map>` names the source repo, so write the entry on a lesson branch there and run the checker with `--skills-dir <bundle dir>`. A map missing from the lock is this repo's own, so write it here.
 3. Run the checker until it is clean. An entry written for an open PR, whose anchors exist only on its branch, sets `pending_pr` so it can be committed now.
 4. Drive it live once, using the map's own SKILL.md, and set `last_verified` to today. If you couldn't drive it, leave `last_verified` alone and say why.
 

@@ -7,6 +7,14 @@
 //   lessons.mjs decide --fingerprint <slug> --decision promote|not-now|never [--session <id>]
 //   lessons.mjs known [--scope core|org]     fingerprints seen before, so a new lesson can reuse one
 //   lessons.mjs target --skill <name>        the source repo to promote an edit of an installed skill into
+//   lessons.mjs classify --text <s> | --file <f>   core or org for new content, by the installed
+//                                            skills' internal-data.json patterns
+//   lessons.mjs start --repo <dir> --slug <s> a lesson branch and worktree in that source repo
+//   lessons.mjs open [--repo <dir>,<dir>]     open lesson branches (default: every bundle source repo)
+//   lessons.mjs land --repo <dir> --branch <b> --reviewed <sha>
+//                                            fast-forward trunk to a reviewed branch, then clean up
+//
+// start, open, land and classify live in landing.mjs. Exit 1 with {error, message} when one refuses.
 //
 // Every lesson goes to <stateRoot>/lessons.jsonl. A core or org lesson also goes to
 // ~/.agents/factory/lessons-index.jsonl (or $FACTORY_HOME), which spans every repo. A fingerprint
@@ -16,6 +24,7 @@ import { readFileSync, appendFileSync, writeFileSync, mkdirSync, existsSync, rea
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { start, open, land, classify, LandingError } from './landing.mjs';
 
 export const THRESHOLD = 3, EXPIRY_DAYS = 90, PROMPTS_PER_SESSION = 3;
 const DAY = 86400000;
@@ -141,10 +150,26 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     return { skill: o.skill, installed: true, bundle: s.bundle, sourceDir, repo: top || null,
       next: 'edit the skill there on a local branch lesson/<fingerprint>, commit, have the user review it, then run factory update --all' };
   }
-  fail('usage: lessons.mjs record|due|decide|known|target (see the header of this file)');
+  if (cmd === 'start') return start({ repo: o.repo || process.cwd(), slug: o.slug, date: o.date, trunk: o.trunk, home: home(env) });
+  if (cmd === 'open') {
+    const repos = o.repo ? o.repo.split(',') : Object.values(readJson(join(home(env), 'installs.json'), {}).sources || {});
+    return { branches: open({ repos }) };
+  }
+  if (cmd === 'land') return land({ repo: o.repo || process.cwd(), branch: o.branch, reviewed: o.reviewed, trunk: o.trunk });
+  if (cmd === 'classify') {
+    if (o.text === undefined && !o.file) fail('classify needs --text or --file');
+    return classify({ text: o.text ?? readFileSync(o.file, 'utf8'), skillsDir: o['skills-dir'] });
+  }
+  fail('usage: lessons.mjs record|due|decide|known|target|start|open|land|classify (see the header of this file)');
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.meta.filename)) {
   const [cmd, ...rest] = process.argv.slice(2);
-  process.stdout.write(JSON.stringify(run(cmd, parse(rest)), null, 2) + '\n');
+  try {
+    process.stdout.write(JSON.stringify(run(cmd, parse(rest)), null, 2) + '\n');
+  } catch (e) {
+    if (!(e instanceof LandingError)) throw e;
+    process.stdout.write(JSON.stringify({ error: e.code, message: e.message, ...(e.fix ? { fix: e.fix } : {}) }, null, 2) + '\n');
+    process.exit(e.code === 'usage' ? 2 : 1);
+  }
 }
