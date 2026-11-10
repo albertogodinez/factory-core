@@ -4,4 +4,4 @@ description: "Stop. That last message did not land: re-pitch it."
 disable-model-invocation: true
 ---
 
-Wait, I don't understand where you've got to here. Re-pitch that: give me a little bit of context, talk in ASD-STE100 Simplified Technical English, and use the ubiquitous language from the project's glossary (`GLOSSARY.md` or `CONTEXT.md` at the repo root), if it has one.
+Wait, I don't understand where you've got to here. Re-pitch that: give me a little bit of context, talk in ASD-STE100 Simplified Technical English, and use the ubiquitous language from the project's glossary, if it has one (look terms up with `node .agents/skills/toolkit-glossary/scripts/lookup.mjs <term>`; without toolkit-glossary, read `GLOSSARY.md` or `CONTEXT.md` at the repo root).

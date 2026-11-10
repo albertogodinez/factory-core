@@ -39,6 +39,7 @@ For every Accepted row that adds a rule, check, skill or term, search the existi
 ```bash
 grep -rliE '<keyword>|<synonym>' .agents/skills/toolkit-review*/rules .agents/skills/toolkit-review*/personas
 grep -rliE '<keyword>' .agents/skills/*/SKILL.md AGENTS.md GLOSSARY.md CONTEXT.md 2>/dev/null
+node .agents/skills/toolkit-glossary/scripts/lookup.mjs '<term>'   # every glossary layer, if toolkit-glossary is installed
 ```
 
 If an existing rule or skill already says it, the failure was in execution. Tighten its wording or placement so it fires, rather than adding a second copy.
@@ -57,7 +58,7 @@ Pick the highest row that works. Mechanical beats judgement. Judgement goes to r
 | A skill existed but didn't trigger | Tune its description | That skill's frontmatter `description` |
 | A recurring workflow with no home | New skill | `.agents/skills/<name>/`, self-contained |
 | A feature gotcha, code anchor or driving step | Feature map entry | `toolkit-feature-map` |
-| A domain term the agent misread | Glossary term | The repo's `GLOSSARY.md` or `CONTEXT.md` |
+| A domain term the agent misread | Glossary term | The layer where it's true (toolkit-glossary's "Add or change a term"): the repo's `GLOSSARY.md` for a repo-only term, else a shared layer (scope `core` or `org`). A team repo with a local install keeps no glossary file. When `lookup.mjs --dupes` finds the term in two places, propose one entry in the shared layer and deleting the copies |
 | The agent couldn't find a file, doc or command | One-line navigation pointer | The closest scoped `AGENTS.md` or `CLAUDE.md` |
 | A decision with lasting rationale | Rationale, not structure | The PR body, the commit message, or the repo's wiki |
 

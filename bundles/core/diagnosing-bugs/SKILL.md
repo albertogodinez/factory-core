@@ -7,7 +7,7 @@ description: Diagnosis loop for hard bugs and performance regressions. Use when 
 
 A discipline for hard bugs. Skip phases only when explicitly justified.
 
-When exploring the codebase, read the project's glossary, if it has one (`GLOSSARY.md` or `CONTEXT.md` at the repo root) for the domain vocabulary, and, if `toolkit-review` is installed, its rules under `.agents/skills/toolkit-review/rules/` for standing fixes in the area you're touching.
+When exploring the codebase, look up the domain terms you meet in the project's glossary, if it has one (`node .agents/skills/toolkit-glossary/scripts/lookup.mjs <term>`, which searches the repo's file and every installed layer; without toolkit-glossary, read `GLOSSARY.md` or `CONTEXT.md` at the repo root), and, if `toolkit-review` is installed, its rules under `.agents/skills/toolkit-review/rules/` for standing fixes in the area you're touching.
 
 ## Redact
 

@@ -11,7 +11,7 @@ Surface architectural friction and propose **deepening opportunities**: refactor
 This command is _informed_ by the project's domain model and built on a shared design vocabulary:
 
 - Read [CODEBASE-DESIGN.md](CODEBASE-DESIGN.md) for the architecture vocabulary (**module**, **interface**, **depth**, **seam**, **adapter**, **leverage**, **locality**) and its principles (the deletion test, "the interface is the test surface", "one adapter = hypothetical seam, two = real"). Use these terms exactly in every suggestion, and don't drift into "component," "service," "API," or "boundary."
-- The domain language in the project's glossary, if it has one (`GLOSSARY.md` or `CONTEXT.md` at the repo root) gives names to good seams. Standing decisions in the target repo's own `AGENTS.md` / `CLAUDE.md` and the toolkit-review rules record decisions this command should not re-litigate.
+- The domain language in the project's glossary, if it has one (`node .agents/skills/toolkit-glossary/scripts/lookup.mjs <term>` searches every layer the repo has; without toolkit-glossary, read `GLOSSARY.md` or `CONTEXT.md` at the repo root) gives names to good seams. Standing decisions in the target repo's own `AGENTS.md` / `CLAUDE.md` and the toolkit-review rules record decisions this command should not re-litigate.
 
 ## Process
 
@@ -22,7 +22,7 @@ This command is _informed_ by the project's domain model and built on a shared d
 - If the user named a direction (a repo, a module, a subsystem, a pain point), take it, and skip the inference below.
 - Otherwise, walk back a good stretch of the commit history (`git log --oneline`) to find the codebase's hot spots, the files and areas that keep coming up, and let those paths pull your attention first. If the changes are scattered with no clear hot spot, widen the net.
 
-Read the glossary, if there is one, and the standing conventions in the area you're touching first: the target repo's `AGENTS.md` / `CLAUDE.md` and the matching toolkit-review rules.
+Look up the glossary terms for the area, if there is a glossary, and read the standing conventions in the area you're touching first: the target repo's `AGENTS.md` / `CLAUDE.md` and the matching toolkit-review rules.
 
 Then spawn a sub-agent with a fresh context window to walk the codebase. Don't follow rigid heuristics; explore organically and note where you experience friction:
 
@@ -65,7 +65,7 @@ Once the user picks a candidate, run the interview loop in [GRILLING.md](GRILLIN
 
 Side effects happen inline as decisions crystallize, to keep the domain model current as you go:
 
-- **Naming a deepened module after a concept not in the glossary?** Add the term there (create `GLOSSARY.md` if the repo has none) in the file's format: a `**Term**:` line, a one- or two-sentence definition of what the term is (no implementation detail), and an `_Avoid_:` line for rejected synonyms, under the subheading it belongs to.
+- **Naming a deepened module after a concept not in the glossary?** Add the term to the layer where it's true (toolkit-glossary's "Add or change a term"; without it, the repo's `GLOSSARY.md`, created if missing) in the format: a `**Term**:` line, a one- or two-sentence definition of what the term is (no implementation detail), and an `_Avoid_:` line for rejected synonyms, under the subheading it belongs to.
 - **Sharpening a fuzzy term during the conversation?** Update the glossary right there.
 - **User rejects the candidate with a load-bearing reason?** Offer to record it, framed as: _"Want me to route this through `/toolkit-reflect` so future architecture reviews don't re-suggest it?"_ Only offer when the reason would actually be needed by a future explorer to avoid re-suggesting the same thing; skip ephemeral reasons ("not worth it right now") and self-evident ones. `/toolkit-reflect` picks the destination (a toolkit-review rule, a skill edit, or a glossary term).
 - **Want to explore alternative interfaces for the deepened module?** Use the design-it-twice parallel sub-agent pattern in [DESIGN-IT-TWICE.md](DESIGN-IT-TWICE.md).
