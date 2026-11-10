@@ -34,10 +34,9 @@ Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-archite
 ├── agent-factory/                  # core + factory CLI · local git, no remote
 │   ├── bin/factory.mjs
 │   └── bundles/core/<skill>/SKILL.md
-├── eg-agent-kit/                   # expedia + trips bundles · local git
+├── eg-agent-kit/                   # expedia + trips bundles, registry, checks, hooks · the EG hub (was trips-ai-toolkit)
 │   ├── bundles/expedia/<skill>/SKILL.md
 │   └── bundles/trips/<skill>/SKILL.md
-├── trips-ai-toolkit/               # hub: a consumer of core, expedia and trips
 ├── ai-shopping-pwa/                # team repo → LOCAL-ONLY install
 │   ├── .agents/skills/
 │   │   ├── migrate-ai-shopping-playground/   # the team's tracked skill, never touched
@@ -80,7 +79,7 @@ Sources, first match wins:
 
 1. `--config <file>` or `AI_TOOLKIT_CONFIG`
 2. The nearest `.ai-toolkit/project.json`, searching from the cwd up to the git root. In a hub, its `workspace` field points at the registry (3 or 4), which keeps workspace mode and the registry's repos; `factory install` sets it
-3. The nearest ancestor `.ai-toolkit/workspace.json` (used only by trips-ai-toolkit during migration)
+3. The nearest ancestor `.ai-toolkit/workspace.json` (a legacy form; a hub uses `project.json` with a `workspace` pointer)
 4. Legacy `.claude/repos.json` (read-only, used only during migration)
 5. Zero-config detection from git: trunk from `origin/HEAD` or the current branch, the remote host, the package manager from the lockfile, the PR template
 
