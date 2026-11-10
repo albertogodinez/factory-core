@@ -136,6 +136,7 @@ here, so the PR body is the only place the stack is legible; see the section bel
 ```bash
 # create
 git worktree add <worktree-dir>/<type>/<name> -b <type>/<TICKET>-<name> origin/<parent-branch> --no-track
+# a local-only install: the status hook prints `factory link --to <worktree>` at the next prompt; run it before using skills there
 gh pr create --base <parent-branch> --head <type>/<name>
 
 # after the parent merges (squash case)

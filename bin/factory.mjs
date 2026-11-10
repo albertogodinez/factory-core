@@ -528,7 +528,7 @@ export function link(opts) {
     if (!existsSync(join(p, 'SKILL.md')) && !lexists(p)) linkOrCopy(join(main, '.agents', 'skills', name), p, join('..', '..', '.agents', 'skills', name));
   }
   if (lock.claudeLink === 'dir' || !lexists(join(main, '.claude', 'skills'))) { /* covered by /.claude/skills */ }
-  out(`link: ${n} skill(s) linked into ${wt}`);
+  out(`link: ${n} skill(s) linked into ${wt}. They point at the main checkout's installed copies: an edit here changes that copy and blocks factory update, so edit a skill at its source (factory list names it).`);
 }
 
 // ---------- list ----------
@@ -781,11 +781,13 @@ function status(opts) {
   if (!root) return;
   const line = statusLine(root);
   if (line) out(line);
-  // A linked worktree of a local-only install sees the skills only after `factory link`.
-  if (root === g.mainRoot && g.toplevel !== g.mainRoot && lockOf(root).mode === 'local') {
-    const missing = Object.keys(lockOf(root).skills).filter((n) => !existsSync(join(g.toplevel, '.agents', 'skills', n, 'SKILL.md')));
-    if (missing.length) out(`factory: this worktree can't see ${missing.length} installed skill(s). Link them: node ${join(FACTORY, 'bin', 'factory.mjs')} link`);
-  }
+  if (opts.hint !== false) { const h = worktreeHint(g, root); if (h) out(h); }
+}
+// A linked worktree of a local-only install sees the skills only after `factory link`.
+function worktreeHint(g, root) {
+  if (root !== g.mainRoot || g.toplevel === g.mainRoot || lockOf(root).mode !== 'local') return '';
+  const missing = Object.keys(lockOf(root).skills).filter((n) => !existsSync(join(g.toplevel, '.agents', 'skills', n, 'SKILL.md')));
+  return missing.length ? `factory: this worktree can't see ${missing.length} installed skill(s). Link them: node ${join(FACTORY, 'bin', 'factory.mjs')} link --to '${g.toplevel}'` : '';
 }
 
 // ---------- the update log and per-session notices ----------
@@ -853,7 +855,7 @@ function hookStatus(opts) {
   const now = Date.now();
   const lines = [];
   if (!state || event === 'SessionStart') {
-    status({ ...opts, to: opts.to || input.cwd }); // the drift line and the worktree hint, as at any session start
+    status({ ...opts, to: opts.to || input.cwd, hint: false }); // the drift line, as at any session start
     if (file) {
       try { // forget sessions untouched for a week
         for (const f of readdirSync(SESSIONS())) if (now - statSync(join(SESSIONS(), f)).mtimeMs > 7 * 864e5) rmSync(join(SESSIONS(), f), { force: true });
@@ -873,9 +875,13 @@ function hookStatus(opts) {
   const told = new Set(state?.edited || []);
   const edited = editedCopies(root, lock).filter((e) => !told.has(e.name));
   for (const e of edited) lines.push(`factory: the installed copy of ${e.name} was edited here, but it's owned by ${e.source} (${e.skillPath}). Move the edit there, commit, then run factory update; the next update won't overwrite this copy until you do.`);
+  // A session can move into a new worktree after it starts: hint once per worktree, again on a new start.
+  const hinted = new Set(event === 'SessionStart' ? [] : state?.hinted || []);
+  const hint = worktreeHint(g, root);
+  if (hint && !hinted.has(g.toplevel)) { lines.push(hint); hinted.add(g.toplevel); }
   for (const l of lines) out(l);
   if (file) {
-    try { writeJson(file, { root: g.mainRoot, seen: now, edited: [...told, ...edited.map((e) => e.name)] }); } catch {}
+    try { writeJson(file, { root: g.mainRoot, seen: now, edited: [...told, ...edited.map((e) => e.name)], hinted: [...hinted] }); } catch {}
   }
 }
 

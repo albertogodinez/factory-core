@@ -13,6 +13,8 @@ node .agents/skills/factory-context/scripts/resolve.mjs --field project.trunk
 node .agents/skills/factory-context/scripts/resolve.mjs --pretty        # for a person
 ```
 
+**Skill paths are relative to the project root.** Keep the shell there, and write into `stateRoot` by path. From any other directory (a subfolder, the state directory, a worktree that was never linked), prefix the path with the main checkout: `node "$(git rev-parse --path-format=absolute --git-common-dir)/../.agents/skills/factory-context/scripts/resolve.mjs"`.
+
 `factory install` puts skills in `.agents/skills` (with `.claude/skills` linking to it). Other flags: `--cwd <dir>`, `--config <file>`, `--full` (don't elide long values), `--no-cache`, and `--repo <name|owner/name>`, which resolves one registered repo (workspace mode) or this project's neighbor (project mode) instead of the cwd. A neighbor reached this way has `writeAllowed: false` unless its `access` is `write`.
 
 ## Sources, first match wins

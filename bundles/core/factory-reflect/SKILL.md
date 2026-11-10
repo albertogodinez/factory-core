@@ -62,7 +62,7 @@ Pick the highest row that works. Mechanical beats judgement. Judgement goes to r
 | The agent couldn't find a file, doc or command | One-line navigation pointer | The closest scoped `AGENTS.md` or `CLAUDE.md` |
 | A decision with lasting rationale | Rationale, not structure | The PR body, the commit message, or the repo's wiki |
 
-**Installed copies are never edited in place.** A skill listed in `.agents/factory-metadata/skills-lock.json` came from a bundle. An edit to that copy blocks `factory update`, and it never reaches other repos. Such a lesson has scope `core` or `org`: record it (§6) and change the skill at its source. A skill missing from the lock is the repo's own, so edit it here.
+**Installed copies are never edited in place.** A skill listed in `.agents/factory-metadata/skills-lock.json` came from a bundle. An edit to that copy blocks `factory update`, and it never reaches other repos. Such a lesson has scope `core` or `org`: record it (§6) and change the skill at its source. A skill missing from the lock is the repo's own, so edit it here. In a linked worktree (`factory link`), `.agents/skills/<name>` is a link to the main checkout's installed copy, so an edit there is an in-place edit too.
 
 Repo-local knowledge stays in its repo. In a local-only install, where the repo belongs to a team, an edit to a tracked file is a product change: it goes through the repo's normal branch and PR. The lesson log itself lives in `stateRoot`, which is never committed.
 

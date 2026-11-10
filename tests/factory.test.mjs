@@ -419,6 +419,30 @@ test('status --hook: a running session hears once about an update or an edited c
   assert.match(hook('s3', 'SessionStart'), /installed copy of beta was edited/, 'a new session hears about it too');
 });
 
+test('status --hook: a session that moves into an unlinked worktree hears the link hint once', () => {
+  const h = join(t.root, 'home-wt-hook'); mkdirSync(h);
+  write(join(h, 'sources.json'), { core: CORE });
+  const d = join(t.root, 'team-hook');
+  makeRepo(d, { remote: 'git@github.com:team/hook.git' });
+  assert.equal(factory(['install', 'core', '--local'], d, { FACTORY_HOME: h }).status, 0);
+  git(d, 'worktree', 'add', '-q', '.worktrees/feat/y', '-b', 'feat/y');
+  const wt = join(d, '.worktrees/feat/y');
+  const hook = (sid, event, cwd) => {
+    const r = spawnSync(process.execPath, [FACTORY, 'status', '--hook'], { cwd, encoding: 'utf8',
+      input: JSON.stringify({ session_id: sid, hook_event_name: event, cwd }),
+      env: { ...process.env, FACTORY_HOME: h, FACTORY_CONFIG: '', FACTORY_HARNESSES: 'none' } });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout;
+  };
+  assert.doesNotMatch(hook('w1', 'SessionStart', d), /can't see/, 'the main checkout: no hint');
+  const said = hook('w1', 'UserPromptSubmit', wt);
+  assert.match(said, /this worktree can't see \d+ installed skill\(s\)\. Link them: node .*factory\.mjs link --to '.*feat\/y'/);
+  assert.doesNotMatch(hook('w1', 'UserPromptSubmit', wt), /can't see/, 'said once per worktree');
+  assert.match(hook('w1', 'SessionStart', wt), /can't see/, 'a new start hears it again');
+  assert.equal(factory(['link', '--to', wt], d, { FACTORY_HOME: h }).status, 0);
+  assert.doesNotMatch(hook('w2', 'SessionStart', wt) + hook('w2', 'UserPromptSubmit', wt), /can't see/, 'linked: no hint');
+});
+
 test('setup on a new machine: adds or repoints the status hooks, keeps other hooks, records committed installs, then is a no-op', () => {
   const machine = join(t.root, 'machine'), repos = join(machine, 'repos'), h = join(machine, 'toolkit');
   const claude = join(machine, 'claude'), codex = join(machine, 'codex');
