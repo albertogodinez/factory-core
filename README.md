@@ -196,6 +196,8 @@ A skill read earlier in a session stays in that session's context, so the notice
 { "type": "command", "command": "node '<agent-factory>/bin/factory.mjs' status --hook 2>/dev/null || true", "timeout": 5 }
 ```
 
+Both harnesses pass the hook's stdout to the model on `UserPromptSubmit` (checked live in each, 2026-11-09). In Codex, two things differ. `codex exec` runs no user hooks, so only interactive sessions hear about updates. And hooks don't inherit `AI_TOOLKIT_HOME`, so a hook always reads `~/.ai-toolkit`.
+
 It checks only the repo the session starts in. A skill is behind when a commit after its `sourceRev` touched its directory in the bundle's repo, and a bundle skill the repo lacks counts as new. There's no hashing. When a source repo's HEAD or the lock changed, it runs one `git log` per source repo. Otherwise it answers from `~/.ai-toolkit/status-cache.json` without spawning git. `tests/guardrails/status.guard.mjs` holds those limits. Uncommitted bundle edits don't count, and `doctor`'s hash check still catches them. In a linked worktree of a local-only install, it also says when the worktree has no links to the installed skills yet (a new worktree never does) and gives the `factory link` command.
 
 `install` does the following:
