@@ -14,7 +14,7 @@ Rationale belongs in the wiki and invariants belong in tests. A comment cannot f
 
 ## Scope
 
-Use the caller's files or diff. Otherwise use the current diff against the base branch, default to the resolver's trunk (`node .agents/skills/toolkit-context/scripts/resolve.mjs --field project.trunk`), including the working tree.
+Use the caller's files or diff. Otherwise use the current diff against the base branch, default to the resolver's trunk (`node .agents/skills/factory-context/scripts/resolve.mjs --field project.trunk`), including the working tree.
 
 ## Steps
 

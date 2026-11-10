@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "factory-core/factory-feature-map/design-authority-policy.schema.json",
+  "title": "Feature map design authority policy",
+  "description": "Selects one design authority and one implementation verifier before an agent loads source-specific instructions.",
+  "type": "object",
+  "required": [
+    "version",
+    "repo",
+    "defaultDesignAuthority",
+    "implementationVerifier"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "repo": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "defaultDesignAuthority": {
+      "description": "Repository-wide authority, or null when authority must be chosen per feature or task.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/designAuthority"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "implementationVerifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "featureOverrides": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/designAuthority"
+      }
+    }
+  },
+  "definitions": {
+    "designAuthority": {
+      "type": "object",
+      "required": [
+        "kind",
+        "skill"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "skill": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        }
+      }
+    }
+  }
+}

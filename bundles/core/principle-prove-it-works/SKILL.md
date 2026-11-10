@@ -20,4 +20,4 @@ Check the real thing, not a proxy:
 
 The strongest proof is a deterministic script that re-runs the same comparison, not a one-time eyeball. Write the script, run it, and keep its output as an artifact a reviewer can re-run instead of trusting your word.
 
-Keep the artifact visible for the human, under the project's scratch state directory (`node .agents/skills/toolkit-context/scripts/resolve.mjs --field stateRoot`; `mkdir -p` it first): the script can regenerate it. For long or multi-phase work, also keep a decision log with `/show-me-your-work` (local and never committed), which cannot be regenerated.
+Keep the artifact visible for the human, under the project's scratch state directory (`node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoot`; `mkdir -p` it first): the script can regenerate it. For long or multi-phase work, also keep a decision log with `/show-me-your-work` (local and never committed), which cannot be regenerated.

@@ -10,7 +10,7 @@ The chart shows how a system moves between states, in the words of the person wh
 
 ## Run
 
-Work in `<stateRoot>/statechart/<name>/`, and never in the project's tracked tree. Get `<stateRoot>` with `node .agents/skills/toolkit-context/scripts/resolve.mjs --field stateRoot` (`mkdir -p` it first). Write a TLA+ spec and its config. Then run:
+Work in `<stateRoot>/statechart/<name>/`, and never in the project's tracked tree. Get `<stateRoot>` with `node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoot` (`mkdir -p` it first). Write a TLA+ spec and its config. Then run:
 
 ```sh
 <skill dir>/scripts/statechart SPEC.tla [--config FILE] [--view FILE] [--out DIR]

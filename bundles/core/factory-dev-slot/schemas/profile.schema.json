@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "factory-dev-slot env profile",
+  "description": "Extra container setup a company network needs. Shipped as profiles/<name>.json by an installed skill and named by adapters.envProfile. Every list is optional.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9-]+$", "description": "Matches the file name." },
+    "description": { "type": "string" },
+    "mounts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["host", "container"],
+        "properties": {
+          "host": { "type": "string", "minLength": 1, "description": "Host path; a leading ~ is the home directory." },
+          "container": { "type": "string", "pattern": "^/" },
+          "readOnly": { "type": "boolean", "description": "Default true." },
+          "warnIfMissing": { "type": "string", "description": "Logged when the host path is absent; the mount is skipped." }
+        }
+      }
+    },
+    "env": { "type": "object", "description": "Literal NAME: value pairs." },
+    "envFromFile": {
+      "type": "array",
+      "description": "A secret read from the first line of a file that starts with linePrefix. It reaches the container through the child process env, never argv or logs.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "file", "linePrefix"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "file": { "type": "string", "minLength": 1 },
+          "linePrefix": { "type": "string", "minLength": 1 },
+          "warnIfMissing": { "type": "string" }
+        }
+      }
+    },
+    "passEnv": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }, "description": "Host env vars forwarded as they are when set." },
+    "rewriteLoopbackEnv": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }, "description": "Host env vars forwarded with 127.0.0.1 or localhost replaced by host.docker.internal (proxy URLs)." },
+    "caBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "container"],
+      "description": "Extra CA certificates, mounted read-only and pointed to by `env` (default NODE_EXTRA_CA_CERTS).",
+      "properties": {
+        "from": { "type": "string", "enum": ["macos-keychain", "file"] },
+        "keychains": { "type": "array", "items": { "type": "string" }, "description": "For macos-keychain: keychain files to export." },
+        "path": { "type": "string", "description": "For file: a PEM bundle on the host." },
+        "container": { "type": "string", "pattern": "^/" },
+        "env": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "hints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "buildFailed": { "type": "string", "description": "Appended to the message when docker build fails (e.g. which login to run)." } }
+    }
+  }
+}

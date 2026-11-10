@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "factory-core/factory-context/project.schema.json",
+  "title": "Project config (.agents/factory-metadata/project.json)",
+  "description": "One repo's settings for factory-core skills. Every field is optional: what's missing is detected from git and the working tree.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "trunk": { "type": "string", "minLength": 1, "description": "The canonical trunk branch. Detected from origin/HEAD when absent." },
+    "packageManager": { "type": "string", "minLength": 1, "description": "Free-form: pnpm, npm, yarn, bun, uv, cargo, go, maven, gradle, none, …" },
+    "prTemplate": { "type": ["string", "null"], "description": "Repo-relative PR template path, or null for none." },
+    "remote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "slug"],
+      "properties": {
+        "host": { "type": "string", "minLength": 1, "description": "Free-form git host, e.g. github.com or a GitHub Enterprise host." },
+        "slug": { "type": "string", "pattern": "^[^/]+/[^/]+$" },
+        "sshAlias": { "type": "string" },
+        "upstream": { "type": "string", "pattern": "^[^/]+/[^/]+$", "description": "Canonical owner/repo when origin is a fork." }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "null"] },
+      "properties": {
+        "install": { "type": ["string", "null"] },
+        "build": { "type": ["string", "null"] },
+        "test": { "type": ["string", "null"] },
+        "lint": { "type": ["string", "null"] },
+        "format": { "type": ["string", "null"] }
+      }
+    },
+    "worktreeConvention": { "enum": ["dot-worktrees", "sibling-directory", "none"] },
+    "workspace": { "type": "string", "minLength": 1, "description": "Repo-relative path to a multi-repo registry (.agents/factory-metadata/workspace.json or a legacy .claude/repos.json). Keeps workspace mode: the registry lists the repos, and this file's settings apply on top." },
+    "planHome": { "type": "string", "description": "Repo-relative directory for plans. Default: plans" },
+    "writeAllowed": { "type": "boolean", "description": "false makes every posting, pushing or ticket-moving skill ask first. Default: true" },
+    "neighbors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "root": { "type": "string", "description": "Path relative to this repo's root. Default: ../<name>" },
+          "trunk": { "type": "string" },
+          "access": { "enum": ["read", "write"], "description": "read needs no permission; write lets a skill change the neighbor without asking. Default: read" }
+        }
+      }
+    },
+    "pr": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commentMarker": { "$ref": "#/$defs/commentMarker" }
+      }
+    },
+    "adapters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tracker": { "type": ["string", "null"], "description": "Name of an installed tracker adapter skill, or null for none." },
+        "personas": { "type": "array", "items": { "type": "string" } },
+        "commentMarker": { "$ref": "#/$defs/commentMarker" },
+        "envProfile": { "type": ["string", "null"] }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "personas": { "type": "array", "items": { "type": "string" } } }
+    },
+    "mining": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "factory-pr-mining settings for this repo: reviewer cohort, bot policy, path scope.",
+      "properties": {
+        "cohort": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Bare reviewer logins whose comments count as human evidence." },
+        "learnDir": { "type": "string", "minLength": 1, "description": "Repo-relative directory for learn mode's ledger and state. Default: <stateRoot>/pr-mining/learn. Set it when stateRoot may be wiped." },
+        "loginSuffix": { "type": "string", "description": "Appended to a cohort login in GitHub search queries when the host's account names carry one. Output keeps bare logins." },
+        "bots": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mine": { "type": "boolean", "description": "Run the bot discovery axis by default. Default: false" },
+            "minOccurrenceUnits": { "type": "integer", "description": "Evidence bar for a pattern only bots raised. Default: 5" },
+            "minVerified": { "type": "integer", "description": "Occurrences that must be checked against the code. Default: 2" }
+          }
+        },
+        "paths": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "include": { "type": "array", "items": { "type": "string" }, "description": "Repo-relative directory prefixes in scope. Empty or absent: the whole repo." },
+            "exclude": { "type": "array", "items": { "type": "string" }, "description": "Prefixes removed from scope. Wins over include." },
+            "pathlessBodies": { "enum": ["scoped-pr-only", "never"], "description": "Keep a review body with no path only on a PR wholly in scope (default) or never." }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "commentMarker": {
+      "description": "What factory-pr-comment adds to every comment it posts. null or {\"mode\":\"off\"} adds nothing.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "enum": ["off", "text", "banner"] },
+            "text": { "type": "string", "description": "The marker tag. The script writes <!-- <text> {metadata json} --> as the body's first line (text and banner modes)." },
+            "banner": {
+              "description": "Visible line prepended to the body (banner mode): one string, or one per kind.",
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": { "reply": { "type": "string" }, "annotation": { "type": "string" }, "review": { "type": "string" } }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

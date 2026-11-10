@@ -5,7 +5,7 @@ argument-hint: "What will the next session be used for?"
 disable-model-invocation: true
 ---
 
-Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save it to `<stateRoot>/handoffs/<timestamp>-<slug>.md`, where `<stateRoot>` is `node .agents/skills/toolkit-context/scripts/resolve.mjs --field stateRoot` (`mkdir -p` it first). The state directory is untracked and per worktree, so the handoff never lands in a commit.
+Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save it to `<stateRoot>/handoffs/<timestamp>-<slug>.md`, where `<stateRoot>` is `node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoot` (`mkdir -p` it first). The state directory is untracked and per worktree, so the handoff never lands in a commit.
 
 Include a "suggested skills" section in the document, naming which skills the next agent should call the Skill tool for.
 

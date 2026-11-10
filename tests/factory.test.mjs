@@ -67,13 +67,13 @@ test('committed install: replaces another installer\'s copy and its lock entry, 
   assert.equal(readFileSync(join(d, '.agents/skills/my-skill/SKILL.md'), 'utf8'), own);
   const lock = json(join(d, '.agents/factory-metadata/skills-lock.json'));
   assert.equal(lock.mode, 'commit');
-  for (const n of ['toolkit-context', 'toolkit-pr-comment', 'handoff']) assert.ok(lock.skills[n]?.computedHash, n);
-  assert.equal(readlinkSync(join(d, '.claude/skills/toolkit-context')), join('..', '..', '.agents', 'skills', 'toolkit-context'));
+  for (const n of ['factory-context', 'factory-pr-comment', 'handoff']) assert.ok(lock.skills[n]?.computedHash, n);
+  assert.equal(readlinkSync(join(d, '.claude/skills/factory-context')), join('..', '..', '.agents', 'skills', 'factory-context'));
   assert.deepEqual(json(join(d, '.agents/factory-metadata/project.json')).pr, { commentMarker: { mode: 'off' } });
   assert.match(readFileSync(join(d, '.git/info/exclude'), 'utf8'), /\/\.agents\/factory-metadata\/state\//);
   assert.ok(json(join(home, 'installs.json')).repos[d]);
   // The resolver works from the installed copy.
-  const ctx = spawnSync(process.execPath, [join(d, '.agents/skills/toolkit-context/scripts/resolve.mjs')], { cwd: d, encoding: 'utf8', env: { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '' } });
+  const ctx = spawnSync(process.execPath, [join(d, '.agents/skills/factory-context/scripts/resolve.mjs')], { cwd: d, encoding: 'utf8', env: { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '' } });
   assert.equal(JSON.parse(ctx.stdout).mode, 'project');
   const doc = factory(['doctor'], d);
   assert.equal(doc.status, 0, doc.out + doc.err);
@@ -111,31 +111,31 @@ test('local-only install: git status stays clean, the team\'s tracked skill is u
   const r = factory(['install', 'core', '--local'], d);
   assert.equal(r.status, 0, r.err);
   assert.equal(porcelain(d), '', 'nothing shows in git status');
-  // A plan written by toolkit-plan-create (default planHome: plans) stays out of git status too.
+  // A plan written by factory-plan-create (default planHome: plans) stays out of git status too.
   write(join(d, 'plans', 'feat-x.md'), '# plan\n');
   assert.equal(porcelain(d), '', 'plans/ is hidden in a local install');
   assert.equal(readFileSync(join(d, '.agents/skills/team-skill/SKILL.md'), 'utf8'), before);
-  assert.ok(existsSync(join(d, '.claude/skills/toolkit-context/SKILL.md')), 'reached through the tracked link');
+  assert.ok(existsSync(join(d, '.claude/skills/factory-context/SKILL.md')), 'reached through the tracked link');
   assert.equal(factory(['doctor'], d).status, 0);
   // A new worktree lacks untracked files until factory link.
   git(d, 'worktree', 'add', '-q', '.worktrees/feat/x', '-b', 'feat/x');
   const wt = join(d, '.worktrees/feat/x');
-  assert.ok(!existsSync(join(wt, '.agents/skills/toolkit-context')));
+  assert.ok(!existsSync(join(wt, '.agents/skills/factory-context')));
   let st = factory(['status'], wt);
   assert.equal(st.status, 0);
   assert.match(st.out, /this worktree can't see \d+ installed skill\(s\)\. Link them: node .*factory\.mjs link/);
   assert.equal(factory(['link'], wt).status, 0);
   assert.doesNotMatch(factory(['status'], wt).out, /can't see/, 'linked: no hint');
   assert.doesNotMatch(factory(['status'], d).out, /can't see/, 'the main checkout never gets the hint');
-  assert.ok(existsSync(join(wt, '.agents/skills/toolkit-context/SKILL.md')));
+  assert.ok(existsSync(join(wt, '.agents/skills/factory-context/SKILL.md')));
   assert.equal(porcelain(wt), '', 'links are excluded too');
-  const ctx = spawnSync(process.execPath, [join(wt, '.agents/skills/toolkit-context/scripts/resolve.mjs'), '--field', 'stateRoot'], { cwd: wt, encoding: 'utf8', env: { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '' } });
+  const ctx = spawnSync(process.execPath, [join(wt, '.agents/skills/factory-context/scripts/resolve.mjs'), '--field', 'stateRoot'], { cwd: wt, encoding: 'utf8', env: { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '' } });
   assert.equal(ctx.stdout.trim(), join(d, '.agents/factory-metadata', 'state', 'x'));
   // remove cleans the exclude entries
   assert.equal(factory(['remove', 'core', '--purge'], d).status, 0);
   const excl = readFileSync(join(d, '.git/info/exclude'), 'utf8');
   assert.doesNotMatch(excl, /factory-core/);
-  assert.ok(!existsSync(join(d, '.agents/factory-metadata')) && !existsSync(join(d, '.agents/skills/toolkit-context')));
+  assert.ok(!existsSync(join(d, '.agents/factory-metadata')) && !existsSync(join(d, '.agents/skills/factory-context')));
   assert.ok(existsSync(join(d, '.agents/skills/team-skill/SKILL.md')));
 });
 
@@ -267,7 +267,7 @@ test('install into a hub with a registry writes a workspace pointer, so the regi
   assert.equal(r.status, 0, r.err);
   assert.match(r.out, /workspace \.claude\/repos\.json/);
   assert.equal(json(join(d, '.agents/factory-metadata/project.json')).workspace, '.claude/repos.json');
-  const ctx = spawnSync(process.execPath, [join(d, '.agents/skills/toolkit-context/scripts/resolve.mjs'), '--no-cache'], { cwd: d, encoding: 'utf8', env: { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '' } });
+  const ctx = spawnSync(process.execPath, [join(d, '.agents/skills/factory-context/scripts/resolve.mjs'), '--no-cache'], { cwd: d, encoding: 'utf8', env: { ...process.env, FACTORY_HOME: home, FACTORY_CONFIG: '' } });
   const o = JSON.parse(ctx.stdout);
   assert.equal(o.mode, 'workspace');
   assert.deepEqual(o.neighbors.map((n) => n.name), ['other']);
@@ -281,24 +281,24 @@ test('tests are not installed; an install from before (hash v1) is not "edited",
   assert.equal(factory(['install', 'core', '--commit'], d).status, 0);
   const skills = join(d, '.agents/skills');
   assert.deepEqual(walk(skills).filter((f) => /\.(test|guard)\.mjs$/.test(f)), [], 'no test files installed');
-  assert.ok(existsSync(join(skills, 'toolkit-context/scripts/resolve.mjs')), 'the scripts themselves are');
+  assert.ok(existsSync(join(skills, 'factory-context/scripts/resolve.mjs')), 'the scripts themselves are');
   const lockPath = join(d, '.agents/factory-metadata/skills-lock.json');
   assert.equal(json(lockPath).hashVersion, 2);
   // Rebuild what an older factory left: test files copied in, hashes over everything, no hashVersion.
   const lock = json(lockPath); delete lock.hashVersion;
-  for (const n of ['toolkit-context', 'toolkit-review']) {
+  for (const n of ['factory-context', 'factory-review']) {
     cpSync(join(CORE, n), join(skills, n), { recursive: true });
     lock.skills[n].computedHash = hashDir(join(skills, n), 1);
   }
   writeFileSync(lockPath, JSON.stringify(lock));
-  assert.ok(walk(join(skills, 'toolkit-context')).some((f) => f.endsWith('.test.mjs')));
+  assert.ok(walk(join(skills, 'factory-context')).some((f) => f.endsWith('.test.mjs')));
   const doc = factory(['doctor'], d);
   assert.doesNotMatch(doc.out, /lock hashes.*edited/, doc.out);
   const up = factory(['update'], d);
   assert.equal(up.status, 0, up.err);
   assert.doesNotMatch(up.err, /was edited/);
   assert.equal(json(lockPath).hashVersion, 2);
-  assert.ok(!walk(join(skills, 'toolkit-context')).some((f) => f.endsWith('.test.mjs')), 'update removed the old test files');
+  assert.ok(!walk(join(skills, 'factory-context')).some((f) => f.endsWith('.test.mjs')), 'update removed the old test files');
   assert.doesNotMatch(factory(['doctor'], d).out, /FAIL lock hashes/);
 });
 

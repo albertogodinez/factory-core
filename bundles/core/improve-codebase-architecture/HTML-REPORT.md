@@ -1,6 +1,6 @@
 # HTML Report Format
 
-The architectural review is rendered as a single self-contained HTML file in the project's `stateRoot` (`toolkit-context`). Tailwind and [Pele](https://pele.run) both come from CDNs. Diagrams are written in Mermaid syntax and rendered by Pele, which draws them as SVG themed with CSS variables, in the pele.run palette below. Pele handles graph-shaped diagrams; hand-built divs and inline SVG handle the more editorial visuals (mass diagrams, cross-sections). Mix the two: don't lean on graphs for everything, it'll start to look generic.
+The architectural review is rendered as a single self-contained HTML file in the project's `stateRoot` (`factory-context`). Tailwind and [Pele](https://pele.run) both come from CDNs. Diagrams are written in Mermaid syntax and rendered by Pele, which draws them as SVG themed with CSS variables, in the pele.run palette below. Pele handles graph-shaped diagrams; hand-built divs and inline SVG handle the more editorial visuals (mass diagrams, cross-sections). Mix the two: don't lean on graphs for everything, it'll start to look generic.
 
 ## Scaffold
 

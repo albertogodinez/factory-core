@@ -26,10 +26,10 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
-import { findGit, toolkitHome, parseRemote } from '../bundles/core/toolkit-context/scripts/resolve.mjs';
+import { findGit, toolkitHome, parseRemote } from '../bundles/core/factory-context/scripts/resolve.mjs';
 
 const FACTORY = dirname(dirname(realpathSync(import.meta.filename)));
-const RESOLVE = join(FACTORY, 'bundles', 'core', 'toolkit-context', 'scripts', 'resolve.mjs');
+const RESOLVE = join(FACTORY, 'bundles', 'core', 'factory-context', 'scripts', 'resolve.mjs');
 const IS_WIN = process.platform === 'win32';
 const LOCK = join('.agents/factory-metadata', 'skills-lock.json');
 const PROJECT = join('.agents/factory-metadata', 'project.json');
@@ -564,11 +564,11 @@ async function doctor(opts) {
   check('install', !!lock.mode, lock.mode ? `${lock.mode}, ${names.length} skills, bundles ${(lock.bundles || []).join(', ')}` : 'no .agents/factory-metadata/skills-lock.json');
 
   // resolver
-  const r = spawnSync(process.execPath, [join(root, '.agents', 'skills', 'toolkit-context', 'scripts', 'resolve.mjs'), '--no-cache'], { cwd: t0.git.toplevel, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [join(root, '.agents', 'skills', 'factory-context', 'scripts', 'resolve.mjs'), '--no-cache'], { cwd: t0.git.toplevel, encoding: 'utf8' });
   let ctx = null; try { ctx = JSON.parse(r.stdout); } catch {}
   check('resolver', r.status === 0 && ctx, ctx ? `${ctx.mode}, ${ctx.project?.name}, trunk ${ctx.project?.trunk}, writeAllowed ${ctx.writeAllowed}` : (r.stderr || '').trim());
   if (existsSync(join(root, PROJECT))) {
-    const v = spawnSync(process.execPath, [join(root, '.agents', 'skills', 'toolkit-context', 'scripts', 'validate.mjs'), join(root, PROJECT)], { encoding: 'utf8' });
+    const v = spawnSync(process.execPath, [join(root, '.agents', 'skills', 'factory-context', 'scripts', 'validate.mjs'), join(root, PROJECT)], { encoding: 'utf8' });
     check('project.json schema', v.status === 0, (v.stderr || '').trim().split('\n')[0]);
   }
   check('marker policy', ctx?.adapters && 'commentMarker' in ctx.adapters, ctx?.adapters?.commentMarker ? describeMarker(ctx.adapters.commentMarker) : 'pr.commentMarker not set');
@@ -929,7 +929,7 @@ function setup(opts) {
   if (none.length) {
     out(`  no install: ${none.join(', ')}`);
     out('  A team repo keeps its install out of git, so a clone has none. For each one you work in:');
-    out('    factory install core [expedia] [trips] --local --to <repo>, then /toolkit-repo-register there');
+    out('    factory install core [expedia] [trips] --local --to <repo>, then /factory-repo-register there');
   }
 }
 

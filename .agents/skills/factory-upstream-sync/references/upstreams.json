@@ -1,0 +1,505 @@
+{
+  "verified": "2026-10-23",
+  "snapshotMaxAgeDays": 14,
+  "sources": {
+    "mattpocock": {
+      "type": "github",
+      "repo": "mattpocock/skills",
+      "branch": "main"
+    },
+    "pstack": {
+      "type": "github",
+      "repo": "cursor/plugins",
+      "branch": "main"
+    },
+    "vercel": {
+      "type": "github",
+      "repo": "vercel-labs/agent-skills",
+      "branch": "main"
+    },
+    "pele": {
+      "type": "npm",
+      "package": "pele"
+    }
+  },
+  "adoptions": [
+    {
+      "id": "writing-for-agents",
+      "source": "mattpocock",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/writing-for-agents"
+      ],
+      "upstream": [
+        {
+          "path": "skills/productivity/writing-for-agents",
+          "baseline": "5beb35b040e3de97e54fa9e386d7e42d15c295c2",
+          "hash": "ad2925850efb8973a72d2e666f7a975f9a2d4a9b"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted"
+    },
+    {
+      "id": "handoff",
+      "source": "mattpocock",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/handoff"
+      ],
+      "upstream": [
+        {
+          "path": "skills/productivity/handoff",
+          "baseline": "5beb35b040e3de97e54fa9e386d7e42d15c295c2",
+          "hash": "ce24892bd2d4b9e7fd5ac9b95c03175e18bef388"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "Saves to the toolkit's gitignored tmp/handoffs/; plans may be a local file, a Confluence page or a Jira comment."
+    },
+    {
+      "id": "wait-what",
+      "source": "mattpocock",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/wait-what"
+      ],
+      "upstream": [
+        {
+          "path": "skills/productivity/wait-what",
+          "baseline": "5beb35b040e3de97e54fa9e386d7e42d15c295c2",
+          "hash": "c8b050e6b8c711be1a9008ceacb2126914f0763e"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted"
+    },
+    {
+      "id": "diagnosing-bugs",
+      "source": "mattpocock",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/diagnosing-bugs"
+      ],
+      "upstream": [
+        {
+          "path": "skills/engineering/diagnosing-bugs",
+          "baseline": "5beb35b040e3de97e54fa9e386d7e42d15c295c2",
+          "hash": "5fdd6cc53385395441910b026c72d71768e993d4"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "Reads GLOSSARY.md and the factory-review rules instead of upstream's domain docs."
+    },
+    {
+      "id": "improve-codebase-architecture",
+      "source": "mattpocock",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/improve-codebase-architecture"
+      ],
+      "upstream": [
+        {
+          "path": "skills/engineering/improve-codebase-architecture",
+          "baseline": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+          "hash": "587147dd230da299cc5e84971cb0a33f6676f8a6"
+        },
+        {
+          "path": "skills/engineering/codebase-design",
+          "baseline": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+          "hash": "4cbe1c131e1ea54109cb1e4e5f3c505810db6606"
+        },
+        {
+          "path": "skills/productivity/grilling",
+          "baseline": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+          "hash": "f551b6e0d219fdda0b6abf277f8f915b3127d1e9"
+        }
+      ],
+      "reviewed": "2026-11-06",
+      "decision": "adopted: 7739eae, subagents start with a fresh context window, not a fork (all three sentences)",
+      "notes": "Merges three upstream skills into one; the HTML report draws diagrams with Pele (tracked separately)."
+    },
+    {
+      "id": "factory-ask-from-ask-matt",
+      "source": "mattpocock",
+      "relation": "inspired",
+      "local": [
+        "bundles/core/factory-ask"
+      ],
+      "upstream": [
+        {
+          "path": "skills/engineering/ask-matt",
+          "baseline": "5beb35b040e3de97e54fa9e386d7e42d15c295c2",
+          "hash": "d6a0d9bf3cdc78cbfcbd6466ac5fd3deffb52877"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "Structure only: a router over this repo's skills with a checked map."
+    },
+    {
+      "id": "correct",
+      "source": "pstack",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/correct"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/correct",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "5ebee6f7fe9cd7f97b1c698dbbf4f19ed8c4c5f4"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted"
+    },
+    {
+      "id": "unslop",
+      "source": "pstack",
+      "relation": "partial",
+      "local": [
+        "bundles/core/unslop"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/unslop",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "4e572dd70e5557f490e3991c52ea58f0dcee8936"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "Only rules 32 and 33 were ported; the Process, Adding soul, and rules 1, 2, 4, 6 and 21 are this toolkit's own."
+    },
+    {
+      "id": "no-comments",
+      "source": "pstack",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/no-comments",
+        "bundles/core/factory-review/personas/no-comments.md",
+        "bundles/core/factory-review/rules/no-comments"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/no-comments",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "3a09487f06a3fcf9e313d397a29f5d2efde9283f"
+        },
+        {
+          "path": "pstack/agents/comment-sicko.md",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "209e3704dfa75022060c936bd3f3362fa3bbe254"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "Also a factory-review persona; its rules map to the upstream skill as a whole, not to single files. Repo-neutral wording."
+    },
+    {
+      "id": "technical-writing",
+      "source": "pstack",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/technical-writing"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/technical-writing",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "f35560fd015d95ae92eb3c7414d3a48065299dfa"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "For write-ups and reports, not PR descriptions."
+    },
+    {
+      "id": "principle-attack-the-premise",
+      "source": "pstack",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/principle-attack-the-premise"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/principle-attack-the-premise",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "0b0de55b1f1e7a989a10dd8680f01a67ef378ebc"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted"
+    },
+    {
+      "id": "principle-build-the-lever",
+      "source": "pstack",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/principle-build-the-lever"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/principle-build-the-lever",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "dd1ee184f4f4d585e42a006f0a1837afdbb3d627"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted"
+    },
+    {
+      "id": "principle-prove-it-works",
+      "source": "pstack",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/principle-prove-it-works"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/principle-prove-it-works",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "41e2142b6479db1dfdb9c2a3b856a895af61089d"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "Artifacts go to the toolkit's tmp/; decision logs to decisions/."
+    },
+    {
+      "id": "principle-subtract-before-you-add",
+      "source": "pstack",
+      "relation": "copied",
+      "local": [
+        "bundles/core/principle-subtract-before-you-add"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/principle-subtract-before-you-add",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "760f5b131e920c0e9914a0ef8cb4b875918af31a"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted"
+    },
+    {
+      "id": "show-me-your-work",
+      "source": "pstack",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/show-me-your-work"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/show-me-your-work",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "118c0642360ab53de52b3f8dd044102567dbcaa9"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "Log lives in the toolkit's gitignored decisions/, never committed; the independent review runs through factory-second-opinion."
+    },
+    {
+      "id": "statechart",
+      "source": "pstack",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/statechart"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/statechart",
+          "baseline": "519d36aa98955bf680db01bcde5fdfba686dc901",
+          "hash": "a79a48c6970be3b63d6efefb0a306b7c87de88d0"
+        }
+      ],
+      "notes": "scripts/ is identical to upstream except package.json and is re-copied on update, not hand-applied; scripts/test/ (3.6 MB TLC corpus, fast-check, a Java oracle) is not vendored. package.json drops the test script and devDependency and gains a typecheck script, which fails under the toolkit TypeScript 7.0.2 (run.ts:455 and :471, exit typed number vs 0|1|2); left for upstream rather than patched. SKILL.md runs in the toolkit tmp/statechart/, adds the Node 22.17-to-Bun fallback, and the TLA2TOOLS/JAVA route for a machine without the TLC installer. viewer/ (open-chart.mjs and its test) is the toolkit's own optional browser viewer for chart.mmd, outside scripts/ so a re-copy leaves it alone.",
+      "reviewed": "2026-11-06",
+      "decision": "adopted"
+    },
+    {
+      "id": "factory-formal-verify",
+      "source": "pstack",
+      "relation": "inspired",
+      "local": [
+        "bundles/core/factory-formal-verify/references"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/create-formal-verification-skill",
+          "baseline": "2776ddd2355d6d6c8747d3964600f28daf62f049",
+          "hash": "091f2a26d46f7bed511d0532a1329532a45899e0"
+        },
+        {
+          "path": "pstack/skills/maintain-formal-verification-skill",
+          "baseline": "2776ddd2355d6d6c8747d3964600f28daf62f049",
+          "hash": "0b843c90b8b04a639dbd86fec9795610374715f2"
+        }
+      ],
+      "reviewed": "2026-11-06",
+      "decision": "adopted",
+      "notes": "Kept: choose the strongest promise from the code; the tool fits the question, TLA+ by default; true to the code, able to fail, findings stay findings, honest scope; read every TLA+ result with /statechart by name; prove the generated skill once; maintain outcomes in sync / updated / bug / blocked and its pass. Changed: create and maintain are one skill with two references; verify skills live in the toolkit as factory-verify-<repo>-<subsystem>, not in the product repo; the coverage record and sync commit are coverage.json, which check-drift.mjs reads to list stale skills and the skills a PR touches (factory-ticket-to-pr runs it before the final push); each finding gets a replay test kept in the skill, run from tmp/ and never committed to the product repo; feature-map entries link a verify skill with verified_by."
+    },
+    {
+      "id": "factory-ask-from-poteto-help",
+      "source": "pstack",
+      "relation": "inspired",
+      "local": [
+        "bundles/core/factory-ask"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/poteto-help",
+          "baseline": "2776ddd2355d6d6c8747d3964600f28daf62f049",
+          "hash": "f0670fe669e944b4a42f027bd440aa21d50e46f8"
+        }
+      ],
+      "reviewed": "2026-11-06",
+      "decision": "adopted: the /statechart row (34b1b7c) is our factory-ask MAP.md row; ab1f702's recipe wording is structure-only churn",
+      "notes": "Structure only."
+    },
+    {
+      "id": "factory-reflect",
+      "source": "pstack",
+      "relation": "inspired",
+      "local": [
+        "bundles/core/factory-reflect"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/reflect",
+          "baseline": "e73df471cd4bd918367e99f3dd9c51bd53ddf5f0",
+          "hash": "fbc98c056509e9ee3dfceebbc0acfa4591491cc2"
+        }
+      ],
+      "reviewed": "2026-10-24",
+      "decision": "skipped: plugins/cache rule is Cursor-plugin specific; our skills live in .agents/skills",
+      "notes": "Same reviewers-plus-synthesizer shape; routes lessons to checks, review rules, skill edits, GLOSSARY.md or AGENTS.md instead of a doc store."
+    },
+    {
+      "id": "factory-feature-map",
+      "source": "pstack",
+      "relation": "inspired",
+      "local": [
+        "bundles/core/factory-feature-map/references"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/create-verification-skill",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "5aa2dae2726d09d219397fbbedc1e9500a239d28"
+        },
+        {
+          "path": "pstack/skills/maintain-verification-skill",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "b6ce4dcdc378492f9acd55a4e56ae111204b4f11"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "Kept: interview the repo, not the user; one file per feature plus an index; prove the map with a live run; a read-only source reader per feature; a required live pass. Changed: maps live in the toolkit, not the product repo; no custom harness (agent-browser and the repo's auth skill); each map ships an inventory script and checked code anchors; a deterministic checker runs first; fixes commit on toolkit main; the live pass can be scoped to a feature list. Entries also map features to code, unlike upstream's feature-map-example."
+    },
+    {
+      "id": "review-fix-root-causes",
+      "source": "pstack",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/factory-review/personas/fix-root-causes.md",
+        "bundles/core/factory-review/rules/fix-root-causes"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/principle-fix-root-causes",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "f1075eead43f95cd9896381345ff28f0da7e1aea"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "Rules map to the upstream principle as a whole."
+    },
+    {
+      "id": "review-test-behavior",
+      "source": "pstack",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/factory-review/personas/test-behavior.md",
+        "bundles/core/factory-review/rules/test-behavior"
+      ],
+      "upstream": [
+        {
+          "path": "pstack/skills/principle-test-behavior-not-implementation",
+          "baseline": "9b93e81fb2921b9263d9463c15bafeabfe3903aa",
+          "hash": "7fa3d5dba8496dcd08278a99903a2dfb58a2e179"
+        }
+      ],
+      "reviewed": "2026-10-23",
+      "decision": "adopted",
+      "notes": "Rules map to the upstream principle as a whole."
+    },
+    {
+      "id": "review-react-best-practices",
+      "source": "vercel",
+      "relation": "adapted",
+      "local": [
+        "bundles/core/factory-review/rules/react-patterns/async-api-routes.md",
+        "bundles/core/factory-review/rules/react-patterns/async-cheap-condition-before-await.md",
+        "bundles/core/factory-review/rules/react-patterns/async-defer-await.md",
+        "bundles/core/factory-review/rules/react-patterns/async-dependencies.md",
+        "bundles/core/factory-review/rules/react-patterns/async-parallel.md",
+        "bundles/core/factory-review/rules/react-patterns/async-suspense-boundaries.md",
+        "bundles/core/factory-review/rules/react-patterns/bundle-analyzable-paths.md",
+        "bundles/core/factory-review/rules/react-patterns/bundle-barrel-imports.md",
+        "bundles/core/factory-review/rules/react-patterns/bundle-conditional.md",
+        "bundles/core/factory-review/rules/react-patterns/bundle-dynamic-imports.md",
+        "bundles/core/factory-review/rules/react-patterns/js-batch-dom-css.md",
+        "bundles/core/factory-review/rules/react-patterns/js-index-maps.md",
+        "bundles/core/factory-review/rules/react-patterns/js-length-check-first.md",
+        "bundles/core/factory-review/rules/react-patterns/js-request-idle-callback.md",
+        "bundles/core/factory-review/rules/react-patterns/js-tosorted-immutable.md",
+        "bundles/core/factory-review/rules/react-patterns/rendering-conditional-render.md",
+        "bundles/core/factory-review/rules/react-patterns/rendering-content-visibility.md",
+        "bundles/core/factory-review/rules/react-patterns/rendering-resource-hints.md",
+        "bundles/core/factory-review/rules/react-patterns/rendering-script-defer-async.md",
+        "bundles/core/factory-review/rules/react-patterns/rerender-dependencies.md",
+        "bundles/core/factory-review/rules/react-patterns/rerender-derived-state-no-effect.md",
+        "bundles/core/factory-review/rules/react-patterns/rerender-functional-setstate.md",
+        "bundles/core/factory-review/rules/react-patterns/rerender-lazy-state-init.md",
+        "bundles/core/factory-review/rules/react-patterns/rerender-memo-with-default-value.md",
+        "bundles/core/factory-review/rules/react-patterns/rerender-move-effect-to-event.md",
+        "bundles/core/factory-review/rules/react-patterns/rerender-no-inline-components.md",
+        "bundles/core/factory-review/rules/react-patterns/rerender-use-ref-transient-values.md"
+      ],
+      "upstream": [
+        {
+          "path": "skills/react-best-practices/rules",
+          "baseline": "063bee94c3f4df8453406c830b0a7df0f2860278",
+          "hash": "0af4bf7cbb25560321d127d270fd787875b8ea89"
+        }
+      ],
+      "reviewed": "2026-10-24",
+      "decision": "adopted: added bundle-analyzable-paths without the Next.js output-tracing section",
+      "notes": "Rules adopted 2026-04-08/09 against a baseline whose exact commit was not recorded. bundle-analyzable-paths (2026-10-23) drops the Next.js output-tracing paragraph and uses trips-flavored examples."
+    },
+    {
+      "id": "pele",
+      "source": "pele",
+      "relation": "pinned",
+      "local": [
+        "bundles/core/improve-codebase-architecture/HTML-REPORT.md",
+        "bundles/core/statechart/references/render.md",
+        "bundles/core/statechart/viewer/open-chart.mjs"
+      ],
+      "version": "1.9.0",
+      "pinPattern": "pele@(\\d+\\.\\d+\\.\\d+)",
+      "reviewedVersion": "1.13.0",
+      "reviewed": "2026-11-06",
+      "decision": "skipped: keep 1.9.0; upstream statechart render.md still pins 1.9.0 and our mount() use has no bug 1.10-1.13 would fix; revisit when pstack moves its pin"
+    }
+  ]
+}

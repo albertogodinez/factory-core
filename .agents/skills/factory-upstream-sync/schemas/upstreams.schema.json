@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://factory-core/schemas/upstreams.schema.json",
+  "title": "Adopted upstream skills",
+  "description": "Where each adopted skill, persona or rule came from, and the upstream state last reviewed. check-upstreams.mjs compares upstream against itself, never against our edited copy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verified", "snapshotMaxAgeDays", "sources", "adoptions"],
+  "properties": {
+    "verified": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "snapshotMaxAgeDays": { "type": "integer", "minimum": 1 },
+    "own": { "type": "array", "items": { "type": "string" }, "uniqueItems": true, "description": "Non-factory- skill directories that are this repo's own work and have no upstream." },
+    "sources": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "object", "additionalProperties": false, "required": ["type", "repo", "branch"],
+            "properties": { "type": { "const": "github" }, "repo": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }, "branch": { "type": "string", "minLength": 1 } } },
+          { "type": "object", "additionalProperties": false, "required": ["type", "package"],
+            "properties": { "type": { "const": "npm" }, "package": { "type": "string", "minLength": 1 } } }
+        ]
+      }
+    },
+    "adoptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "source", "relation", "local", "reviewed", "decision"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "source": { "type": "string", "minLength": 1 },
+          "relation": { "enum": ["copied", "adapted", "partial", "inspired", "pinned"] },
+          "local": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+          "upstream": {
+            "type": "array", "minItems": 1,
+            "items": { "type": "object", "additionalProperties": false, "required": ["path", "baseline", "hash"],
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "baseline": { "type": "string", "pattern": "^[0-9a-f]{40}$", "description": "Upstream commit last reviewed." },
+                "hash": { "type": "string", "pattern": "^[0-9a-f]{40}$", "description": "Git tree or blob SHA of path at baseline." } } }
+          },
+          "version": { "type": "string" },
+          "pinPattern": { "type": "string", "description": "Regex whose group 1 is the version pinned in each local file." },
+          "reviewedVersion": { "type": "string", "description": "Latest upstream version seen at the last review." },
+          "reviewed": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+          "decision": { "type": "string", "minLength": 1, "description": "adopted, skipped: <reason>, or partial: <what>." },
+          "notes": { "type": "string", "description": "What we changed on purpose, so a review does not re-propose it." }
+        },
+        "oneOf": [
+          { "required": ["upstream"], "not": { "required": ["version"] } },
+          { "required": ["version", "pinPattern", "reviewedVersion"], "properties": { "relation": { "const": "pinned" } } }
+        ]
+      }
+    }
+  }
+}

@@ -3,7 +3,7 @@ set -e
 # Unit tests and the context and internal-data checks run on every commit.
 node tests/run.mjs
 # Resolver guardrails (timing, spawns, output size) run when the resolver changes.
-if git diff --cached --name-only | grep -q '^bundles/core/toolkit-context/'; then
+if git diff --cached --name-only | grep -q '^bundles/core/factory-context/'; then
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE node --test --test-reporter=dot tests/guardrails/resolver.guard.mjs
 fi
 # Status guardrails (a SessionStart hook runs it every session) run when the CLI changes.
@@ -11,4 +11,4 @@ if git diff --cached --name-only | grep -q '^bin/factory.mjs$'; then
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE node --test --test-reporter=dot tests/guardrails/status.guard.mjs
 fi
 # Upstream adoptions (offline half; warns, never fails).
-node .agents/skills/toolkit-upstream-sync/scripts/check-upstreams.mjs
+node .agents/skills/factory-upstream-sync/scripts/check-upstreams.mjs

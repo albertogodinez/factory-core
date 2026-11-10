@@ -91,7 +91,7 @@ Don't mix modes: no reference tables inside a tutorial, no tutorial hand-holding
 ## Voice and repo specifics
 
 - Apply the **unslop** skill to every doc this skill touches. That skill owns the slop-pattern catalog: AI vocabulary, filler, hedging, formatting tells.
-- This skill covers write-ups only: explainers, reports, readmes, and RFCs. PR descriptions belong to the **toolkit-pr-create** skill and the repo's PR template. Leave them and commit messages out of scope.
+- This skill covers write-ups only: explainers, reports, readmes, and RFCs. PR descriptions belong to the **factory-pr-create** skill and the repo's PR template. Leave them and commit messages out of scope.
 - Product UI strings are not documentation. Use your product's copy guidelines for those.
 - Indent code snippets the way the target repo's formatter does. Write real paths. Make every count or tree claim true at the commit that lands it, and include the command that regenerates it.
 

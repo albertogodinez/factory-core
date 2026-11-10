@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const hub = process.argv[2];
 if (!hub) { console.error('usage: hub-parity.mjs <hub-dir>'); process.exit(2); }
-const RESOLVE = join(dirname(fileURLToPath(import.meta.url)), '..', 'bundles', 'core', 'toolkit-context', 'scripts', 'resolve.mjs');
+const RESOLVE = join(dirname(fileURLToPath(import.meta.url)), '..', 'bundles', 'core', 'factory-context', 'scripts', 'resolve.mjs');
 const reg = JSON.parse(readFileSync(join(hub, '.claude', 'repos.json'), 'utf8'));
 let bad = 0;
 for (const r of reg.repos) {

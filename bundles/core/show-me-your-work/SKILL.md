@@ -35,7 +35,7 @@ ts	phase	decision	why	evidence	result
 
 The log is always a local working file. It never gets committed, pushed, or merged, in any repo the work touches.
 
-- Path: `<stateRoot>/../decisions/<task-slug>.tsv`, where `<stateRoot>` comes from `node .agents/skills/toolkit-context/scripts/resolve.mjs --field stateRoot`. The `decisions/` directory sits beside the state directory, not inside it, for two reasons: clearing scratch state keeps the logs, and one project's worktrees share one set of logs. A log is the one record of why a call was made and cannot be regenerated; a script's output can, so that goes under `<stateRoot>`.
+- Path: `<stateRoot>/../decisions/<task-slug>.tsv`, where `<stateRoot>` comes from `node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoot`. The `decisions/` directory sits beside the state directory, not inside it, for two reasons: clearing scratch state keeps the logs, and one project's worktrees share one set of logs. A log is the one record of why a call was made and cannot be regenerated; a script's output can, so that goes under `<stateRoot>`.
 - The helper resolves the path itself, from the current directory's project, so the log lands in the same place from any worktree of it. Set `DECISIONS_DIR` to override.
 - Pick a short slug per task, such as the ticket key or branch name (`PROJ-1234-clarifier`). Several efforts at once get several slugs.
 - Never write the log inside a repo's tracked tree, and never `git add -f` it.
@@ -80,7 +80,7 @@ Correct the log, not the story. The audit never edits or removes a row, even an 
 
 ## Independent review of the trail
 
-Before handing back, get a reviewer that did not do the work, on the other vendor's model: run `/toolkit-second-opinion` if it is installed (it sends the prompt to the other vendor's model and falls back to a fresh subagent), or any other reviewer on a different model. If none is available, use a fresh `general-purpose` subagent and say so. Self-review is not a substitute. Give it the log path and this run's transcript path. It scans for what the user should pay attention to, not a redo of the work:
+Before handing back, get a reviewer that did not do the work, on the other vendor's model: run `/factory-second-opinion` if it is installed (it sends the prompt to the other vendor's model and falls back to a fresh subagent), or any other reviewer on a different model. If none is available, use a fresh `general-purpose` subagent and say so. Self-review is not a substitute. Give it the log path and this run's transcript path. It scans for what the user should pay attention to, not a redo of the work:
 
 - Decisions logged with weak or absent evidence.
 - Verification steps skipped or claimed without proof in the transcript.

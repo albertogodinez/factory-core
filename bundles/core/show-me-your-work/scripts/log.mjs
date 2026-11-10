@@ -2,7 +2,7 @@
 // Append a well-formed row to a show-me-your-work decision log (TSV).
 // Usage: log.mjs <slug|logfile> <phase> <decision> <why> <evidence> <result>
 // A bare slug (no "/", "\", or ".tsv") writes to <stateRoot>/../decisions/<slug>.tsv, where
-// stateRoot comes from the toolkit-context resolver. DECISIONS_DIR overrides that directory.
+// stateRoot comes from the factory-context resolver. DECISIONS_DIR overrides that directory.
 import { appendFileSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -21,12 +21,12 @@ export const clean = (v) => {
 function decisionsDir() {
   if (process.env.DECISIONS_DIR) return resolve(process.env.DECISIONS_DIR);
   const here = dirname(fileURLToPath(import.meta.url));
-  const resolver = join(here, '..', '..', 'toolkit-context', 'scripts', 'resolve.mjs');
+  const resolver = join(here, '..', '..', 'factory-context', 'scripts', 'resolve.mjs');
   let stateRoot;
   try {
     stateRoot = execFileSync(process.execPath, [resolver, '--field', 'stateRoot'], { encoding: 'utf8' }).trim();
   } catch {
-    fail('could not resolve the state directory; install toolkit-context, or pass a log file path');
+    fail('could not resolve the state directory; install factory-context, or pass a log file path');
   }
   return join(stateRoot, '..', 'decisions');
 }

@@ -25,7 +25,7 @@ Core carries no internal data: no repo names, reviewer logins, hosts or paths. A
 
 There's no hub bundle. Working across several repos is a mode of core (see [Neighbors](#neighbors-cross-repo-work)).
 
-Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-architecture`, `wait-what`, `writing-for-agents`, originally from `mattpocock/skills`) ship as our versions. When the factory installs core into a repo, they replace any copies already there. `toolkit-upstream-sync` (in this repo's own `.agents/skills`, not a bundle) pulls upstream improvements into our versions. It runs only in factory-core; the pre-commit hook runs its offline check.
+Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-architecture`, `wait-what`, `writing-for-agents`, originally from `mattpocock/skills`) ship as our versions. When the factory installs core into a repo, they replace any copies already there. `factory-upstream-sync` (in this repo's own `.agents/skills`, not a bundle) pulls upstream improvements into our versions. It runs only in factory-core; the pre-commit hook runs its offline check.
 
 ## Directory layout
 
@@ -40,7 +40,7 @@ Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-archite
 ├── ai-shopping-pwa/                # team repo → LOCAL-ONLY install
 │   ├── .agents/skills/
 │   │   ├── migrate-ai-shopping-playground/   # the team's tracked skill, never touched
-│   │   └── toolkit-review/ …                 # installed copies, untracked
+│   │   └── factory-review/ …                 # installed copies, untracked
 │   ├── .claude/skills -> ../.agents/skills   # symlink on macOS/Linux; a copy on Windows
 │   ├── .agents/factory-metadata/
 │   │   ├── project.json                      # config: neighbors, marker policy, cohort, commands
@@ -73,7 +73,7 @@ New worktrees don't contain untracked files. With a local-only install, onboardi
 
 ## The resolver
 
-Every skill asks one script, `toolkit-context`, "which project am I in, and what are its settings?" Skills never read config files themselves.
+Every skill asks one script, `factory-context`, "which project am I in, and what are its settings?" Skills never read config files themselves.
 
 Sources, first match wins:
 
@@ -257,6 +257,6 @@ node ~/Documents/repos/factory-core/bin/factory.mjs setup            # --root <d
 It does what a clone can't bring:
 - **The user hooks.** It adds the `status --hook` entries to `~/.claude/settings.json` and `~/.codex/hooks.json` (`CLAUDE_CONFIG_DIR` and `CODEX_HOME` move them). Trust them in the next interactive Codex session.
 - **installs.json.** A `--commit` repo's skills and lock arrive with the clone, but this machine's `~/.agents/factory/installs.json` doesn't list it, so `update --all` would skip it. `setup` records each repo under `--root` (default: factory-core's parent directory) that carries a lock.
-- **Team repos.** A `--local` install is never tracked, so a clone has none. `setup` lists the repos with no install. Run `install … --local` in the ones you work in, then `/toolkit-repo-register`, because `project.json` was untracked too.
+- **Team repos.** A `--local` install is never tracked, so a clone has none. `setup` lists the repos with no install. Run `install … --local` in the ones you work in, then `/factory-repo-register`, because `project.json` was untracked too.
 
 Keep the resolver and scripts fast, small and free of dependencies. On Windows, `factory` copies skills instead of linking them, and every script runs without a shell.

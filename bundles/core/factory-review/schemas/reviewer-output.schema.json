@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory-review/reviewer-output",
+  "title": "factory-review reviewer output (fields check-sweep-coverage.mjs reads)",
+  "description": "The full shape and field rules live in references/finding-schema.md. This schema covers what scripts/check-sweep-coverage.mjs depends on.",
+  "type": "object",
+  "required": ["reviewer", "findings", "checked_left_alone", "sweep_dispositions"],
+  "properties": {
+    "reviewer": { "type": "string" },
+    "findings": { "type": "array", "items": { "type": "object" } },
+    "checked_left_alone": { "type": "array", "items": { "type": "object" } },
+    "sweep_dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["signal", "file", "line", "disposition", "note"],
+        "properties": {
+          "signal": { "type": "string" },
+          "file": { "type": "string" },
+          "line": { "type": "number" },
+          "disposition": { "type": "string", "enum": ["finding", "left_alone", "not_applicable"] },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -8,7 +8,7 @@ factory-core holds the `core` skill bundle and the `factory` CLI that installs b
 - **Small and fast.** Scripts are `.mjs` files that import only `node:` modules. No network. No dependencies in `package.json`.
 - **Local only.** Installs copy files from local paths. Nothing is published or fetched.
 - **Every harness.** Nothing in core depends on a feature only one harness has (Claude Code, Codex, Copilot, Cursor).
-- **No internal data in core.** No company repo names, reviewer logins, hosts or paths. A core skill gets that data from the resolver (`bundles/core/toolkit-context`), which reads the consumer's config or an adapter bundle. `tests/internal-data.test.mjs` enforces this.
+- **No internal data in core.** No company repo names, reviewer logins, hosts or paths. A core skill gets that data from the resolver (`bundles/core/factory-context`), which reads the consumer's config or an adapter bundle. `tests/internal-data.test.mjs` enforces this.
 
 ## Layout
 
@@ -18,6 +18,6 @@ factory-core holds the `core` skill bundle and the `factory` CLI that installs b
 
 ## Checks
 
-- `npm test` runs every test. The pre-commit hook runs the same suite, plus the resolver guardrails when `bundles/core/toolkit-context/` changes.
+- `npm test` runs every test. The pre-commit hook runs the same suite, plus the resolver guardrails when `bundles/core/factory-context/` changes.
 - Let the hook run on every commit. If it fails, fix the cause or the check; never pass `--no-verify`.
 - Run `npm run prepare` once per clone so `core.hooksPath` points at `.githooks`.

@@ -1,6 +1,6 @@
 // Hard limits on the resolver: speed, git spawns, output size, imports.
 // Every skill calls the resolver, so these run in pre-commit whenever
-// bundles/core/toolkit-context/ changes (see .githooks/pre-commit).
+// bundles/core/factory-context/ changes (see .githooks/pre-commit).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { makeFixtures, write, makeRepo } from '../fixtures/make.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SKILL = join(HERE, '..', '..', 'bundles', 'core', 'toolkit-context');
+const SKILL = join(HERE, '..', '..', 'bundles', 'core', 'factory-context');
 const RESOLVE = join(SKILL, 'scripts', 'resolve.mjs');
 // Node itself takes 40-50 ms to start on a loaded laptop, so the speed limits
 // are on the resolver's overhead above an empty Node run, measured alternately
@@ -102,7 +102,7 @@ test(`output: ≤ ${LIMITS.outBytes} B + ${LIMITS.perNeighborBytes} B per neighb
     remote: { org: 'some-org', repo: n, ghHost: 'github.com', sshAlias: 'github-work' }, primaryBranch: 'master', commands: {} })) });
   write(join(big, '.agents/factory-metadata/project.json'), { version: 1, name: 'big-hub', workspace: '.claude/repos.json',
     pr: { commentMarker: { mode: 'banner', text: 'cc-autoreply', banner: { reply: 'x'.repeat(200), review: 'y'.repeat(200) } } },
-    adapters: { tracker: 'toolkit-tracker-jira', envProfile: 'eg-corporate' } });
+    adapters: { tracker: 'factory-tracker-jira', envProfile: 'eg-corporate' } });
   for (const [d, args] of [['project', []], ['zero-config', []], ['hub', []], ['hub', ['--repo', 'project']], ['project/.worktrees/feat/x', []], ['big-hub', []]]) {
     const { out } = timed(join(fx.root, d), ['--no-cache', ...args]);
     if (d === 'big-hub') assert.equal(JSON.parse(out).neighbors.length, 10);
