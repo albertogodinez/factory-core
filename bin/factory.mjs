@@ -809,6 +809,17 @@ export function lessonBranches(home = toolkitHome()) {
   }
   return found;
 }
+// Only the branch's own repo lands it (a session writes only its own repo), so a session elsewhere
+// is told where to start one instead.
+export function lessonLines(waiting, here) {
+  const own = waiting.filter((w) => w.root === here), away = new Map();
+  for (const w of waiting) if (w.root !== here) away.set(w.root, [...(away.get(w.root) || []), w]);
+  const list = (ws) => ws.slice(0, 4).map((w) => w.branch).join(', ') + (ws.length > 4 ? ` +${ws.length - 4}` : '');
+  const lines = [];
+  if (own.length) lines.push(`factory: ${own.length} lesson branch(es) wait for review here: ${list(own)}. factory-reflect lists and lands them (lessons.mjs open).`);
+  for (const [root, ws] of away) lines.push(`factory: ${ws.length} lesson branch(es) wait for review in ${basename(root)}: ${list(ws)}. Review and land them from a session started there: cd ${root} && <your agent CLI>.`);
+  return lines;
+}
 function readText(f) { try { return readFileSync(f, 'utf8'); } catch { return null; } }
 
 // ---------- the update log and per-session notices ----------
@@ -877,11 +888,7 @@ function hookStatus(opts) {
   const lines = [];
   if (!state || event === 'SessionStart') {
     status({ ...opts, to: opts.to || input.cwd, hint: false }); // the drift line, as at any session start
-    const waiting = lessonBranches();
-    if (waiting.length) {
-      const shown = waiting.slice(0, 4).map((w) => `${w.repo} ${w.branch}`).join(', ') + (waiting.length > 4 ? ` +${waiting.length - 4}` : '');
-      out(`factory: ${waiting.length} lesson branch(es) wait for review: ${shown}. factory-reflect lists and lands them (lessons.mjs open).`);
-    }
+    for (const l of lessonLines(lessonBranches(), g.mainRoot)) out(l);
     if (file) {
       try { // forget sessions untouched for a week
         for (const f of readdirSync(SESSIONS())) if (now - statSync(join(SESSIONS(), f)).mtimeMs > 7 * 864e5) rmSync(join(SESSIONS(), f), { force: true });

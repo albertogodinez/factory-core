@@ -108,9 +108,12 @@ function patchId(root, from, to) {
 
 // Fast-forward trunk to a reviewed lesson branch, then remove its worktree and branch.
 // The head must be the reviewed commit, or carry the same change after a rebase.
-export function land({ repo, branch, reviewed, trunk: trunkArg }) {
+// Only a session started in the source repo lands: auto mode treats every other repo as shared,
+// so a land from a downstream session is denied by design. `cwd` is that session's shell.
+export function land({ repo, branch, reviewed, trunk: trunkArg, cwd = process.cwd() }) {
   if (!branch || !reviewed) throw new LandingError('usage', '--branch and --reviewed are required');
   const { mainRoot, trunk } = repoInfo(repo, trunkArg);
+  homeCheck(mainRoot, cwd, `lessons.mjs land --repo ${mainRoot} --branch ${branch} --reviewed ${reviewed}`);
   const head = must(mainRoot, 'rev-parse', '--verify', `refs/heads/${branch}`);
   const rev = git(mainRoot, 'rev-parse', '--verify', `${reviewed}^{commit}`);
   if (!rev.ok) throw new LandingError('unknown-reviewed', `${reviewed} is not a commit in ${mainRoot}`);
@@ -137,7 +140,24 @@ export function land({ repo, branch, reviewed, trunk: trunkArg }) {
   if (!git(mainRoot, 'merge-base', '--is-ancestor', head, trunk).ok) throw new LandingError('not-landed', `${trunk} does not contain ${head.slice(0, 7)}`);
   must(mainRoot, 'branch', '-D', branch);
   return { landed: true, repo: mainRoot, trunk, from: before, to: head, removed: { branch, worktree: wt || null },
-    next: [`git -C ${mainRoot} push origin ${trunk}`, 'factory update --all'] };
+    next: landNext(mainRoot, trunk) };
+}
+
+// A land ends at its own repo's push. Consumers pull at their next session start; the one exception
+// is a source repo that installs bundles into itself, which refreshes its own copies.
+export function landNext(mainRoot, trunk) {
+  const next = [`git -C ${mainRoot} push origin ${trunk}`];
+  if (existsSync(join(mainRoot, '.agents', 'factory-metadata', 'skills-lock.json'))) next.push(`factory update --to ${mainRoot}`);
+  return next;
+}
+
+// Throws wrong-session unless the shell's repo is the source repo.
+export function homeCheck(mainRoot, cwd, then) {
+  let here = null;
+  try { here = repoInfo(cwd, 'unused').mainRoot; } catch {}
+  if (here && realpathSync(here) === realpathSync(mainRoot)) return;
+  throw new LandingError('wrong-session', `this session's repo is ${here || `not a repo (${cwd})`}, not ${mainRoot}; a session writes only its own repo`,
+    { fix: `start a session in the source repo (cd ${mainRoot} && <your agent CLI>), then run ${then} there` });
 }
 
 // Patterns of internal data that may never land in a shared, generic bundle. Each installed

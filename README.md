@@ -158,7 +158,7 @@ fingerprint → ~/.agents/factory/lessons-index.jsonl
 "We've seen 'X' 3 times across 2 repos. Promote to core?"  promote / not now / never
         │ promote
         ▼
-commit on a local branch in factory-core → you review → factory update --all
+lesson branch in factory-core → a session started there reviews, lands, pushes → consumers pull at their next session start
 ```
 
 - There's no schedule. The prompt appears at the end of a reflect run, at most 3 per session.
@@ -200,7 +200,7 @@ A skill read earlier in a session stays in that session's context, so the notice
 
 Both harnesses pass the hook's stdout to the model on `UserPromptSubmit` (checked live in each, 2026-11-09). In Codex, two things differ. `codex exec` runs no user hooks, so only interactive sessions hear about updates. And hooks don't inherit `FACTORY_HOME`, so a hook always reads `~/.agents/factory`.
 
-It checks only the repo the session starts in. A skill is behind when a commit after its `sourceRev` touched its directory in the bundle's repo, and a bundle skill the repo lacks counts as new. There's no hashing. When a source repo's HEAD or the lock changed, it runs one `git log` per source repo. Otherwise it answers from `~/.agents/factory/status-cache.json` without spawning git. `tests/guardrails/status.guard.mjs` holds those limits. Uncommitted bundle edits don't count, and `doctor`'s hash check still catches them. In a linked worktree of a local-only install, it also says when the worktree has no links to the installed skills yet (a new worktree never does) and gives the `factory link` command. As a hook it says so once per worktree, including one the session moves into after it starts. At a session start the hook also names each `factory-reflect` lesson branch still waiting for review: `lessons.mjs start` records them in `~/.agents/factory/lesson-branches.jsonl`, and the hook reads their refs without spawning git.
+It checks only the repo the session starts in. A skill is behind when a commit after its `sourceRev` touched its directory in the bundle's repo, and a bundle skill the repo lacks counts as new. There's no hashing. When a source repo's HEAD or the lock changed, it runs one `git log` per source repo. Otherwise it answers from `~/.agents/factory/status-cache.json` without spawning git. `tests/guardrails/status.guard.mjs` holds those limits. Uncommitted bundle edits don't count, and `doctor`'s hash check still catches them. In a linked worktree of a local-only install, it also says when the worktree has no links to the installed skills yet (a new worktree never does) and gives the `factory link` command. As a hook it says so once per worktree, including one the session moves into after it starts. At a session start the hook also names each `factory-reflect` lesson branch still waiting for review (in its own repo it says to land them; elsewhere it names the repo to start a session in): `lessons.mjs start` records them in `~/.agents/factory/lesson-branches.jsonl`, and the hook reads their refs without spawning git.
 
 `install` does the following:
 

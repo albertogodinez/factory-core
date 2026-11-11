@@ -61,12 +61,12 @@ test('land fast-forwards the reviewed head, removes the worktree and branch, and
     assert.equal(listed.length, 1);
     assert.deepEqual(listed[0].commits.map((c) => c.replace(/^\S+ /, '')), ['lesson two', 'lesson one']);
     assert.equal(listed[0].worktree, s.worktree);
-    const out = land({ repo: r.root, branch: s.branch, reviewed: head, trunk: 'main' });
+    const out = land({ repo: r.root, branch: s.branch, reviewed: head, trunk: 'main', cwd: r.root });
     assert.equal(out.to, head);
     assert.equal(git(r.root, 'rev-parse', 'main'), head);
     assert.ok(!existsSync(s.worktree));
     assert.equal(git(r.root, 'branch', '--list', 'lesson/*'), '');
-    assert.deepEqual(out.next, [`git -C ${r.root} push origin main`, 'factory update --all']);
+    assert.deepEqual(out.next, [`git -C ${r.root} push origin main`], 'the land ends at its own push; consumers pull');
     assert.deepEqual(open({ repos: [r.root] }), []);
   } finally { r.done(); }
 });
@@ -77,13 +77,13 @@ test('land refuses a branch that changed after review, and one whose trunk moved
     const s = start({ repo: r.root, slug: 'b', date: '2026-11-10', trunk: 'main' });
     const reviewed = commit(s.worktree, 'skill.md', 'two\n', 'lesson');
     commit(s.worktree, 'extra.md', 'x\n', 'sneaked in after review');
-    assert.throws(() => land({ repo: r.root, branch: s.branch, reviewed, trunk: 'main' }), { code: 'changed-since-review' });
+    assert.throws(() => land({ repo: r.root, branch: s.branch, reviewed, trunk: 'main', cwd: r.root }), { code: 'changed-since-review' });
     git(s.worktree, 'reset', '-q', '--hard', reviewed);
     commit(r.root, 'other.md', 'o\n', 'trunk moved');
-    assert.throws(() => land({ repo: r.root, branch: s.branch, reviewed, trunk: 'main' }), { code: 'trunk-moved' });
+    assert.throws(() => land({ repo: r.root, branch: s.branch, reviewed, trunk: 'main', cwd: r.root }), { code: 'trunk-moved' });
     // A clean rebase keeps the reviewed change, so it lands without a second review.
     git(s.worktree, 'rebase', '-q', 'main');
-    const out = land({ repo: r.root, branch: s.branch, reviewed, trunk: 'main' });
+    const out = land({ repo: r.root, branch: s.branch, reviewed, trunk: 'main', cwd: r.root });
     assert.notEqual(out.to, reviewed);
     assert.equal(git(r.root, 'show', 'main:skill.md'), 'two');
   } finally { r.done(); }
@@ -96,7 +96,7 @@ test('land moves trunk by ref when no worktree has it checked out', () => {
     writeFileSync(join(r.root, 'wip.txt'), 'uncommitted\n');
     const s = start({ repo: r.root, slug: 'c', date: '2026-11-10', trunk: 'main' });
     const head = commit(s.worktree, 'skill.md', 'three\n', 'lesson');
-    land({ repo: r.root, branch: s.branch, reviewed: head, trunk: 'main' });
+    land({ repo: r.root, branch: s.branch, reviewed: head, trunk: 'main', cwd: r.root });
     assert.equal(git(r.root, 'rev-parse', 'main'), head);
     assert.equal(git(r.root, 'branch', '--show-current'), 'busy', 'the busy checkout keeps its branch and its edits');
     assert.ok(existsSync(join(r.root, 'wip.txt')));
@@ -109,9 +109,40 @@ test('the CLI reports a refusal as JSON with exit 1', () => {
     const s = start({ repo: r.root, slug: 'd', date: '2026-11-10', trunk: 'main' });
     const reviewed = commit(s.worktree, 'skill.md', 'x\n', 'l');
     writeFileSync(join(s.worktree, 'dirty.md'), 'd\n');
-    const p = spawnSync(process.execPath, [LESSONS, 'land', '--repo', r.root, '--branch', s.branch, '--reviewed', reviewed, '--trunk', 'main'], { encoding: 'utf8', env: ENV });
+    const p = spawnSync(process.execPath, [LESSONS, 'land', '--repo', r.root, '--branch', s.branch, '--reviewed', reviewed, '--trunk', 'main'], { cwd: r.root, encoding: 'utf8', env: ENV });
     assert.equal(p.status, 1, p.stderr);
     assert.equal(JSON.parse(p.stdout).error, 'uncommitted');
+  } finally { r.done(); }
+});
+
+test('land refuses outside its home repo and names the session to start', () => {
+  const r = repo(), other = repo();
+  try {
+    const s = start({ repo: r.root, slug: 'e', date: '2026-11-10', trunk: 'main' });
+    const head = commit(s.worktree, 'skill.md', 'e\n', 'lesson');
+    for (const cwd of [other.root, other.dir]) {
+      assert.throws(() => land({ repo: r.root, branch: s.branch, reviewed: head, trunk: 'main', cwd }),
+        (e) => e.code === 'wrong-session' && e.fix.includes(`cd ${r.root} && `) && e.fix.includes(`--branch ${s.branch}`));
+    }
+    assert.notEqual(git(r.root, 'rev-parse', 'main'), head, 'nothing landed');
+    const p = spawnSync(process.execPath, [LESSONS, 'land', '--repo', r.root, '--branch', s.branch, '--reviewed', head, '--trunk', 'main'], { cwd: other.root, encoding: 'utf8', env: ENV });
+    assert.equal(p.status, 1, p.stderr);
+    assert.equal(JSON.parse(p.stdout).error, 'wrong-session');
+    // From the lesson worktree itself, the session is in the source repo.
+    land({ repo: r.root, branch: s.branch, reviewed: head, trunk: 'main', cwd: s.worktree });
+  } finally { r.done(); other.done(); }
+});
+
+test('a source repo that installs into itself refreshes its own copies after the push, and nothing else', () => {
+  const r = repo();
+  try {
+    mkdirSync(join(r.root, '.agents', 'factory-metadata'), { recursive: true });
+    writeFileSync(join(r.root, '.agents', 'factory-metadata', 'skills-lock.json'), '{"skills":{}}\n');
+    commit(r.root, '.gitignore', '.worktrees/\n', 'lock');
+    const s = start({ repo: r.root, slug: 'f', date: '2026-11-10', trunk: 'main' });
+    const head = commit(s.worktree, 'skill.md', 'f\n', 'lesson');
+    const out = land({ repo: r.root, branch: s.branch, reviewed: head, trunk: 'main', cwd: r.root });
+    assert.deepEqual(out.next, [`git -C ${r.root} push origin main`, `factory update --to ${r.root}`]);
   } finally { r.done(); }
 });
 

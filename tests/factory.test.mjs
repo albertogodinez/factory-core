@@ -455,10 +455,16 @@ test('status --hook: a session start names the lesson branches that still wait f
   git(src, 'branch', '-f', 'lesson/2026-11-10-a');
   const reg = ['a', 'b', 'gone'].map((n) => JSON.stringify({ root: src, branch: `lesson/2026-11-10-${n}` })).join('\n') + '\n';
   writeFileSync(join(h, 'lesson-branches.jsonl'), reg);
-  const hook = (sid, event) => spawnSync(process.execPath, [FACTORY, 'status', '--hook'], { cwd: d, encoding: 'utf8',
-    input: JSON.stringify({ session_id: sid, hook_event_name: event, cwd: d }),
+  const hook = (sid, event, cwd = d) => spawnSync(process.execPath, [FACTORY, 'status', '--hook'], { cwd, encoding: 'utf8',
+    input: JSON.stringify({ session_id: sid, hook_event_name: event, cwd }),
     env: { ...process.env, FACTORY_HOME: h, FACTORY_CONFIG: '', FACTORY_HARNESSES: 'none' } }).stdout;
-  assert.match(hook('l1', 'SessionStart'), /factory: 2 lesson branch\(es\) wait for review: lesson-src lesson\/2026-11-10-a, lesson-src lesson\/2026-11-10-b\./);
+  // Downstream, the line names the repo to start a session in, never "lands them" from here.
+  const away = hook('l1', 'SessionStart');
+  assert.match(away, /factory: 2 lesson branch\(es\) wait for review in lesson-src: lesson\/2026-11-10-a, lesson\/2026-11-10-b\. Review and land them from a session started there: cd \S*lesson-src && /);
+  assert.doesNotMatch(away, /lists and lands/);
+  // In the branch's own repo, the session lands them.
+  assert.equal(factory(['install', 'core', '--commit'], src, { FACTORY_HOME: h }).status, 0);
+  assert.match(hook('l0', 'SessionStart', src), /factory: 2 lesson branch\(es\) wait for review here: lesson\/2026-11-10-a, lesson\/2026-11-10-b\. factory-reflect lists and lands them/);
   assert.doesNotMatch(hook('l1', 'UserPromptSubmit'), /lesson branch/, 'only at a session start');
   git(src, 'branch', '-D', 'lesson/2026-11-10-a', 'lesson/2026-11-10-b');
   assert.doesNotMatch(hook('l2', 'SessionStart'), /lesson branch/, 'landed or deleted branches drop out');

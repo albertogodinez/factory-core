@@ -12,7 +12,8 @@
 //   lessons.mjs start --repo <dir> --slug <s> a lesson branch and worktree in that source repo
 //   lessons.mjs open [--repo <dir>,<dir>]     open lesson branches (default: every bundle source repo)
 //   lessons.mjs land --repo <dir> --branch <b> --reviewed <sha>
-//                                            fast-forward trunk to a reviewed branch, then clean up
+//                                            fast-forward trunk to a reviewed branch, then clean up;
+//                                            only from a session started in that repo (wrong-session)
 //
 // start, open, land and classify live in landing.mjs. Exit 1 with {error, message} when one refuses.
 //
@@ -148,7 +149,7 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     if (!sourceDir || !existsSync(sourceDir)) return { skill: o.skill, installed: true, bundle: s.bundle, note: `the ${s.bundle} bundle's source isn't on this machine; record the lesson and promote it where that bundle lives` };
     const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: sourceDir, encoding: 'utf8' }).stdout.trim();
     return { skill: o.skill, installed: true, bundle: s.bundle, sourceDir, repo: top || null,
-      next: 'edit the skill there on a local branch lesson/<fingerprint>, commit, have the user review it, then run factory update --all' };
+      next: 'a session started in that repo edits the skill on a lesson branch, reviews and lands it; consumers pull the change at their next session start' };
   }
   if (cmd === 'start') return start({ repo: o.repo || process.cwd(), slug: o.slug, date: o.date, trunk: o.trunk, home: home(env) });
   if (cmd === 'open') {
