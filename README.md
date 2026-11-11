@@ -18,7 +18,7 @@ Design rules:
 | Bundle | Holds | Lives in |
 |---|---|---|
 | `core` | Principles, writing, review, PR, plan, CI watch, recording, feature-map, formal-verify, dev-slot, registry/status, PR mining, the resolver, and the factory kit (reflect, ask, docs-validate, tool-sync, writing-for-agents) | `factory-core` |
-| `launchers` | Opt-in `adapters.sessionLauncher` adapters: `factory-launcher-hc` starts a session in a lesson's source repo with hc, and pins `hc` and `plannotator` | `factory-core` |
+| `launchers` | `adapters.sessionLauncher` adapters, read in place (no repo installs them): `factory-launcher-hc` starts a session in a lesson's source repo with hc, and pins `hc` and `plannotator` | `factory-core` |
 | `expedia` | Tracker adapter (Jira link, `In Review` transition, Confluence), GHE host, the `cc-autoreply` marker policy, dev-slot's `eg-corporate` env profile, the EGDS persona, and the tarmac skills (deploy-preflight, oncall, telemetry, design-capture) | `factory-org` |
 | `trips` | Trip Expert auth, prototype and feature maps, CCUI and shared-ui testing, tarball linking, template blocks, RUM, dev-slot app configs, trips reviewer personas, trips data (mining cohorts, experiment map) | `factory-org` |
 
@@ -57,6 +57,7 @@ Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-archite
 
 ~/.agents/factory/                      # machine-wide, outside every repo
 ├── installs.json                   # onboarded repos, bundles, versions → `factory update --all`
+├── config.json                     # machine adapters: sessionLauncher (factory setup)
 ├── lessons-index.jsonl             # lesson fingerprints across repos, and the never list
 ├── candidates/<core|org>/          # lessons handed to their source repo; triage moves them to done/
 ├── metrics.jsonl                   # counted signals per session (no content), 180 days
@@ -169,7 +170,7 @@ land and push from that session → consumers pull at their next session start
 - A session writes only its home repo plus `~/.agents/factory/`. `lessons.mjs land` refuses anywhere else.
 - Nothing counts to three. Triage reads the whole queue and clusters it; a cluster's size is the count that matters.
 - "Never" is remembered per family (`lessons.mjs decide --decision never`), and triage drops its candidates.
-- `adapters.sessionLauncher` starts the source repo's session (`launchers` bundle); unset, reflect prints the command.
+- `adapters.sessionLauncher` starts the source repo's session. It's machine config (`~/.agents/factory/config.json`), set by `factory setup` when `hc` is on PATH; a repo's `project.json` can override it or set `null`. Unset, reflect prints the command.
 - `/factory-ask` answers "what's waiting" from `lessons.mjs queue`.
 - Every session's end appends counts to `~/.agents/factory/metrics.jsonl` (`metrics.mjs capture`, installed by `factory setup` as a SessionEnd hook, Codex's Stop). A row holds tool counts, command heads, failures, hook blocks, denials, stuck signals, corrections (a heuristic) and the skills used, tagged core or org. It never holds prompts, file contents or tokens: a schema check refuses the row first. It keeps 180 days, up to 5 MB.
 - Cadence: triage ends with `lessons.mjs cadence --ran`, which keeps each scope's mode in `~/.agents/factory/triage-state.json`. It's daily for the first 14 days and stays daily until two quiet weeks pass (at most 2 candidates a week, no facts, no cluster of 3). Then it's weekly until an early trigger brings daily back. The status hook nudges in the source repo only when triage is due, or a trigger fires. `--pin daily|weekly|off` overrides.
@@ -191,7 +192,7 @@ node factory.mjs doctor               # onboarding tests
 node factory.mjs list
 node factory.mjs status               # one line when installed skills are behind their source; else silent
 node factory.mjs status --hook        # as a hook: also tells a running session about updates and edited copies
-node factory.mjs setup [--root <dir>] # a new machine: the status hooks, and installs.json for repos already cloned
+node factory.mjs setup [--root <dir>] # a new machine: the status and metrics hooks, the session launcher, and installs.json for repos already cloned
 ```
 
 `status --hook` reads the hook's JSON from stdin (`session_id`, `hook_event_name`, `cwd`). It answers the session-start check the same way, and on later prompts it tells a running session, once, what changed since it last checked:

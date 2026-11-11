@@ -36,7 +36,7 @@ import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { start, open, land, classify, LandingError } from './landing.mjs';
-import { writeCandidate, queue, markDone, sourceRepo, launchFor, triagePrompt } from './candidates.mjs';
+import { writeCandidate, queue, markDone, sourceRepo, launchFor, triagePrompt, pickLauncher } from './candidates.mjs';
 import { report } from './metrics.mjs';
 import { cadence } from './cadence.mjs';
 
@@ -176,7 +176,11 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     const prompt = triagePrompt(repo, w.file, sources);
     if (from.root && repo === from.root) return { ...out, home: true, next: `you are in the source repo: ${prompt}` };
     // Fast lane: start the source repo's session now. Queue: the status hook there names it.
-    if (w.lane === 'now') return { ...out, launch: launchFor({ launcher: ctx.adapters?.sessionLauncher, skillsDir: o['skills-dir'] || SKILLS_DIR, repo, prompt }) };
+    if (w.lane === 'now') {
+      const launcher = pickLauncher(ctx.adapters, readJson(join(home(env), 'config.json'), {}));
+      const bundle = sources.core && join(dirname(sources.core), 'launchers');
+      return { ...out, launch: launchFor({ launcher, skillsDirs: [o['skills-dir'] || SKILLS_DIR, bundle], repo, prompt }) };
+    }
     return { ...out, next: `queued: the next factory-triage session in ${repo} takes it` };
   }
   if (cmd === 'queue') {

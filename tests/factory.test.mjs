@@ -540,6 +540,20 @@ test('setup on a new machine: adds or repoints the status hooks, keeps other hoo
   assert.equal(readdirSync(claude).filter((f) => f.includes('.bak-')).length, 1, 'a no-op run writes nothing');
 });
 
+test('setup: the session launcher is machine config, set once when hc is on PATH, and never overwritten', async () => {
+  const { machineLauncher } = await import('../bin/factory.mjs');
+  const h = join(t.root, 'home-launcher'), bin = join(t.root, 'bin-hc');
+  mkdirSync(bin, { recursive: true }); writeFileSync(join(bin, 'hc'), '#!/bin/sh\n');
+  assert.match(machineLauncher(h, {}, { PATH: join(t.root, 'nowhere') })[0], /no hc on PATH/);
+  assert.ok(!existsSync(join(h, 'config.json')));
+  assert.match(machineLauncher(h, { dryRun: true }, { PATH: bin })[0], /dry run/);
+  assert.ok(!existsSync(join(h, 'config.json')), 'dry run writes nothing');
+  assert.match(machineLauncher(h, {}, { PATH: bin })[0], /sessionLauncher factory-launcher-hc/);
+  assert.deepEqual(JSON.parse(readFileSync(join(h, 'config.json'), 'utf8')), { adapters: { sessionLauncher: 'factory-launcher-hc' } });
+  writeFileSync(join(h, 'config.json'), JSON.stringify({ adapters: { sessionLauncher: null } }));
+  assert.match(machineLauncher(h, {}, { PATH: bin })[0], /already off/, 'a choice made by hand stays');
+});
+
 test('setup leaves a hook file it cannot parse alone, and --dry-run writes nothing', () => {
   const machine = join(t.root, 'machine2'), claude = join(machine, 'claude'), codex = join(machine, 'codex');
   write(join(claude, 'settings.json'), '{ not json');

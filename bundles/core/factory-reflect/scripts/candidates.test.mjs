@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, realpathSync, writeFileSync, mkdirSync, existsSync
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sourceRepo, triagePrompt } from './candidates.mjs';
+import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sourceRepo, triagePrompt, pickLauncher } from './candidates.mjs';
 
 const LESSONS = join(dirname(fileURLToPath(import.meta.url)), 'lessons.mjs');
 const T0 = Date.parse('2026-11-11T12:00:00Z');
@@ -76,8 +76,18 @@ test('launch: the adapter argv when sessionLauncher names an installed launcher.
     assert.deepEqual(a.argv, ['tool', 'run', '--cwd', '/r/src', 'agent', '/factory-triage /h/c.json']);
     assert.equal(a.command, "tool run --cwd /r/src agent '/factory-triage /h/c.json'");
     assert.deepEqual(launchFor({ skillsDir: skills, repo: '/r/my src', prompt: 'p' }), { via: 'print', command: "cd '/r/my src' && <your agent CLI>", prompt: 'p' });
-    assert.match(launchFor({ launcher: 'missing', skillsDir: skills, repo: '/r', prompt: 'p' }).note, /missing or invalid/);
+    assert.match(launchFor({ launcher: 'missing', skillsDir: skills, repo: '/r', prompt: 'p' }).note, /no valid launcher\.json/);
+    // The launchers bundle itself is the fallback, so no repo has to install the launcher.
+    assert.deepEqual(launchFor({ launcher: 'launch-x', skillsDirs: [join(s.dir, 'none'), skills], repo: '/r', prompt: 'p' }).argv, ['tool', 'run', '--cwd', '/r', 'agent', 'p']);
   } finally { s.done(); }
+});
+
+test('the launcher: the repo\'s setting wins (null turns it off), else the machine\'s', () => {
+  const machine = { adapters: { sessionLauncher: 'factory-launcher-hc' } };
+  assert.equal(pickLauncher({}, machine), 'factory-launcher-hc');
+  assert.equal(pickLauncher({ sessionLauncher: 'other' }, machine), 'other');
+  assert.equal(pickLauncher({ sessionLauncher: null }, machine), null, 'a repo can turn it off');
+  assert.equal(pickLauncher({}, {}), null);
 });
 
 test('the CLI: a downstream fact prints its launch; a pattern queues; queue lists both with the source repo', () => {
@@ -97,6 +107,14 @@ test('the CLI: a downstream fact prints its launch; a pattern queues; queue list
     assert.equal(fact.out.launch.via, 'print');
     assert.equal(fact.out.launch.command, `cd ${src} && <your agent CLI>`);
     assert.equal(fact.out.launch.prompt, `/factory-triage ${fact.out.file}`);
+    // A machine-level launcher, read from the launchers bundle next to core: no repo installs it.
+    mkdirSync(join(src, 'bundles', 'launchers', 'launch-x'), { recursive: true });
+    writeFileSync(join(src, 'bundles', 'launchers', 'launch-x', 'launcher.json'), JSON.stringify({ argv: ['tool', '--cwd', '{repo}', '{prompt}'] }));
+    writeFileSync(join(s.home, 'config.json'), JSON.stringify({ adapters: { sessionLauncher: 'launch-x' } }));
+    const launched = run('candidate', '--kind', 'fact', '--summary', 'machine launch', ...base);
+    assert.equal(launched.out.launch.via, 'launch-x');
+    assert.deepEqual(launched.out.launch.argv.slice(0, 3), ['tool', '--cwd', src]);
+    rmSync(join(s.home, 'config.json'));
     const pat = run('candidate', '--kind', 'pattern', '--summary', 'new rule', ...base);
     assert.equal(pat.out.lane, 'queue');
     assert.ok(!pat.out.launch);
@@ -106,7 +124,7 @@ test('the CLI: a downstream fact prints its launch; a pattern queues; queue list
     assert.equal(home.out.home, true, 'in the source repo itself there is nothing to launch');
     const q = run('queue');
     assert.equal(q.out.repos[0].repo, src);
-    assert.equal(q.out.repos[0].queued, 4);
+    assert.equal(q.out.repos[0].queued, 5);
     assert.equal(q.out.repos[0].start, `cd ${src} && <your agent CLI>`);
     assert.equal(q.out.repos[0].prompt, '/factory-triage', 'no bundle SKILL.md in this fixture');
     // A bundle repo that doesn't install core gets the SKILL.md by path.

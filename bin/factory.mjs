@@ -953,6 +953,18 @@ function hookStatus(opts) {
 }
 
 // ---------- setup ----------
+// The session launcher is a fact of the machine (is hc installed?), so it lives in
+// ~/.agents/factory/config.json, not in each repo; a repo's adapters.sessionLauncher still overrides it.
+// factory-reflect reads launcher.json from the launchers bundle itself, so no repo installs anything.
+export const onPath = (cmd, env = process.env) => (env.PATH || '').split(':').filter(Boolean).some((d) => { try { return statSync(join(d, cmd)).isFile(); } catch { return false; } });
+export function machineLauncher(home, opts = {}, env = process.env) {
+  const f = join(home, 'config.json'), cfg = readJson(f, {});
+  if (cfg.adapters && Object.hasOwn(cfg.adapters, 'sessionLauncher')) return [`machine config: sessionLauncher already ${cfg.adapters.sessionLauncher ?? 'off'} (${f})`];
+  if (!onPath('hc', env)) return ['machine config: no hc on PATH, so lessons print the command to start a session'];
+  cfg.adapters = { ...(cfg.adapters || {}), sessionLauncher: 'factory-launcher-hc' };
+  if (!opts.dryRun) { mkdirSync(home, { recursive: true }); writeJson(f, cfg); }
+  return [`machine config: sessionLauncher factory-launcher-hc, since hc is on PATH (${f}${opts.dryRun ? ', dry run' : ''})`];
+}
 // A new machine. Committed installs arrive with a clone, but the user hooks and installs.json don't,
 // so sessions never hear about updates and `update --all` skips those repos. A hook file is backed up
 // before it's written; a run that changes nothing writes nothing.
@@ -1013,6 +1025,8 @@ function setup(opts) {
     out(`  ${h.harness}: ${changes.join(', ')}${opts.dryRun ? ' (dry run)' : ` (${h.path}${existsSync(`${h.path}.bak-${stamp}`) ? `, backup .bak-${stamp}` : ''})`}`);
   }
   if (codexChanged) out('  codex: trust the new hooks in the next interactive session (codex exec runs no user hooks)');
+
+  for (const l of machineLauncher(toolkitHome(), opts)) out(l);
 
   const root = resolve(opts.root || dirname(FACTORY));
   const known = readJson(join(toolkitHome(), 'installs.json'), { repos: {} }).repos;

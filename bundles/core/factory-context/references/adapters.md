@@ -40,8 +40,8 @@ Read from the **source repo** a lesson lands in (`resolve.mjs --cwd <repo>`), no
 
 ## sessionLauncher
 
-Read from the repo the session runs in (it's per machine, so it fits a local-only `project.json`). `factory-reflect` uses it to hand a fact candidate to its source repo: `lessons.mjs candidate` prints the launch.
+A fact of the machine, not of a repo: `~/.agents/factory/config.json` holds it (`{"adapters": {"sessionLauncher": "factory-launcher-hc"}}`), and `factory setup` writes it when `hc` is on PATH. A repo's own `adapters.sessionLauncher` overrides it, and `null` turns it off there. `factory-reflect` uses it to hand a fact candidate to its source repo: `lessons.mjs candidate` prints the launch.
 
-- `adapters.sessionLauncher` names an installed skill that ships `launcher.json`: `{"argv": [...]}`, where `{repo}` is the source repo's main checkout and `{prompt}` the prompt the new session starts with. The skill's `tools.json` pins the CLI it runs.
+- The value names a skill that ships `launcher.json`. It's read from the repo's installed skills first, then from the `launchers` bundle beside core, so no repo has to install it. The file is: `{"argv": [...]}`, where `{repo}` is the source repo's main checkout and `{prompt}` the prompt the new session starts with. The skill's `tools.json` pins the CLI it runs.
 - The new session starts in the source repo, so it writes only its own repo. Starting it is the only cross-repo step.
-- Unset, or a launcher that isn't installed: the candidate prints `cd <repo> && <your agent CLI>` and the prompt, for the user to run.
+- Unset, or a launcher with no `launcher.json` in either place: the candidate prints `cd <repo> && <your agent CLI>` and the prompt, for the user to run.
