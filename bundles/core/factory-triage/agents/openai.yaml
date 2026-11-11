@@ -1,0 +1,5 @@
+interface:
+  display_name: "Triage"
+  short_description: "Cluster queued lesson candidates into one reviewed lesson branch"
+policy:
+  allow_implicit_invocation: false

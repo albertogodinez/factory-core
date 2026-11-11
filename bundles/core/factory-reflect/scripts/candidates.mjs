@@ -126,6 +126,14 @@ export function sourceRepo(scope, sources) {
   return null;
 }
 
+// The prompt that starts triage in the source repo: the slash command where factory-triage is
+// installed, else the bundle's SKILL.md by path (a bundle's own repo doesn't install it).
+export function triagePrompt(repo, target, sources = {}) {
+  if (existsSync(join(repo, '.agents', 'skills', 'factory-triage', 'SKILL.md'))) return `/factory-triage ${target}`.trim();
+  const md = sources.core && join(sources.core, 'factory-triage', 'SKILL.md');
+  return md && existsSync(md) ? `Read ${md} and follow it${target ? ` for ${target}` : ''}.` : `/factory-triage ${target}`.trim();
+}
+
 const sh = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${String(s).replace(/'/g, `'\\''`)}'`);
 
 // How to start the source repo's session: the adapter's argv when adapters.sessionLauncher names an

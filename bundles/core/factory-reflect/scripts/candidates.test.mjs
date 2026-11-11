@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, realpathSync, writeFileSync, mkdirSync, existsSync
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sourceRepo } from './candidates.mjs';
+import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sourceRepo, triagePrompt } from './candidates.mjs';
 
 const LESSONS = join(dirname(fileURLToPath(import.meta.url)), 'lessons.mjs');
 const T0 = Date.parse('2026-11-11T12:00:00Z');
@@ -107,7 +107,15 @@ test('the CLI: a downstream fact prints its launch; a pattern queues; queue list
     const q = run('queue');
     assert.equal(q.out.repos[0].repo, src);
     assert.equal(q.out.repos[0].queued, 4);
-    assert.match(q.out.repos[0].start, /factory-triage/);
+    assert.equal(q.out.repos[0].start, `cd ${src} && <your agent CLI>`);
+    assert.equal(q.out.repos[0].prompt, '/factory-triage', 'no bundle SKILL.md in this fixture');
+    // A bundle repo that doesn't install core gets the SKILL.md by path.
+    mkdirSync(join(src, 'bundles', 'core', 'factory-triage'), { recursive: true });
+    writeFileSync(join(src, 'bundles', 'core', 'factory-triage', 'SKILL.md'), '---\nname: factory-triage\n---\n');
+    assert.equal(triagePrompt(src, '/h/c.json', { core: join(src, 'bundles', 'core') }), `Read ${join(src, 'bundles', 'core', 'factory-triage', 'SKILL.md')} and follow it for /h/c.json.`);
+    mkdirSync(join(src, '.agents', 'skills', 'factory-triage'), { recursive: true });
+    writeFileSync(join(src, '.agents', 'skills', 'factory-triage', 'SKILL.md'), 'x');
+    assert.equal(triagePrompt(src, '/h/c.json', { core: join(src, 'bundles', 'core') }), '/factory-triage /h/c.json', 'installed: the slash command');
     assert.equal(q.out.repos[1].queued, 0);
   } finally { s.done(); }
 });

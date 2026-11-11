@@ -4,7 +4,7 @@ Each `##` section stands on its own, so you can lift it into another repo's READ
 
 ## What it is
 
-The agent factory is a set of agent skills that you install into any repo you work in. It works the same way in Claude Code, Codex, Copilot and Cursor. Each repo gets its own copy of the skills it needs, its own config, and its own lessons. A lesson that keeps coming up in several repos can be promoted back into the shared skills, but only after you approve it.
+The agent factory is a set of agent skills that you install into any repo you work in. It works the same way in Claude Code, Codex, Copilot and Cursor. Each repo gets its own copy of the skills it needs, its own config, and its own lessons. A lesson about the shared skills is handed to the repo that owns them, batched with its family, and lands there only after you approve it.
 
 Design rules:
 
@@ -57,7 +57,8 @@ Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-archite
 
 ~/.agents/factory/                      # machine-wide, outside every repo
 ├── installs.json                   # onboarded repos, bundles, versions → `factory update --all`
-├── lessons-index.jsonl             # lesson fingerprints across repos → promotion prompt
+├── lessons-index.jsonl             # lesson fingerprints across repos, and the never list
+├── candidates/<core|org>/          # lessons handed to their source repo; triage moves them to done/
 └── cache/<repo-id>/                # state for zero-config repos
 ```
 
@@ -150,24 +151,25 @@ Every accepted reflect lesson has a scope:
 The flow:
 
 ```
-reflect run (≤3 accepted) → fix in the repo now
-        │ generic?
+reflect run (≤3 accepted) → repo lessons: fixed in the repo, in the PR that taught them
+        │ core or org?
         ▼
-fingerprint → ~/.agents/factory/lessons-index.jsonl
-        │ 3rd occurrence (any repos)
+candidate → ~/.agents/factory/candidates/<core|org>/   (pointers to evidence, a draft, fixedWhen)
+        │ fact: launch a session in the source repo now · pattern / harness: queue
         ▼
-"We've seen 'X' 3 times across 2 repos. Promote to core?"  promote / not now / never
-        │ promote
+/factory-triage in the source repo → clusters → one lesson branch, one commit per cluster
+        │ review gate
         ▼
-lesson branch in factory-core → a session started there reviews, lands, pushes → consumers pull at their next session start
+land and push from that session → consumers pull at their next session start
 ```
 
-- There's no schedule. The prompt appears at the end of a reflect run, at most 3 per session.
-- "Never" is remembered per fingerprint. Backlog entries expire after 90 days without a new occurrence.
-- A lesson that edits a core skill is labeled core immediately. It still needs 3 occurrences, or you can say "promote now".
-- The only writes outside the current repo go to `~/.agents/factory/` and, when you promote, your local factory-core.
+- A session writes only its home repo plus `~/.agents/factory/`. `lessons.mjs land` refuses anywhere else.
+- Nothing counts to three. Triage reads the whole queue and clusters it; a cluster's size is the count that matters.
+- "Never" is remembered per family (`lessons.mjs decide --decision never`), and triage drops its candidates.
+- `adapters.sessionLauncher` starts the source repo's session (`launchers` bundle); unset, reflect prints the command.
+- `/factory-ask` answers "what's waiting" from `lessons.mjs queue`.
 
-PR mining works the same way. Each repo's `project.json` holds its reviewer cohort. Patterns found in several repos reach core through the same prompt.
+PR mining works the same way. Each repo's `project.json` holds its reviewer cohort. Patterns found in several repos reach core as candidates.
 
 ## The factory CLI
 

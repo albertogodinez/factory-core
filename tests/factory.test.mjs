@@ -482,6 +482,8 @@ test('status --hook: queued candidates ask for triage in the source repo, and ar
   const sources = { core: join(src, 'bundles', 'core'), launchers: join(src, 'bundles', 'core') };
   write(join(h, 'candidates', 'org', '3-c.json'), { kind: 'fact', scope: 'org', summary: 'c', from: { root: other }, at });
   assert.deepEqual(candidateLines([other], h, sources).slice(1), ["factory: 1 lesson candidate(s) from this repo are queued for the org source repo. They're reviewed there."], 'a bundle in core\'s repo is not the org repo');
+  assert.deepEqual(candidateLines([src], h, sources), [`factory: 2 core lesson candidate(s) wait here (oldest 2 days): factory-triage reviews them (${join(src, 'bundles', 'core', 'factory-triage', 'SKILL.md')}).`]);
+  write(join(src, '.agents', 'skills', 'factory-triage', 'SKILL.md'), 'x');
   assert.deepEqual(candidateLines([src], h, sources), ['factory: 2 core lesson candidate(s) wait here (oldest 2 days): /factory-triage reviews them.']);
   assert.deepEqual(candidateLines([shop], h, sources), [`factory: 1 lesson candidate(s) from this repo are queued for cand-src. They're reviewed there: cd ${src} && <your agent CLI>, then /factory-triage.`]);
   assert.deepEqual(candidateLines([join(t.root, 'elsewhere')], h, sources), [], 'a repo with no handoffs hears nothing');

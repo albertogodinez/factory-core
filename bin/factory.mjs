@@ -837,7 +837,9 @@ export function candidateLines(here, home = toolkitHome(), sources = bundleSourc
     const days = (c) => Math.floor((Date.now() - (Date.parse(c.at) || Date.now())) / 864e5);
     if (root && here.includes(root)) {
       const oldest = Math.max(...items.map(days));
-      lines.push(`factory: ${items.length} ${scope} lesson candidate(s) wait here (oldest ${oldest} day${oldest === 1 ? '' : 's'}): /factory-triage reviews them.`);
+      const installed = existsSync(join(root, '.agents', 'skills', 'factory-triage', 'SKILL.md')) || !sources.core;
+      const how = installed ? '/factory-triage reviews them' : `factory-triage reviews them (${join(sources.core, 'factory-triage', 'SKILL.md')})`;
+      lines.push(`factory: ${items.length} ${scope} lesson candidate(s) wait here (oldest ${oldest} day${oldest === 1 ? '' : 's'}): ${how}.`);
       continue;
     }
     const mine = items.filter((c) => here.includes(c.from?.root));

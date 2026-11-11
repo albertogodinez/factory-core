@@ -145,7 +145,7 @@ In the persona's rules directory, from `rules/_template.md`: `title`; `impact` (
 
 ### 3.6 Report results
 
-List the rule files created, totals (reviewed, promoted, skipped), and remind the user to run `factory-review` against the new rules. A pattern that held across several repos is also a lesson: `node .agents/skills/factory-reflect/scripts/lessons.mjs record --scope core --fingerprint <slug> --summary "<one line>" --status proposed` (see `factory-reflect`).
+List the rule files created, totals (reviewed, promoted, skipped), and remind the user to run `factory-review` against the new rules. A pattern that held across several repos is also a core lesson: hand it upstream with `node .agents/skills/factory-reflect/scripts/lessons.mjs candidate --kind pattern --scope core --summary "<one line>" --evidence '[{"pr":"<owner/repo#N>"}]'` (see `factory-reflect` §6).
 
 ## Notes
 

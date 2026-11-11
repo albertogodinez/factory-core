@@ -1,6 +1,6 @@
 ---
 name: factory-reflect
-description: 'Run a retrospective on a session or PR and turn at most three durable lessons into structure: an automated check, a factory-review rule, a skill edit, a glossary term, or an AGENTS.md pointer. Three reviewer subagents mine the evidence, a synthesizer filters one-offs and labels each lesson repo, core or org, and a lesson seen three times across repos is offered for promotion into the shared skills. Use for /factory-reflect, "reflect", "retro", or a learnings phase.'
+description: 'Run a retrospective on a session or PR and turn at most three durable lessons into structure: an automated check, a factory-review rule, a skill edit, a glossary term, or an AGENTS.md pointer. Three reviewer subagents mine the evidence, a synthesizer filters one-offs and labels each lesson repo, core or org, and a core or org lesson is handed to the repo that owns it as a candidate for triage. Use for /factory-reflect, "reflect", "retro", or a learnings phase.'
 ---
 
 # Reflect
@@ -57,7 +57,7 @@ Pick the highest row that works. Mechanical beats judgement. Judgement goes to r
 | A skill the session used had a missing step, a stale command or a wrong fact | Edit that skill | Its `SKILL.md` or `references/`; see the installed-copy rule below |
 | A skill existed but didn't trigger | Tune its description | That skill's frontmatter `description` |
 | A recurring workflow with no home | New skill | `.agents/skills/<name>/`, self-contained |
-| A feature gotcha, code anchor or driving step | Feature map entry | `factory-feature-map`. A map installed from a bundle is scope `org`: its entry lands on the lesson branch now, with no promotion wait |
+| A feature gotcha, code anchor or driving step | Feature map entry | `factory-feature-map`. A map installed from a bundle is scope `org`: its entry is a `fact` candidate |
 | A domain term the agent misread | Glossary term | The layer where it's true (factory-glossary's "Add or change a term"): the repo's `GLOSSARY.md` for a repo-only term, else a shared layer (scope `core` or `org`). A team repo with a local install keeps no glossary file. When `lookup.mjs --dupes` finds the term in two places, propose one entry in the shared layer and deleting the copies |
 | The agent couldn't find a file, doc or command | One-line navigation pointer | The closest scoped `AGENTS.md` or `CLAUDE.md` |
 | A decision with lasting rationale | Rationale, not structure | The PR body, the commit message, or the repo's wiki |
@@ -66,7 +66,7 @@ Pick the highest row that works. Mechanical beats judgement. Judgement goes to r
 
 Repo-local knowledge stays in its repo. In a local-only install, where the repo belongs to a team, an edit to a tracked file is a product change: it goes through the repo's normal branch and PR. The lesson log itself lives in `stateRoot`, which is never committed.
 
-## 6. Record, apply after approval, and offer promotion
+## 6. Record, apply after approval, and hand off upstream
 
 Present the synthesizer's output with its routed destinations, and wait for the user to pick rows; they may redirect a routing. When this skill runs as a background subagent, return the proposals instead and let the caller ask.
 
@@ -95,22 +95,7 @@ For each approved row:
    - **lane `now`**: with `launch.argv`, run it; it starts a session in the source repo with the triage prompt. With `launch.via: print`, give the user `launch.command` and `launch.prompt` (they can run it with `!`). **lane `queue`**: the status hook in the source repo names it; a `harness` candidate also gets an Inbox notice (thread `factory lessons`, when `adapters.lessonInbox` is set), since it touches the user's config.
    - **`home: true`**: this session is in the source repo, so run `/factory-triage` on it here.
 
-Then ask about whatever is due, at most three prompts per session:
-
-```bash
-node .agents/skills/factory-reflect/scripts/lessons.mjs due --session <session id>
-```
-
-Show each `prompt` line as it comes ("We've seen 'X' 3 times across 2 repos. Promote it to core? [promote / not now / never]"), and record the answer:
-
-```bash
-node .agents/skills/factory-reflect/scripts/lessons.mjs decide --fingerprint <slug> --decision promote|not-now|never --session <session id>
-```
-
-- **never** is remembered, and that fingerprint is never offered again.
-- **not now** waits for another occurrence.
-- Entries expire after 90 days without a new occurrence.
-- **promote**: write it as a candidate (step 3) with `--now`. Writes outside this repo go only to `~/.agents/factory/`.
+A lesson the user rejects for good is a **never**: `lessons.mjs decide --fingerprint <slug> --decision never`. `known` lists it, and triage drops its family from then on.
 
 ### Landing a lesson branch
 
@@ -135,7 +120,8 @@ A short list, no preamble:
 - **Edits made**: `<destination path>`: what changed, one line each. For a check, the command that proved it red.
 - **Lesson branches**: each `lesson/*` branch still open in a source repo, with the repo path and a one-line diff summary.
 - **Edits proposed** (not yet approved): `<destination path>`: one line each.
-- **Recorded**: each fingerprint with its scope and occurrence count; any promotion answers given.
+- **Recorded**: each fingerprint with its scope and occurrence count.
+- **Candidates**: each one with its lane, and the launch command or the repo where it queued.
 - **Backlog**: one line each, with the suggested mechanism.
 - **Dropped**: one line per rejected finding, with the synthesizer's reason.
 

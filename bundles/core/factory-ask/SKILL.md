@@ -62,6 +62,6 @@ Name a step only when the table has a skill for it, in this order; skip the rest
 7. Watch CI and bot comments: `factory-pr-ci-monitor`.
 8. Learn from it: `factory-reflect`.
 
-Mid-session: `handoff` (to another agent or harness), `wait-what` (the last reply didn't land), `principle-*` skills (steer with a principle). Repo upkeep: `factory-repo-status`, `factory-repo-register`, `factory-pr-mining`.
+Mid-session: `handoff` (to another agent or harness), `wait-what` (the last reply didn't land), `principle-*` skills (steer with a principle). Repo upkeep: `factory-repo-status`, `factory-repo-register`, `factory-pr-mining`. In a repo that owns skills: `factory-triage` (queued lesson candidates).
 
 Test: `node --test bundles/core/factory-ask/scripts/routes.test.mjs`.
