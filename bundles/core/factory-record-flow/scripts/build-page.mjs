@@ -14,6 +14,10 @@
 // outside any <style> element, since each expands to a full <style> block.
 // Exit 0: written. 1: a placeholder's file is missing. 2: usage. 3: a placeholder is misplaced.
 // Nothing is written on 1 or 3.
+const trackOutput = !process.env.FACTORY_RUN_ID ? () => {}
+  : await import('../../factory-teardown/scripts/producer.mjs').then(m => m.trackOutput).catch(e => {
+    throw new Error('FACTORY_RUN_ID requires factory-teardown; install it or unset the run binding', { cause: e });
+  });
 import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -93,6 +97,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
     for (const m of missing) console.error(`✗ no file for ${m}`);
     process.exit(1);
   }
+  trackOutput(out);
   writeFileSync(out, html);
   console.log(`✓ ${out} (${(statSync(out).size / 1e6).toFixed(1)} MB)`);
 }

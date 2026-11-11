@@ -11,6 +11,8 @@ question, and Playwright's WebKit is a patched engine build, not Safari. This sk
 Safari.app on this Mac through Apple's `safaridriver`, once per run: open, probe, screenshot,
 close. Run it when a change depends on the engine, not as a default step of every validation.
 
+Depends on `factory-context` and, for managed evidence, `factory-teardown`.
+
 `<stateRoot>` is `node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoot`.
 
 ```bash
@@ -69,3 +71,11 @@ Done when every selector the change touches has a Safari value next to its Chrom
   The user's own Safari windows are left alone.
 - iOS Safari is a different check: `safaridriver` takes `safari:deviceType` for the Simulator
   (needs Xcode). Mobile scrollbars are always overlay.
+
+## Managed screenshots
+
+For a validation run, begin with `factory-teardown`, export its ID as `FACTORY_RUN_ID` and the
+resolver state root as `FACTORY_STATE_ROOT`, and put `--shot` inside the returned run `dir`.
+The script registers that screenshot as evidence before writing it. Without this binding,
+caller-selected output paths remain legacy unregistered files and are never GC candidates.
+Finish and tear down the run after all consumers finish; the screenshot is retained.

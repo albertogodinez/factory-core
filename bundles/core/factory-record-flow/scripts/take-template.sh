@@ -37,8 +37,28 @@ done
 cd "$(git rev-parse --show-toplevel)" || exit 1
 source .agents/skills/factory-record-flow/scripts/record-lib.sh
 [ -z "$EXTRA_LIB" ] || source "$EXTRA_LIB"
-STATE=$(node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoot) || exit 1
-mkdir -p "$STATE/recordings"
+STATE=${FACTORY_STATE_ROOT:-}
+if [ -z "$STATE" ]; then
+  STATE=$(node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoot) || exit 1
+fi
+case "$STATE" in /*) ;; *) echo "Invalid state root" >&2; exit 2 ;; esac
+export FACTORY_STATE_ROOT="$STATE"
+LIFECYCLE=.agents/skills/factory-teardown/scripts/lifecycle.mjs
+if [ -f "$LIFECYCLE" ]; then
+  if [ -n "${FACTORY_RUN_ID:-}" ]; then
+    RUN=$(node "$LIFECYCLE" show --run "$FACTORY_RUN_ID" --state-root "$STATE") || exit 1
+  else
+    RUN=$(node "$LIFECYCLE" begin --kind recording --state-root "$STATE") || exit 1
+  fi
+  FACTORY_RUN_ID=$(printf '%s' "$RUN" | jq -er '.id | strings | select(length > 0)') || exit 1
+  STATE=$(printf '%s' "$RUN" | jq -er '.dir | strings | select(startswith("/"))') || exit 1
+  export FACTORY_RUN_ID
+  echo "Recording run: $FACTORY_RUN_ID; keep it active through encoding/upload, then release inputs and teardown." >&2
+elif [ -n "${FACTORY_RUN_ID:-}" ]; then
+  echo "FACTORY_RUN_ID requires factory-teardown; install it or unset the run binding" >&2
+  exit 2
+fi
+mkdir -p "$STATE/recordings" || exit 1
 OUT=$STATE/recordings/$LABEL
 
 running() { ab snapshot | grep -q -E "$BUSY_RE"; }
@@ -77,5 +97,8 @@ ab wait --fn "$RESULTS_JS" --timeout "$RESULTS_TIMEOUT_MS" >/dev/null || record_
 TR=$(now)
 sleep 5
 record_end
+if [ -n "${FACTORY_RUN_ID:-}" ]; then
+  node .agents/skills/factory-teardown/scripts/producer.mjs "$OUT.json" intermediate --pending || exit 1
+fi
 jq -n --arg label "$LABEL" --arg target "$TARGET_LINE" --argjson t0 "$T0" --argjson click "$TC" --argjson results "$TR" \
   '{label:$label,target:$target,t0:$t0,click:$click,results:$results}' | tee "$OUT.json"

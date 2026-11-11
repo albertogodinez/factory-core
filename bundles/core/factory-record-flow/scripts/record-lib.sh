@@ -70,10 +70,60 @@ settle() {
   return 1
 }
 
+_record_restore_traps() {
+  trap - EXIT HUP INT TERM
+  eval "$_RECORD_PREV_EXIT"
+  eval "$_RECORD_PREV_HUP"
+  eval "$_RECORD_PREV_INT"
+  eval "$_RECORD_PREV_TERM"
+}
+
+_record_discard() {
+  [ "${_RECORD_ACTIVE:-0}" = 1 ] || return 0
+  _RECORD_ACTIVE=0
+  if [ "${_RECORD_STARTED:-0}" = 1 ]; then ab record stop >/dev/null 2>&1 || true; fi
+  rm -f -- "${_RECORD_FILES[@]}"
+}
+
+_record_status() { return "$1"; }
+
+# trap -p emits shell-quoted code; decode it, then give the caller's trap its original status.
+_record_run_trap() {
+  local saved=$1 status=$2 command
+  [ -n "$saved" ] || return 0
+  saved=${saved#trap -- }; saved=${saved% *}
+  eval "command=$saved"
+  if _record_status "$status"; then eval "$command"; else eval "$command"; fi
+}
+
+_record_exit() {
+  local status=$1
+  _record_discard || true
+  _record_restore_traps
+  _record_run_trap "$_RECORD_PREV_EXIT" "$status"
+  return "$status"
+}
+
+_record_signal() {
+  local status=$1 saved=$2
+  _record_discard || true
+  _record_restore_traps
+  _record_run_trap "$saved" "$status"
+  exit "$status"
+}
+
+_record_begin_failed() {
+  local status=$1
+  _record_discard || true
+  _record_restore_traps
+  return "$status"
+}
+
 # record_begin <path> [WxH]: set the viewport (WxH, else VIEWPORT_W/H, else 1440x900), then start.
 # Set the viewport here, not before: this call overwrites whatever was set earlier.
 record_begin() {
-  local out=${1:?output path} size=${2:-} w h
+  local out=${1:?output path} size=${2:-} w h file status
+  [ "${_RECORD_ACTIVE:-0}" != 1 ] || { echo "✗ recording already active" >&2; return 2; }
   require_recording_support || return
   case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
   [ -d "$(dirname "$out")" ] || { echo "✗ record_begin: directory $(dirname "$out") does not exist" >&2; return 2; }
@@ -85,20 +135,48 @@ record_begin() {
   else
     w=${VIEWPORT_W:-1440}; h=${VIEWPORT_H:-900}
   fi
-  ab set viewport "$w" "$h" >/dev/null
-  ab mouse move 700 450 >/dev/null
-  ab record start "$out" --cursor --fps 30
-  # `record start` returns about 2.1 s after capture begins, so the take's 0 s is that much earlier.
-  RECORD_T0=$(python3 -c "import time;print(f'{time.time() - 2.1:.3f}')")
   RECORD_MARKS="$out.marks"
-  : > "$RECORD_MARKS"
   RECORD_CAPTIONS="${out%.*}.captions.jsonl"
-  : >"$RECORD_CAPTIONS"
+  RECORD_TAKE="${out%.*}.take.json"
+  for file in "$out" "$RECORD_MARKS" "$RECORD_CAPTIONS" "$RECORD_TAKE"; do
+    [ ! -e "$file" ] && [ ! -L "$file" ] || { echo "✗ recording output already exists: $file" >&2; return 2; }
+  done
+  if [ -n "${FACTORY_RUN_ID:-}" ]; then
+    for file in "$out" "$RECORD_MARKS" "$RECORD_CAPTIONS" "$RECORD_TAKE"; do
+      node "$(dirname "${BASH_SOURCE[0]}")/../../factory-teardown/scripts/producer.mjs" "$file" intermediate --pending || return
+    done
+  fi
+  _RECORD_PREV_EXIT=$(trap -p EXIT)
+  _RECORD_PREV_HUP=$(trap -p HUP)
+  _RECORD_PREV_INT=$(trap -p INT)
+  _RECORD_PREV_TERM=$(trap -p TERM)
+  trap '_record_exit "$?"' EXIT
+  trap '_record_signal 129 "$_RECORD_PREV_HUP"' HUP
+  trap '_record_signal 130 "$_RECORD_PREV_INT"' INT
+  trap '_record_signal 143 "$_RECORD_PREV_TERM"' TERM
+  _RECORD_FILES=()
+  _RECORD_STARTED=0
+  for file in "$out" "$RECORD_MARKS" "$RECORD_CAPTIONS" "$RECORD_TAKE"; do
+    if (set -C; : > "$file") 2>/dev/null; then
+      _RECORD_FILES+=("$file")
+      _RECORD_ACTIVE=1
+    else
+      echo "✗ cannot reserve recording output: $file" >&2
+      _record_begin_failed 2
+      return $?
+    fi
+  done
+  ab set viewport "$w" "$h" >/dev/null || { _record_begin_failed "$?"; return $?; }
+  ab mouse move 700 450 >/dev/null || { _record_begin_failed "$?"; return $?; }
+  ab record start "$out" --cursor --fps 30 || { _record_begin_failed "$?"; return $?; }
+  _RECORD_STARTED=1
+  # `record start` returns about 2.1 s after capture begins, so the take's 0 s is that much earlier.
+  RECORD_T0=$(python3 -c "import time;print(f'{time.time() - 2.1:.3f}')") || { _record_begin_failed "$?"; return $?; }
   # Which build this take shows, so "is the before really main?" is one jq away.
   # RECORD_APP_DIR is the worktree the server runs from (a slot's worktree).
   python3 -c 'import json,sys; json.dump({"url": sys.argv[1], "appDir": sys.argv[2] or None, "appSha": sys.argv[3] or None}, open(sys.argv[4], "w"))' \
     "$(ab get url 2>/dev/null)" "${RECORD_APP_DIR:-}" \
-    "$([ -n "${RECORD_APP_DIR:-}" ] && git -C "$RECORD_APP_DIR" rev-parse HEAD 2>/dev/null)" "${out%.*}.take.json"
+    "$([ -n "${RECORD_APP_DIR:-}" ] && git -C "$RECORD_APP_DIR" rev-parse HEAD 2>/dev/null)" "$RECORD_TAKE" || { _record_begin_failed "$?"; return $?; }
   sleep 2
 }
 
@@ -142,14 +220,18 @@ caption() {
 }
 
 record_end() {
+  [ "${_RECORD_ACTIVE:-0}" = 1 ] || { echo "✗ no recording active" >&2; return 2; }
   sleep 2
-  ab record stop
+  ab record stop || { _record_begin_failed "$?"; return $?; }
+  _RECORD_ACTIVE=0
+  _RECORD_STARTED=0
+  _record_restore_traps
 }
 
 # Stop the take and fail, so a bad take is never kept by accident.
 record_abort() {
   echo "✗ $1" >&2
-  ab record stop >/dev/null 2>&1 || true
+  _record_discard || true
   exit 1
 }
 

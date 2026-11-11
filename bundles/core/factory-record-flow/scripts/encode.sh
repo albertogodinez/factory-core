@@ -15,6 +15,11 @@ if [ "${4:-}" = --captions ]; then CAPTIONS=${5:?--captions needs a file}; fi
 command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || { echo "✗ ffmpeg/ffprobe not installed" >&2; exit 2; }
 mkdir -p "$OUT_DIR"
 MP4="$OUT_DIR/$NAME.mp4"
+if [ -n "${FACTORY_RUN_ID:-}" ]; then
+  for output in "$MP4" "$OUT_DIR/contact-sheet.jpg" "$OUT_DIR/contact-sheet.txt"; do
+    node "$(dirname "$0")/../../factory-teardown/scripts/producer.mjs" "$output" evidence
+  done
+fi
 
 if [ -n "$CAPTIONS" ]; then
   node "$(dirname "$0")/caption.mjs" --in "$RAW" --captions "$CAPTIONS" --out "$MP4" >/dev/null
@@ -26,6 +31,10 @@ DURATION=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$MP4")
 MARKS="$RAW.marks"
 if [ -s "$MARKS" ]; then
   FRAMES=$(mktemp -d)
+  trap 'status=$?; rm -rf -- "$FRAMES" || echo "✗ failed to remove encoding frames: $FRAMES" >&2; exit "$status"' EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   n=0
   : > "$OUT_DIR/contact-sheet.txt"
   while IFS=$'\t' read -r at label; do
@@ -38,7 +47,6 @@ if [ -s "$MARKS" ]; then
   done < "$MARKS"
   cols=$(( n < 3 ? n : 3 )); rows=$(( (n + 2) / 3 ))
   ffmpeg -y -loglevel error -framerate 1 -i "$FRAMES/%03d.jpg" -vf "tile=${cols}x${rows}:color=white" -frames:v 1 "$OUT_DIR/contact-sheet.jpg"
-  rm -rf "$FRAMES"
 else
   # Six evenly spaced frames, skipping the first and last few percent, tiled 3x2.
   ffmpeg -y -loglevel error -i "$MP4" \

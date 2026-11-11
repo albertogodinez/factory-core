@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { mkdtempSync, rmSync, realpathSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync, rmSync, realpathSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { patchFiles, checkCoverage, prep, importGuide } from './guide.mjs';
@@ -84,5 +84,41 @@ test('import refuses a guide that misses a file, records the model, and passes -
     assert.ok(Number.isInteger(gen.generatedAt));
     importGuide({ worktree: r.dir, guide: p.guide, patch: p.patch, run });
     assert.ok(!calls[1][1].includes('--pr'), 'local: no --pr');
+  } finally { r.done(); }
+});
+
+test('explicit guide output roots get unique directories for repeated same-head reviews', () => {
+  const r = repo();
+  try {
+    const out = join(r.dir, '.out');
+    const first = prep({ worktree: r.dir, base: 'main', out, briefFn: BRIEF });
+    const second = prep({ worktree: r.dir, base: 'main', out, briefFn: BRIEF });
+    assert.notEqual(first.patch, second.patch);
+    assert.equal(readFileSync(first.patch, 'utf8'), readFileSync(second.patch, 'utf8'));
+  } finally { r.done(); }
+});
+
+test('default prep registers owned inputs and successful import preserves guide evidence', () => {
+  const r = repo();
+  try {
+    const meta = join(r.dir, '.agents/factory-metadata'); mkdirSync(meta, { recursive: true });
+    writeFileSync(join(meta, 'project.json'), JSON.stringify({ name: 'fixture', trunk: 'main' }));
+    const p = prep({ worktree: r.dir, base: 'main', briefFn: BRIEF });
+    assert.ok(p.run); assert.ok(existsSync(p.patch));
+    writeFileSync(p.guide, JSON.stringify(guide([sec('a.md', 'new file.md')], ['gone.md'])));
+    importGuide({ worktree: r.dir, guide: p.guide, patch: p.patch, run: () => ({ status: 0, stdout: 'saved' }) });
+    assert.ok(existsSync(p.guide)); assert.ok(!existsSync(p.patch)); assert.ok(!existsSync(p.prompt));
+  } finally { r.done(); }
+});
+
+test('successful guide import remains successful when cleanup is locked', () => {
+  const r = repo();
+  try {
+    const meta = join(r.dir, '.agents/factory-metadata'); mkdirSync(meta, { recursive: true }); writeFileSync(join(meta, 'project.json'), JSON.stringify({ name: 'fixture', trunk: 'main' }));
+    const p = prep({ worktree: r.dir, base: 'main', briefFn: BRIEF });
+    writeFileSync(p.guide, JSON.stringify(guide([sec('a.md', 'new file.md')], ['gone.md'])));
+    const owner = JSON.parse(readFileSync(p.guide + '.run.json')); mkdirSync(join(owner.stateRoot, 'teardown/.lock'));
+    const result = importGuide({ worktree: r.dir, guide: p.guide, patch: p.patch, run: () => ({ status: 0, stdout: 'saved' }) });
+    assert.equal(result.imported, true); assert.match(result.cleanup.error, /locked/); assert.ok(existsSync(p.patch));
   } finally { r.done(); }
 });

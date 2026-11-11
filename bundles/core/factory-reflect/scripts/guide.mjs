@@ -10,10 +10,17 @@
 //
 // The guide's method and schema come from Plannotator (`plannotator inbox call get_guide_brief`),
 // so they follow its version. Prints JSON. node: imports only; plannotator runs locally.
-import { writeFileSync, readFileSync, mkdirSync, realpathSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { writeFileSync, readFileSync, mkdirSync, mkdtempSync, existsSync, realpathSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+const LIFECYCLE = fileURLToPath(new URL('../../factory-teardown/scripts/lifecycle.mjs', import.meta.url));
+function lifecycle(cwd, ...args) {
+  const r = spawnSync(process.execPath, [LIFECYCLE, ...args], { cwd, encoding: 'utf8' });
+  if (r.status !== 0) throw new GuideError('lifecycle-failed', (r.stderr || '').trim());
+  return JSON.parse(r.stdout);
+}
 
 export class GuideError extends Error { constructor(code, message) { super(message); this.code = code; } }
 function git(cwd, ...args) {
@@ -63,10 +70,24 @@ export function prep({ worktree, base, pr, out, briefFn = brief }) {
   const patch = git(wt, 'diff', mergeBase);
   if (!patch.trim()) throw new GuideError('empty-diff', `no changes between ${base} and HEAD in ${wt}`);
   const files = patchFiles(patch);
-  const dir = resolve(out || join(tmpdir(), 'factory-guides'));
-  mkdirSync(dir, { recursive: true });
+  let managed;
+  let dir;
+  if (out) {
+    mkdirSync(resolve(out), { recursive: true });
+    dir = mkdtempSync(join(resolve(out), 'guide-'));
+  } else {
+    managed = lifecycle(wt, 'begin', '--kind', 'review-guide');
+    dir = managed.dir;
+  }
   const id = head.slice(0, 12);
   const patchFile = join(dir, `${id}.patch`), promptFile = join(dir, `${id}.prompt.md`), guideFile = join(dir, `${id}.guide.json`);
+  if (managed) {
+    for (const [file, kind] of [[patchFile, 'intermediate'], [promptFile, 'intermediate'], [guideFile, 'evidence']]) {
+      lifecycle(wt, 'add', '--run', managed.id, '--path', file, '--class', kind);
+    }
+    writeFileSync(`${guideFile}.run.json`, JSON.stringify({ run: managed.id, cwd: wt, stateRoot: managed.stateRoot }));
+    lifecycle(wt, 'add', '--run', managed.id, '--path', `${guideFile}.run.json`, '--class', 'intermediate');
+  }
   writeFileSync(patchFile, patch);
   const b = briefFn();
   const log = git(wt, 'log', '--format=%h %s%n%n%b', `${mergeBase}..HEAD`).trim();
@@ -81,7 +102,7 @@ export function prep({ worktree, base, pr, out, briefFn = brief }) {
     `Write only the guide JSON to \`${guideFile}\`, matching this schema, then stop:\n\n\`\`\`json\n${JSON.stringify(b.output_schema)}\n\`\`\``,
     `\nRules:\n${(b.rules || []).map((r) => `- ${r}`).join('\n')}`,
   ].join('\n'));
-  return { head, base, mergeBase, files: files.length, patch: patchFile, prompt: promptFile, guide: guideFile, target: pr || wt,
+  return { head, base, mergeBase, run: managed?.id || null, files: files.length, patch: patchFile, prompt: promptFile, guide: guideFile, target: pr || wt,
     review: pr ? `plannotator review ${pr} --gate --json` : `plannotator review ${wt} --base ${base} --diff-type merge-base --gate --json` };
 }
 
@@ -96,7 +117,18 @@ export function importGuide({ worktree, guide, patch, pr, model, run = spawnSync
   writeFileSync(guide, JSON.stringify(g, null, 2) + '\n');
   const r = run('plannotator', ['guide', 'import', '--guide', guide, '--patch', patch, ...(pr ? ['--pr', pr] : [])], { cwd: resolve(worktree), encoding: 'utf8' });
   if (r.status !== 0) throw new GuideError('import-failed', (r.stderr || r.stdout || '').trim());
-  return { imported: true, output: (r.stdout || '').trim(), pr: pr || null };
+  let cleanup;
+  if (existsSync(`${guide}.run.json`)) {
+    let owner;
+    try {
+      owner = JSON.parse(readFileSync(`${guide}.run.json`, 'utf8'));
+      const ownedDir = resolve(owner.stateRoot, 'teardown', 'runs', owner.run, 'files');
+      if (dirname(resolve(guide)) !== ownedDir) throw new Error('guide ownership metadata does not match its directory');
+      lifecycle(owner.cwd, 'finish', '--run', owner.run, '--state-root', owner.stateRoot, '--status', 'complete');
+      cleanup = lifecycle(owner.cwd, 'teardown', '--run', owner.run, '--state-root', owner.stateRoot, '--apply');
+    } catch (e) { cleanup = { run: owner?.run, error: e.message }; }
+  }
+  return { imported: true, output: (r.stdout || '').trim(), pr: pr || null, ...(cleanup ? { cleanup } : {}) };
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.meta.filename)) {

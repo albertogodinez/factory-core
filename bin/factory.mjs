@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // factory: install factory-core bundles into a repo, keep them current, and check them.
-// One file, node: imports only, copies from local paths, never touches the network.
+// Dependency-free, copies from local paths, never touches the network.
 //
 //   factory install <bundle...> [--to <repo>] (--commit | --local) [--marker keep|off|text:<tag>]
 //                               [--force] [--dry-run]
 //   factory update [--all] [--to <repo>] [--force]
+//   factory cleanup [--all] [--to <repo>] [--dry-run | --apply] [--json]
+//   factory setup --cleanup-schedule [--dry-run] [--apply]  daily inventory; apply requires repo policies
 //   factory remove <skill|bundle...> [--to <repo>] [--purge]
 //   factory link [--to <worktree>]
 //   factory doctor [--to <repo>] [--live] [--json]
@@ -26,6 +28,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
+import { cleanup, setupCleanupSchedule } from './cleanup.mjs';
 import { findGit, toolkitHome, parseRemote } from '../bundles/core/factory-context/scripts/resolve.mjs';
 
 const FACTORY = dirname(dirname(realpathSync(import.meta.filename)));
@@ -919,6 +922,14 @@ function hookStatus(opts) {
   const state = (file && readJson(file, null)) || null;
   const now = Date.now();
   const lines = [];
+  const cleanupReport = readJson(join(toolkitHome(), 'cleanup-last.json'));
+  const cleanupAt = cleanupReport?.at;
+  if (cleanupAt && cleanupAt !== state?.cleanupAt) {
+    const summary = cleanupReport.summary;
+    if (summary?.failed || summary?.candidates || summary?.attention) lines.push(`factory: scheduled cleanup found ${summary.candidates || 0} candidates and ${summary.failed || 0} failures, with ${summary.attention || 0} inactive runs needing inspection. Read ${join(toolkitHome(), 'cleanup-last.json')}; inspect before applying cleanup.`);
+    if (cleanupReport.errors?.length) lines.push(`factory: scheduled cleanup could not run: ${cleanupReport.errors[0]}`);
+    if (cleanupReport.targets?.some(t => t.reason?.startsWith('upgrade required'))) lines.push('factory: scheduled cleanup skipped repos without factory-teardown; run factory update --all to install the engine.');
+  }
   if (!state || event === 'SessionStart') {
     status({ ...opts, to: opts.to || input.cwd, hint: false }); // the drift line, as at any session start
     for (const l of lessonLines(lessonBranches(), g.mainRoot)) out(l);
@@ -948,7 +959,7 @@ function hookStatus(opts) {
   if (hint && !hinted.has(g.toplevel)) { lines.push(hint); hinted.add(g.toplevel); }
   for (const l of lines) out(l);
   if (file) {
-    try { writeJson(file, { root: g.mainRoot, seen: now, edited: [...told, ...edited.map((e) => e.name)], hinted: [...hinted] }); } catch {}
+    try { writeJson(file, { root: g.mainRoot, seen: now, cleanupAt, edited: [...told, ...edited.map((e) => e.name)], hinted: [...hinted] }); } catch {}
   }
 }
 
@@ -1005,7 +1016,12 @@ function hookFiles(env = process.env) {
     { harness: 'codex', dir: env.CODEX_HOME || join(homedir(), '.codex'), file: 'hooks.json' },
   ].map((h) => ({ ...h, path: join(h.dir, h.file) }));
 }
-function setup(opts) {
+async function setup(opts) {
+  if (opts.cleanupSchedule) {
+    const schedule = await setupCleanupSchedule(opts);
+    out(`cleanup schedule: ${schedule.apply ? 'policy-protected apply' : 'report only'}${schedule.dryRun ? ' (dry run)' : ''}`);
+    for (const file of schedule.files) out(`  ${file}`);
+  }
   const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
   out('hooks');
   let codexChanged = false;
@@ -1056,7 +1072,7 @@ function parse(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--to' || a === '--marker' || a === '--root') { o[a.slice(2)] = argv[++i]; if (o[a.slice(2)] == null) die(`${a} needs a value`, 2); }
-    else if (['--commit', '--local', '--force', '--dry-run', '--all', '--purge', '--live', '--json', '--hook'].includes(a)) o[a.slice(2).replace(/-(.)/g, (_, c) => c.toUpperCase())] = true;
+    else if (['--commit', '--local', '--force', '--dry-run', '--all', '--purge', '--live', '--json', '--hook', '--apply', '--scheduled', '--cleanup-schedule'].includes(a)) o[a.slice(2).replace(/-(.)/g, (_, c) => c.toUpperCase())] = true;
     else if (a === '-h' || a === '--help') o.help = true;
     else if (a.startsWith('--')) die(`unknown flag ${a}`, 2);
     else o._.push(a);
@@ -1079,7 +1095,11 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.met
   else if (cmd === 'link') link(o);
   else if (cmd === 'doctor') await doctor(o);
   else if (cmd === 'list') list(o);
-  else if (cmd === 'setup') setup(o);
+  else if (cmd === 'setup') await setup(o);
+  else if (cmd === 'cleanup') {
+    try { const report = await cleanup(o); out(JSON.stringify(report, null, o.json ? 0 : 2)); if (report.summary.failed) process.exitCode = 1; }
+    catch (e) { die(e.message); }
+  }
   else if (cmd === 'status') { try { o.hook ? hookStatus(o) : status(o); } catch {} process.exitCode = 0; }
   else die(`unknown command ${cmd} (see factory help)`, 2);
 }

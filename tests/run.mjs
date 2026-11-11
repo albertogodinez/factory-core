@@ -21,6 +21,6 @@ const files = [...walk(join(ROOT, 'tests')), ...walk(join(ROOT, 'bundles')), ...
 // tests spawn, they would write fixture state into the commit being made. Tests that need
 // one set it themselves.
 const env = { ...process.env };
-for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_PREFIX']) delete env[k];
+for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_PREFIX', 'FACTORY_RUN_ID', 'FACTORY_STATE_ROOT']) delete env[k];
 const r = spawnSync(process.execPath, ['--test', ...(process.env.CI || process.argv.includes('--tap') ? [] : ['--test-reporter=dot']), ...files.filter((f) => f !== '--tap')], { cwd: ROOT, stdio: 'inherit', env });
 process.exit(r.status ?? 1);

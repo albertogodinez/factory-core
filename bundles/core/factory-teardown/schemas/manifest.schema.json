@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Factory run ownership manifest",
+  "type": "object",
+  "required": ["version", "id", "root", "createdAt", "heartbeatAt", "owner", "status", "pinned", "artifacts", "resources"],
+  "properties": {
+    "version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-f0-9-]{36}$" },
+    "root": { "type": "string", "minLength": 1 },
+    "kind": { "type": "string" },
+    "createdAt": { "type": "number" },
+    "heartbeatAt": { "type": "number" },
+    "finishedAt": { "type": "number" },
+    "owner": { "type": "object", "properties": { "pid": { "type": "integer", "minimum": 2 }, "started": { "type": ["string", "null"] } } },
+    "status": { "enum": ["active", "complete", "failed"] },
+    "pinned": { "type": "boolean" },
+    "artifacts": { "type": "array", "items": { "type": "object", "required": ["path", "class"], "properties": { "path": { "type": "string", "minLength": 1 }, "class": { "enum": ["intermediate", "evidence", "durable"] }, "pinned": { "type": "boolean" }, "pending": { "type": "boolean" }, "publication": { "type": "object", "required": ["url", "verifiedAt"], "properties": { "url": { "type": "string" }, "verifiedAt": { "type": "number" } } } } } },
+    "resources": { "type": "array", "items": { "type": "object", "required": ["type"], "properties": { "type": { "enum": ["scratch", "process", "browser", "slot"] }, "released": { "type": "boolean" } } } }
+  }
+}

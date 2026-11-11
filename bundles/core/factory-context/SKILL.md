@@ -40,7 +40,7 @@ A sibling checkout or worktree of a registered repo resolves to that repo, match
 
 - Empty and null fields are left out. A comment marker's banner text is elided (`--full` prints it). Read a missing field as "not configured".
 - A neighbor's `root` is left out when it is `<project.root>/../<name>`, and its `access` when it is `read`.
-- `stateRoot` is where a skill writes scratch state (recordings, handoffs, lessons). It's per worktree. The resolver doesn't create it, so `mkdir -p` it before writing.
+- `stateRoot` is where a skill writes scratch state (recordings, handoffs, lessons). It also holds lessons, handoffs and preserved evidence; never wipe it wholesale. `factory-teardown` registers per-run intermediates and resources for scoped cleanup. It's per worktree in project/zero-config mode; legacy workspace mode shares the hub's tmp directory. The resolver doesn't create it, so `mkdir -p` it before writing.
 - **`writeAllowed: false` (always, in zero-config mode): don't post, push, merge or move a ticket without the user confirming that action first.**
 
 Exit codes: 0 ok; 1 `--field` path not present; 2 bad usage, an invalid config, or no git repo and no config.

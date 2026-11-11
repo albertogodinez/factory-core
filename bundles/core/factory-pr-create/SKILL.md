@@ -219,3 +219,8 @@ tracker.mjs parse  → KEY-12; link → ok; review → ok (In Progress → In Re
 - **The PR was "stacked" only by base branch** for its first hour, because `gh stack link` was not run. Step 4 is not optional.
 - **Moving a directory changes every relative read inside its tests, not just the anchor.** A `resolve(__dirname, "../../../styles/…")` that was right at three levels deep is wrong at two. After a `git mv`, run the suite before trusting the anchor rewrite.
 - **Recreating a file at a moved path hides the rename from `git status`.** Moving a route body elsewhere and writing a short stub back at the old path shows as `M` + `A`, not `R`. `git log --follow` on the new file still finds the history; say so in the PR before a reviewer reads the rename count as "history lost".
+
+For managed evidence, use `factory-teardown` to begin a run and export `FACTORY_RUN_ID` and
+`FACTORY_STATE_ROOT`. Put grids under the returned directory; `build-compare-grid.mjs` registers
+its output as evidence. Verify the uploaded destination before recording publication, then finish
+and tear down intermediates after every consumer is done. Final images remain retained.
