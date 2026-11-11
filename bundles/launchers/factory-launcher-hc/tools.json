@@ -16,7 +16,7 @@
       "min": "0.28.61",
       "verified": "0.28.61",
       "install": "the plannotator installer (it lives in ~/.local/bin)",
-      "notes": "The lesson review gate is `plannotator review <worktree> --base <trunk> --diff-type merge-base --gate --json`, which prints {decision, message}; the Inbox notice goes to the thread `factory lessons`."
+      "notes": "The lesson review gate is `plannotator review <worktree> --base <trunk> --diff-type merge-base --gate --json`, which prints {decision, message}; `plannotator guide import --guide --patch [--pr]` saves the guided review it lists; `plannotator inbox call get_guide_brief` gives the guide's method. The Inbox notice goes to the thread `factory lessons`."
     }
   ]
 }

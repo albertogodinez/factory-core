@@ -34,7 +34,7 @@ Data, not a skill. See `factory-pr-comment/references/github-pr-comments.md` §1
 
 Read from the **source repo** a lesson lands in (`resolve.mjs --cwd <repo>`), not from the repo the session ran in. `factory-reflect` uses them in "Landing a lesson branch".
 
-- `adapters.reviewUI` names the review step for a lesson branch. `plannotator-review` runs `plannotator review <worktree> --gate --json` and reads its `decision`. Unset means the diff in chat, one commit at a time.
+- `adapters.reviewUI` names the review step for a lesson branch. `plannotator-review` writes a guided review first (`factory-reflect/scripts/guide.mjs`, the guide by a subagent on the newest Sonnet), then runs `plannotator review <worktree | PR URL> --gate --json` and reads its `decision`. When the branch has an open PR, the guide and the review both go to the PR, so the comments are saved there. Unset means the diff in chat, one commit at a time.
 - `adapters.lessonInbox` names where a notice goes when a lesson branch is left undecided. `plannotator-inbox` sends one message to the thread `factory lessons`. It is a notice only; approval is always the review step.
 - `adapters.lessonLanding`: `local-review` (default) fast-forwards trunk after approval and pushes; `pr` pushes the branch and opens a PR for a repo with other reviewers.
 
