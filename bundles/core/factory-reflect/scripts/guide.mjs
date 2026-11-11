@@ -43,8 +43,9 @@ export function checkCoverage(guide, files) {
   guide.unplacedFiles.forEach((f) => place(f, 'unplacedFiles'));
   for (const f of seen.keys()) if (!files.includes(f)) problems.push(`${f} is not in the patch`);
   for (const f of files) if (!seen.has(f)) problems.push(`${f} is missing: place it in a section or unplacedFiles`);
-  // A dash standing in for punctuation; `--flag` in a command is fine.
-  if (/—|\s--\s/.test([guide.title, guide.intent, ...guide.sections.map((s) => s.overview)].join('\n'))) problems.push('no em-dashes, or " -- " standing in for one, in the prose');
+  // A dash standing in for punctuation. Code spans (`--flag`, a quoted rule) don't count.
+  const prose = [guide.title, guide.intent, ...guide.sections.map((s) => s.overview)].join('\n').replace(/```[\s\S]*?```|`[^`\n]*`/g, '');
+  if (/—|\s--\s/.test(prose)) problems.push('no em-dashes, or " -- " standing in for one, in the prose');
   return problems;
 }
 

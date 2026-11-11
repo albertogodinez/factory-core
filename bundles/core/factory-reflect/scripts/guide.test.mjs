@@ -42,6 +42,7 @@ test('coverage: every patch file in exactly one place, nothing invented, no em-d
   assert.match(checkCoverage({ ...guide([sec('a.md', 'b.md')]), intent: 'Why — because.' }, files).join(), /em-dashes/);
   assert.match(checkCoverage({ ...guide([sec('a.md', 'b.md')]), intent: 'Why -- because.' }, files).join(), /em-dashes/);
   assert.deepEqual(checkCoverage({ ...guide([sec('a.md', 'b.md')]), intent: 'Run `lessons.mjs candidate --now` to launch.' }, files), [], 'a CLI flag is not a dash');
+  assert.deepEqual(checkCoverage({ ...guide([sec('a.md', 'b.md')]), intent: 'It refuses an em-dash or ` -- ` in the prose, and `a — b` too.' }, files), [], 'a dash quoted in a code span is not prose');
   assert.match(checkCoverage({ title: 'T', intent: 'I', sections: [sec('a.md', 'b.md')] }, files).join(), /unplacedFiles must be an array/);
 });
 
