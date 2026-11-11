@@ -18,6 +18,8 @@
 //   lessons.mjs queue [--scope core|org] [--skill <name>]   queued candidates, their source repo and launch command,
 //                                            and the open lesson branches: what's waiting
 //   lessons.mjs done --file <candidate> --outcome landed|dropped|merged
+//   lessons.mjs cadence [--scope core|org] [--pin daily|weekly|off] [--ran --clusters <largest>]
+//                                            triage's mode per scope (cadence.mjs); triage ends with --ran
 //   lessons.mjs report [--days 90]           the trend report per layer (metrics.mjs), for triage to post
 //   lessons.mjs land --repo <dir> --branch <b> --reviewed <sha>
 //                                            fast-forward trunk to a reviewed branch, then clean up;
@@ -36,6 +38,7 @@ import { spawnSync } from 'node:child_process';
 import { start, open, land, classify, LandingError } from './landing.mjs';
 import { writeCandidate, queue, markDone, sourceRepo, launchFor, triagePrompt } from './candidates.mjs';
 import { report } from './metrics.mjs';
+import { cadence } from './cadence.mjs';
 
 export const EXPIRY_DAYS = 90;
 const DAY = 86400000;
@@ -93,7 +96,7 @@ function parse(argv) {
   const o = { _: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--now' || a === '--queue' || a === '--never') o[a.slice(2)] = true;
+    if (a === '--now' || a === '--queue' || a === '--never' || a === '--ran') o[a.slice(2)] = true;
     else if (a.startsWith('--')) { const v = argv[i + 1]; if (v == null || v.startsWith('--')) fail(`${a} needs a value`); o[a.slice(2)] = v; i++; }
     else o._.push(a);
   }
@@ -194,12 +197,18 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     if (!o.file) fail('--file is required');
     return markDone(home(env), o.file, o.outcome, now);
   }
+  if (cmd === 'cadence') {
+    if (o.scope && !['core', 'org'].includes(o.scope)) fail('--scope must be core or org');
+    try {
+      return { scopes: (o.scope ? [o.scope] : ['core', 'org']).map((scope) => cadence({ home: home(env), scope, pin: o.pin, ran: o.ran, clusterMax: o.clusters, env, now })) };
+    } catch (e) { fail(e.message); }
+  }
   if (cmd === 'report') return report({ days: o.days ? Number(o.days) : 90, out: o.out }, env, now);
   if (cmd === 'classify') {
     if (o.text === undefined && !o.file) fail('classify needs --text or --file');
     return classify({ text: o.text ?? readFileSync(o.file, 'utf8'), skillsDir: o['skills-dir'] });
   }
-  fail('usage: lessons.mjs record|decide|known|target|candidate|queue|done|report|start|open|land|classify (see the header of this file)');
+  fail('usage: lessons.mjs record|decide|known|target|candidate|queue|done|cadence|report|start|open|land|classify (see the header of this file)');
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.meta.filename)) {

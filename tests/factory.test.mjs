@@ -487,6 +487,14 @@ test('status --hook: queued candidates ask for triage in the source repo, and ar
   assert.deepEqual(candidateLines([src], h, sources), ['factory: 2 core lesson candidate(s) wait here (oldest 2 days): /factory-triage reviews them.']);
   assert.deepEqual(candidateLines([shop], h, sources), [`factory: 1 lesson candidate(s) from this repo are queued for cand-src. They're reviewed there: cd ${src} && <your agent CLI>, then /factory-triage.`]);
   assert.deepEqual(candidateLines([join(t.root, 'elsewhere')], h, sources), [], 'a repo with no handoffs hears nothing');
+  // The cadence gates the nudge: a weekly scope that ran yesterday stays quiet, unless a trigger fires.
+  write(join(h, 'triage-state.json'), { core: { mode: 'weekly', lastRun: new Date(Date.now() - 864e5).toISOString() } });
+  assert.match(candidateLines([src], h, sources)[0], /weekly triage/, 'a fact waiting is an early trigger');
+  rmSync(join(h, 'candidates', 'core', '1-a.json'));
+  write(join(h, 'candidates', 'core', '2-b.json'), { kind: 'pattern', scope: 'core', summary: 'b', from: { root: other }, at: new Date().toISOString() });
+  assert.deepEqual(candidateLines([src], h, sources), [], 'not due, no trigger: quiet');
+  write(join(h, 'triage-state.json'), { core: { mode: 'weekly', lastRun: new Date(Date.now() - 8 * 864e5).toISOString() } });
+  assert.match(candidateLines([src], h, sources)[0], /1 core lesson candidate\(s\) wait here \(oldest 0 days, weekly triage\)/, 'due again after a week');
 });
 
 test('setup on a new machine: adds or repoints the status hooks, keeps other hooks, records committed installs, then is a no-op', () => {

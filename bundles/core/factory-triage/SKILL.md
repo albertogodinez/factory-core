@@ -59,7 +59,11 @@ node <lessons.mjs> done --file <candidate> --outcome dropped    # dropped in ste
 
 `done` moves the candidate and its draft to `done/`, and keeps them there for 90 days. When the branch stays undecided (the gate was dismissed), leave the candidates queued. The branch's Inbox notice says which candidates wait on it.
 
-## 5. Report
+## 5. Tools, cadence and report
+
+Check the pinned CLIs against their latest releases: `node .agents/skills/factory-tool-sync/scripts/check-tools.mjs --online` (in a bundle repo, `<core bundle>/factory-tool-sync/scripts/check-tools.mjs --online --skills <core bundle>`). Name each `CHANGED` or `BELOW` tool in the report message. Moving a pin is a `factory-tool-sync` review, not part of this run.
+
+Record the run, with the size of the largest cluster: `node <lessons.mjs> cadence --scope <scope> --ran --clusters <largest>`. The script sets the mode: daily until two quiet weeks, then weekly, and back to daily on an early trigger (a queue of 5 or more, a candidate 3 or more days old, a cluster of 3 or more, or a lesson whose signal didn't drop). The status hook nudges by that mode. Say when it switches, and why. The user can pin a mode: `cadence --pin daily|weekly`, or `--pin off`.
 
 Write the trend report: `node <lessons.mjs> report`. It writes one HTML file per layer under `~/.agents/factory/reports/`, from the counted metrics every session's end captures. It shows weekly per-session rates, a marker for each landed lesson, and each lesson's `fixedWhen` signal for the 7 days before and after. A lesson whose signal stayed flat didn't work: queue a `pattern` candidate that says so, so the next triage reopens that cluster.
 

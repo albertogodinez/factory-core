@@ -837,9 +837,15 @@ export function candidateLines(here, home = toolkitHome(), sources = bundleSourc
     const days = (c) => Math.floor((Date.now() - (Date.parse(c.at) || Date.now())) / 864e5);
     if (root && here.includes(root)) {
       const oldest = Math.max(...items.map(days));
+      // The cadence (lessons.mjs cadence) decides when to nudge: when triage is due by its mode, or an
+      // early trigger fires (a fact waits, the queue is 5+, or the oldest is 3+ days).
+      const st = readJson(join(home, 'triage-state.json'), {})[scope];
+      const interval = (st?.mode === 'weekly' ? 7 : 1) * 864e5;
+      const due = !st?.lastRun || Date.now() - Date.parse(st.lastRun) >= interval;
+      if (!due && items.length < 5 && oldest < 3 && !items.some((c) => c.kind === 'fact')) continue;
       const installed = existsSync(join(root, '.agents', 'skills', 'factory-triage', 'SKILL.md')) || !sources.core;
       const how = installed ? '/factory-triage reviews them' : `factory-triage reviews them (${join(sources.core, 'factory-triage', 'SKILL.md')})`;
-      lines.push(`factory: ${items.length} ${scope} lesson candidate(s) wait here (oldest ${oldest} day${oldest === 1 ? '' : 's'}): ${how}.`);
+      lines.push(`factory: ${items.length} ${scope} lesson candidate(s) wait here (oldest ${oldest} day${oldest === 1 ? '' : 's'}${st?.mode ? `, ${st.mode} triage` : ''}): ${how}.`);
       continue;
     }
     const mine = items.filter((c) => here.includes(c.from?.root));
