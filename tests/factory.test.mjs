@@ -508,7 +508,8 @@ test('setup on a new machine: adds or repoints the status hooks, keeps other hoo
   const r = factory(['setup', '--root', repos], machine, env);
   assert.equal(r.status, 0, r.err);
   assert.match(r.out, /claude-code: SessionStart: added, UserPromptSubmit: repointed at this checkout/);
-  assert.match(r.out, /codex: SessionStart: added, UserPromptSubmit: added/);
+  assert.match(r.out, /codex: SessionStart: added, UserPromptSubmit: added, Stop: capture added/);
+  assert.match(r.out, /claude-code: [^\n]*SessionEnd: capture added/);
   assert.match(r.out, /recorded: mine \(commit\)/);
   assert.match(r.out, /no install: team/);
   const cfg = json(join(claude, 'settings.json'));
@@ -519,6 +520,9 @@ test('setup on a new machine: adds or repoints the status hooks, keeps other hoo
   assert.equal(cfg.hooks.UserPromptSubmit.length, 1);
   assert.equal(cfg.hooks.UserPromptSubmit[0].hooks[0].command, cmd);
   assert.equal(json(join(codex, 'hooks.json')).hooks.UserPromptSubmit[0].hooks[0].command, cmd);
+  const capture = `node '${join(CORE, 'factory-reflect', 'scripts', 'metrics.mjs')}' capture --hook 2>/dev/null || true`;
+  assert.equal(cfg.hooks.SessionEnd[0].hooks[0].command, capture, 'claude-code: metrics capture at SessionEnd');
+  assert.equal(json(join(codex, 'hooks.json')).hooks.Stop[0].hooks[0].command, capture, 'codex: capture on Stop (no SessionEnd)');
   assert.ok(readdirSync(claude).some((f) => /^settings\.json\.bak-\d{14}$/.test(f)), 'the old file is backed up');
   assert.ok(json(join(h, 'installs.json')).repos[mine], 'update --all now reaches it');
 
@@ -537,6 +541,6 @@ test('setup leaves a hook file it cannot parse alone, and --dry-run writes nothi
   assert.equal(r.status, 1);
   assert.match(r.err, /settings\.json isn't valid JSON; left alone/);
   assert.equal(readFileSync(join(claude, 'settings.json'), 'utf8'), '{ not json');
-  assert.match(r.out, /codex: SessionStart: added, UserPromptSubmit: added \(dry run\)/);
+  assert.match(r.out, /codex: SessionStart: added, UserPromptSubmit: added, Stop: capture added \(dry run\)/);
   assert.equal(existsSync(join(codex, 'hooks.json')), false);
 });

@@ -61,4 +61,6 @@ node <lessons.mjs> done --file <candidate> --outcome dropped    # dropped in ste
 
 ## 5. Report
 
-When `adapters.lessonInbox` is `plannotator-inbox`, send one message to the thread `factory lessons`. It names the repo, the clusters with their member counts, what landed and what was dropped, and the candidates still queued. Then give the same summary here, in a few lines.
+Write the trend report: `node <lessons.mjs> report`. It writes one HTML file per layer under `~/.agents/factory/reports/`, from the counted metrics every session's end captures. It shows weekly per-session rates, a marker for each landed lesson, and each lesson's `fixedWhen` signal for the 7 days before and after. A lesson whose signal stayed flat didn't work: queue a `pattern` candidate that says so, so the next triage reopens that cluster.
+
+When `adapters.lessonInbox` is `plannotator-inbox`, send one message to the thread `factory lessons`. Name the repo, the clusters with their member counts, what landed and what was dropped, and the candidates still queued. Put a screenshot of this layer's graph in the body if you have a browser tool, and attach the HTML either way. Then give the same summary here, in a few lines.

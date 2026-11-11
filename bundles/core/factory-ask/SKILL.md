@@ -40,6 +40,8 @@ node .agents/skills/factory-reflect/scripts/lessons.mjs queue
 
 It lists queued candidates per source repo (kind, skill, summary, age) with the command that starts a session there, and the open lesson branches. Lead with the counts per repo, then that repo's start command and `/factory-triage`. Reviewing and landing happen in the source repo's own session, so give the command; don't start it. Without factory-reflect installed, say nothing is tracked here.
 
+"How are we trending?": `lessons.mjs report` writes the trend per layer to `~/.agents/factory/reports/`. Give the paths, and the before/after of each lesson it lists.
+
 ## Reply
 
 Lead with the answer: the slash command and one sentence on why this one and not its nearest neighbour. Then one ready-to-send prompt in a code block, filled in with what you know (ticket key, PR number, URL). Then the path of the SKILL.md you read. Keep it short unless the user asked for the whole list.

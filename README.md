@@ -59,6 +59,8 @@ Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-archite
 ├── installs.json                   # onboarded repos, bundles, versions → `factory update --all`
 ├── lessons-index.jsonl             # lesson fingerprints across repos, and the never list
 ├── candidates/<core|org>/          # lessons handed to their source repo; triage moves them to done/
+├── metrics.jsonl                   # counted signals per session (no content), 180 days
+├── reports/<date>-<core|org>.html  # the trend report triage posts
 └── cache/<repo-id>/                # state for zero-config repos
 ```
 
@@ -168,6 +170,8 @@ land and push from that session → consumers pull at their next session start
 - "Never" is remembered per family (`lessons.mjs decide --decision never`), and triage drops its candidates.
 - `adapters.sessionLauncher` starts the source repo's session (`launchers` bundle); unset, reflect prints the command.
 - `/factory-ask` answers "what's waiting" from `lessons.mjs queue`.
+- Every session's end appends counts to `~/.agents/factory/metrics.jsonl` (`metrics.mjs capture`, installed by `factory setup` as a SessionEnd hook, Codex's Stop). A row holds tool counts, command heads, failures, hook blocks, denials, stuck signals, corrections (a heuristic) and the skills used, tagged core or org. It never holds prompts, file contents or tokens: a schema check refuses the row first. It keeps 180 days, up to 5 MB.
+- Triage runs `lessons.mjs report` and posts the trend per layer: each landed lesson's `fixedWhen` signal before and after. The newest 12 reports per layer are kept.
 
 PR mining works the same way. Each repo's `project.json` holds its reviewer cohort. Patterns found in several repos reach core as candidates.
 
@@ -197,6 +201,12 @@ A skill read earlier in a session stays in that session's context, so the notice
 
 ```json
 { "type": "command", "command": "node '<factory-core>/bin/factory.mjs' status --hook 2>/dev/null || true", "timeout": 5 }
+```
+
+A third hook captures metrics when a session ends: `SessionEnd` in Claude Code, `Stop` in Codex (Codex has no session-end event, so each turn replaces the session's row):
+
+```json
+{ "type": "command", "command": "node '<factory-core>/bundles/core/factory-reflect/scripts/metrics.mjs' capture --hook 2>/dev/null || true", "timeout": 10 }
 ```
 
 `factory setup` adds these entries, or repoints them when factory-core moved. It keeps every other hook, backs up a file before writing it, and writes nothing when the hooks are already set.

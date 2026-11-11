@@ -952,6 +952,20 @@ function hookStatus(opts) {
 // before it's written; a run that changes nothing writes nothing.
 const hookCommand = () => `node '${join(FACTORY, 'bin', 'factory.mjs')}' status --hook 2>/dev/null || true`;
 const IS_STATUS_HOOK = /factory\.mjs'? status --hook/;
+// Metrics capture at a session's end (Codex has no SessionEnd: its Stop hook fires after each turn,
+// and the capture replaces the session's row, so the last turn's count stands).
+const captureCommand = () => `node '${join(FACTORY, 'bundles', 'core', 'factory-reflect', 'scripts', 'metrics.mjs')}' capture --hook 2>/dev/null || true`;
+const IS_CAPTURE_HOOK = /metrics\.mjs'? capture --hook/;
+export function addCaptureHook(cfg, harness, command = captureCommand()) {
+  cfg.hooks ||= {};
+  const ev = harness === 'claude-code' ? 'SessionEnd' : 'Stop';
+  const groups = (cfg.hooks[ev] ||= []);
+  const found = groups.flatMap((g) => g.hooks || []).filter((h) => IS_CAPTURE_HOOK.test(h.command || ''));
+  const changes = [];
+  for (const h of found) if (h.command !== command) { h.command = command; changes.push(`${ev}: capture repointed at this checkout`); }
+  if (!found.length) { groups.push({ hooks: [{ type: 'command', command, timeout: 10 }] }); changes.push(`${ev}: capture added`); }
+  return changes;
+}
 export function addStatusHooks(cfg, harness, command = hookCommand()) {
   cfg.hooks ||= {};
   const changes = [];
@@ -983,7 +997,7 @@ function setup(opts) {
     if (existsSync(h.path)) {
       try { cfg = JSON.parse(readFileSync(h.path, 'utf8')); } catch { warn(`${h.path} isn't valid JSON; left alone. Add the hook by hand (README).`); process.exitCode = 1; continue; }
     }
-    const changes = addStatusHooks(cfg, h.harness);
+    const changes = [...addStatusHooks(cfg, h.harness), ...addCaptureHook(cfg, h.harness)];
     if (!changes.length) { out(`  ${h.harness}: already set (${h.path})`); continue; }
     if (!opts.dryRun) {
       if (existsSync(h.path)) cpSync(h.path, `${h.path}.bak-${stamp}`);
