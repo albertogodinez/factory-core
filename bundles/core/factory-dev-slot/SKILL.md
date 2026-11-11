@@ -127,4 +127,5 @@ Stop that server by its PID, proven yours: `lsof -tiTCP:<port> -sTCP:LISTEN`, th
 - **`slot down --purge` before `git worktree remove`.** A running slot keeps writing into its bind mount, so removing the worktree under it fails with `Directory not empty`. If that happens, `rm -rf` the directory, `git worktree prune`, then `slot gc`.
 - **Ports bind `127.0.0.1` only, and no container gets the Docker socket.** Keep both when adding an app.
 - **Sign-in happens on the host, never in a slot.** A container serves the app and nothing else.
+- **Preflight before the first commit in a worktree.** `node .agents/skills/factory-dev-slot/scripts/preflight.mjs [--after-commit <sha-before>]` exits 1 when `node -v` misses `.nvmrc`, `node_modules` is a symlink, or HEAD did not move: a hook that died on the wrong Node looks like a finished commit.
 - **Secrets stay out of argv and logs.** Profiles pass secrets through the child env only.
