@@ -1,0 +1,3 @@
+{
+  "argv": ["hc", "run", "--bg", "--no-parent", "--outlive-parent", "--cwd", "{repo}", "claude", "{prompt}"]
+}

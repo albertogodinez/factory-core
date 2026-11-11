@@ -1,0 +1,113 @@
+// Candidates: the kind sets the lane, evidence stays pointers, the queue is the folder, and the
+// launch is the adapter's argv or a printed command.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { join, dirname } from 'node:path';
+import { mkdtempSync, rmSync, realpathSync, writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, utimesSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sourceRepo } from './candidates.mjs';
+
+const LESSONS = join(dirname(fileURLToPath(import.meta.url)), 'lessons.mjs');
+const T0 = Date.parse('2026-11-11T12:00:00Z');
+const ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
+for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete ENV[k];
+
+function sandbox() {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'af-cand-')));
+  return { dir, home: join(dir, 'home'), done: () => rmSync(dir, { recursive: true, force: true }) };
+}
+const git = (cwd, ...a) => spawnSync('git', a, { cwd, encoding: 'utf8', env: ENV });
+
+test('the kind sets the lane: a fact launches now, a pattern or harness lesson queues; flags override', () => {
+  assert.equal(laneOf('fact'), 'now');
+  assert.equal(laneOf('pattern'), 'queue');
+  assert.equal(laneOf('harness'), 'queue');
+  assert.equal(laneOf('fact', { queue: true }), 'queue');
+  assert.equal(laneOf('pattern', { now: true }), 'now');
+  assert.throws(() => laneOf('fact', { now: true, queue: true }), { code: 'usage' });
+});
+
+test('evidence is pointers: known keys, one short line each', () => {
+  assert.equal(checkEvidence([{ transcript: '~/.claude/projects/x/y.jsonl', grep: 'Modify Shared Resources' }, { pr: 'o/r#9', thread: 'r1' }]), null);
+  assert.match(checkEvidence([{ transcript: 'a', body: 'pasted' }]), /evidence\[0\]\.body/);
+  assert.match(checkEvidence([{ note: 'line one\nline two' }]), /pointer, not content/);
+  assert.match(checkEvidence([{ note: 'x'.repeat(301) }]), /pointer, not content/);
+  assert.match(checkEvidence({}), /array/);
+});
+
+test('a candidate is one file in its scope folder; done moves it and its draft out of the queue', () => {
+  const s = sandbox();
+  try {
+    const patch = join(s.dir, 'fix.patch'); writeFileSync(patch, 'diff\n');
+    const w = writeCandidate({ home: s.home, kind: 'fact', scope: 'core', skill: 'factory-reflect', summary: 'A land from downstream is denied',
+      evidence: [{ grep: 'Modify Shared Resources' }], draft: patch, fixedWhen: { metric: 'permission_denials', match: 'lessons.mjs land' },
+      from: { project: 'shop', session: 's1' }, at: T0 });
+    assert.equal(w.file, join(s.home, 'candidates', 'core', '20261111T120000Z-a-land-from-downstream-is-denied.json'));
+    const c = JSON.parse(readFileSync(w.file, 'utf8'));
+    assert.deepEqual(Object.keys(c), ['kind', 'scope', 'skill', 'summary', 'evidence', 'draft', 'fixedWhen', 'from', 'lane', 'at']);
+    assert.equal(c.draft, 'candidates/core/20261111T120000Z-a-land-from-downstream-is-denied.patch');
+    assert.ok(!('want' in c), 'no want field: the kind decides');
+    writeCandidate({ home: s.home, kind: 'pattern', scope: 'org', summary: 'p', at: T0 });
+    assert.deepEqual(queue(s.home, null, T0 + 3 * 86400000).map((q) => [q.scope, q.lane, q.ageDays]), [['core', 'now', 3], ['org', 'queue', 3]]);
+    assert.throws(() => writeCandidate({ home: s.home, kind: 'fact', scope: 'repo', summary: 'x' }), /repo-scope lesson stays in its PR/);
+    const d = markDone(s.home, w.file, 'landed', T0);
+    assert.ok(!existsSync(w.file));
+    assert.deepEqual(readdirSync(join(s.home, 'candidates', 'core', 'done')).sort(), [
+      '20261111T120000Z-a-land-from-downstream-is-denied.json', '20261111T120000Z-a-land-from-downstream-is-denied.patch']);
+    assert.equal(JSON.parse(readFileSync(d.done, 'utf8')).done.outcome, 'landed');
+    assert.deepEqual(queue(s.home, 'core'), []);
+    // done/ keeps 90 days.
+    const old = join(s.home, 'candidates', 'core', 'done', 'old.json'); writeFileSync(old, '{}');
+    utimesSync(old, new Date(T0 - 91 * 86400000), new Date(T0 - 91 * 86400000));
+    const w2 = writeCandidate({ home: s.home, kind: 'fact', scope: 'core', summary: 'again', at: T0 });
+    markDone(s.home, w2.file, 'dropped', T0);
+    assert.ok(!existsSync(old), 'pruned after 90 days');
+  } finally { s.done(); }
+});
+
+test('launch: the adapter argv when sessionLauncher names an installed launcher.json, else a printed command', () => {
+  const s = sandbox();
+  try {
+    const skills = join(s.dir, 'skills'); mkdirSync(join(skills, 'launch-x'), { recursive: true });
+    writeFileSync(join(skills, 'launch-x', 'launcher.json'), JSON.stringify({ argv: ['tool', 'run', '--cwd', '{repo}', 'agent', '{prompt}'] }));
+    const a = launchFor({ launcher: 'launch-x', skillsDir: skills, repo: '/r/src', prompt: '/factory-triage /h/c.json' });
+    assert.deepEqual(a.argv, ['tool', 'run', '--cwd', '/r/src', 'agent', '/factory-triage /h/c.json']);
+    assert.equal(a.command, "tool run --cwd /r/src agent '/factory-triage /h/c.json'");
+    assert.deepEqual(launchFor({ skillsDir: skills, repo: '/r/my src', prompt: 'p' }), { via: 'print', command: "cd '/r/my src' && <your agent CLI>", prompt: 'p' });
+    assert.match(launchFor({ launcher: 'missing', skillsDir: skills, repo: '/r', prompt: 'p' }).note, /missing or invalid/);
+  } finally { s.done(); }
+});
+
+test('the CLI: a downstream fact prints its launch; a pattern queues; queue lists both with the source repo', () => {
+  const s = sandbox();
+  try {
+    const src = join(s.dir, 'src'); mkdirSync(join(src, 'bundles', 'core'), { recursive: true });
+    git(src, 'init', '-q', '-b', 'main');
+    mkdirSync(s.home, { recursive: true });
+    writeFileSync(join(s.home, 'installs.json'), JSON.stringify({ sources: { core: join(src, 'bundles', 'core'), org: join(s.dir, 'absent') } }));
+    assert.equal(sourceRepo('core', { core: join(src, 'bundles', 'core') }), src);
+    assert.equal(sourceRepo('org', { core: join(src, 'bundles', 'core'), launchers: join(src, 'bundles') }), null, "a bundle in core's repo is not the org repo");
+    const run = (...a) => { const p = spawnSync(process.execPath, [LESSONS, ...a], { encoding: 'utf8', env: { ...ENV, FACTORY_HOME: s.home } }); return { status: p.status, out: p.stdout ? JSON.parse(p.stdout) : null, err: p.stderr }; };
+    const base = ['--scope', 'core', '--project', 'shop', '--root', join(s.dir, 'shop')];
+    const fact = run('candidate', '--kind', 'fact', '--summary', 'stale command', '--evidence', '[{"pr":"o/r#1"}]', ...base);
+    assert.equal(fact.status, 0, fact.err);
+    assert.equal(fact.out.lane, 'now');
+    assert.equal(fact.out.launch.via, 'print');
+    assert.equal(fact.out.launch.command, `cd ${src} && <your agent CLI>`);
+    assert.equal(fact.out.launch.prompt, `/factory-triage ${fact.out.file}`);
+    const pat = run('candidate', '--kind', 'pattern', '--summary', 'new rule', ...base);
+    assert.equal(pat.out.lane, 'queue');
+    assert.ok(!pat.out.launch);
+    assert.equal(run('candidate', '--kind', 'pattern', '--summary', 'x', '--now', ...base).out.lane, 'now');
+    assert.equal(run('candidate', '--kind', 'fact', '--summary', 'x', '--evidence', '[{"body":"pasted"}]', ...base).out.error, 'bad-evidence');
+    const home = run('candidate', '--kind', 'fact', '--summary', 'here', '--scope', 'core', '--project', 'src', '--root', src);
+    assert.equal(home.out.home, true, 'in the source repo itself there is nothing to launch');
+    const q = run('queue');
+    assert.equal(q.out.repos[0].repo, src);
+    assert.equal(q.out.repos[0].queued, 4);
+    assert.match(q.out.repos[0].start, /factory-triage/);
+    assert.equal(q.out.repos[1].queued, 0);
+  } finally { s.done(); }
+});

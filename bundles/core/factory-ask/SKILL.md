@@ -1,6 +1,6 @@
 ---
 name: factory-ask
-description: Ask which installed skill fits a situation ("which skill do I use for X", "what's the flow for shipping a ticket", "is there a skill for reviewing a PR"). Routes over the skills actually installed in this repo, read from their frontmatter at run time, and answers with a command and a prompt to send. Does not start the work.
+description: Ask which installed skill fits a situation ("which skill do I use for X", "what's the flow for shipping a ticket", "is there a skill for reviewing a PR"), or what's waiting (queued lesson candidates and lesson branches, and where to review them). Routes over the skills actually installed in this repo, read from their frontmatter at run time, and answers with a command and a prompt to send. Does not start the work.
 disable-model-invocation: true
 ---
 
@@ -29,6 +29,16 @@ The ranking is keyword overlap with each skill's name and description. It narrow
 - **Resolve the repo first when it changes the answer.** `node .agents/skills/factory-context/scripts/resolve.mjs` gives trunk, host, commands, neighbors and adapters. A skill that needs an adapter or a config field the repo lacks (a tracker, a comment marker, a mining cohort) isn't a fit until that is set; say what's missing.
 - **If nothing fits, say so.** Don't stretch the nearest skill. Suggest `factory-reflect` if a past session shows the gap, or writing a new skill with `writing-for-agents`, when they are installed.
 - **Name only installed skills.** A skill the table doesn't list isn't available here, whatever you remember of other repos.
+
+## What's waiting
+
+"What's waiting", "what's queued", "any lessons to review": answer from the queue, not the routing table.
+
+```bash
+node .agents/skills/factory-reflect/scripts/lessons.mjs queue
+```
+
+It lists queued candidates per source repo (kind, skill, summary, age) with the command that starts a session there, and the open lesson branches. Lead with the counts per repo, then that repo's start command and `/factory-triage`. Reviewing and landing happen in the source repo's own session, so give the command; don't start it. Without factory-reflect installed, say nothing is tracked here.
 
 ## Reply
 

@@ -82,7 +82,18 @@ For each approved row:
    - **Check**: build it, then prove it goes red on the real past mistake (make the mistake, see it fail, revert). A check that never fails protects nothing.
    - **Skill, rule, AGENTS.md or glossary edit**: read `writing-for-agents` first. A one-line fix is done directly; a new section or a new skill follows its full guidance.
    - Run the repo's checks (`project.commands.lint` and `test`). Commit and push only under the user's standing authorization. A commit that touches a review rule names its source (the PR, ticket or `session`) in a `Source:` trailer; the rule itself states the lesson with no PR or ticket numbers.
-3. **Core and org lessons go on a lesson branch** ([Landing a lesson branch](#landing-a-lesson-branch)). A **fact** (a stale command, a wrong path, a feature-map entry) is written now. A **pattern** (a new rule or check that generalizes) waits for the promotion prompt, unless the user approves it now. Either way the user sees the diff before anything merges: an abstract "record 1, 2, 3?" with no diff behind it stalls.
+3. **Core and org lessons become a candidate**, the handoff to the repo that owns the file. A repo-scope lesson stays here, in the PR that taught it.
+   ```bash
+   node .agents/skills/factory-reflect/scripts/lessons.mjs candidate --kind fact|pattern|harness --scope core|org \
+     --skill <installed skill> --summary "<one line>" --session <session id> \
+     --evidence '[{"transcript":"<path>","grep":"<words>"},{"pr":"<owner/repo#N>","thread":"<id>"}]' \
+     [--draft <patch>] [--fixed-when '{"metric":"<signal>","match":"<command head>"}']
+   ```
+   - **kind**: `fact` (a stale command, a wrong path, a leaked secret, a broken script), `pattern` (a new rule or check, a reworded skill) or `harness` (permissions, hooks, settings). The kind sets the lane: a fact launches now, the others queue for triage, which batches a pattern with its family. Offer [Review now] [Queue] with that default; `--now` or `--queue` records the answer.
+   - **evidence** is pointers: a transcript path and the words to grep, a PR and its thread. Never paste content.
+   - **fixedWhen** names the signal that should drop once the lesson lands.
+   - **lane `now`**: with `launch.argv`, run it; it starts a session in the source repo with the triage prompt. With `launch.via: print`, give the user `launch.command` and `launch.prompt` (they can run it with `!`). **lane `queue`**: the status hook in the source repo names it; a `harness` candidate also gets an Inbox notice (thread `factory lessons`, when `adapters.lessonInbox` is set), since it touches the user's config.
+   - **`home: true`**: this session is in the source repo, so run `/factory-triage` on it here.
 
 Then ask about whatever is due, at most three prompts per session:
 
@@ -99,13 +110,11 @@ node .agents/skills/factory-reflect/scripts/lessons.mjs decide --fingerprint <sl
 - **never** is remembered, and that fingerprint is never offered again.
 - **not now** waits for another occurrence.
 - Entries expire after 90 days without a new occurrence.
-- **promote**: write it as a lesson branch (below). Writes outside this repo go only to `~/.agents/factory/` and, on promote, to that source repo.
+- **promote**: write it as a candidate (step 3) with `--now`. Writes outside this repo go only to `~/.agents/factory/`.
 
 ### Landing a lesson branch
 
-Core and org changes are upstream changes: they land in the repo that owns the file, never in this one. Each reflect run gets **one lesson branch per source repo**, with **one commit per lesson**, in its own worktree, so the source repo's main checkout never changes branch. Run every command below with `--repo <source repo>`.
-
-A session lands only in its **home repo**, the repo it started in. When the source repo is another repo (you're downstream), do steps 1–3, then hand off: print `cd <source repo> && <agent CLI>` for the user, send the step 6 Inbox notice, and stop. Steps 4 and 5 run in that session; `land` refuses anywhere else (`wrong-session`).
+This runs in the source repo's own session: `factory-triage` follows it for queued candidates, and a reflect run in a factory repo follows it for its own core or org lessons. A session lands only in its **home repo**, the repo it started in; downstream, a lesson is a candidate (§6 step 3), and `land` refuses anywhere else (`wrong-session`). Each run gets **one lesson branch per source repo**, with **one commit per lesson**, in its own worktree, so the main checkout never changes branch. Run every command below with `--repo <source repo>`.
 
 1. **Pick the source repo.** For an installed skill, `lessons.mjs target --skill <name>` names it. For new content with no skill yet, write the draft to a file and run `lessons.mjs classify --file <draft>`: `org` means a company bundle (company-wide or product-specific), `core` means the generic core bundle. When a lesson has both parts, the generic rule goes in the core skill and the specifics in its company companion. When the source isn't on this machine, record the lesson, say where it has to land, and stop.
 2. **Bring its trunk up to date** (`git -C <repo> pull --ff-only` in the checkout that has trunk checked out, else `git -C <repo> fetch origin <trunk>:<trunk>`), then `lessons.mjs start --repo <repo> --slug <run slug>`. Use the same slug for every repo in the run. It prints the worktree; make every edit there (read `writing-for-agents` first) and commit each lesson on its own. The repo's pre-commit hook runs its suite.
@@ -130,4 +139,4 @@ A short list, no preamble:
 - **Backlog**: one line each, with the suggested mechanism.
 - **Dropped**: one line per rejected finding, with the synthesizer's reason.
 
-Tests: `node --test .agents/skills/factory-reflect/scripts/index.test.mjs .agents/skills/factory-reflect/scripts/landing.test.mjs`.
+Tests: `node --test .agents/skills/factory-reflect/scripts/*.test.mjs`.

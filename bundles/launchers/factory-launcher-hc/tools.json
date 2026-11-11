@@ -1,0 +1,22 @@
+{
+  "tools": [
+    {
+      "id": "hc",
+      "version": { "argv": ["hc", "--version"], "pattern": "hc (\\d+\\.\\d+\\.\\d+)" },
+      "usage": "\"hc\", \"run\"|\\bhc run\\b",
+      "min": "0.1.20",
+      "verified": "0.1.20",
+      "install": "the hc installer (it lives in ~/.local/bin)",
+      "notes": "0.1.20: run --bg --no-parent --outlive-parent keeps the launched session alive after the downstream session ends."
+    },
+    {
+      "id": "plannotator",
+      "version": { "argv": ["plannotator", "--version"], "pattern": "plannotator (\\d+\\.\\d+\\.\\d+)" },
+      "usage": "\\bplannotator (review|annotate|inbox)\\b|plannotator-(review|inbox)",
+      "min": "0.28.61",
+      "verified": "0.28.61",
+      "install": "the plannotator installer (it lives in ~/.local/bin)",
+      "notes": "The lesson review gate is `plannotator review <worktree> --base <trunk> --diff-type merge-base --gate --json`, which prints {decision, message}; the Inbox notice goes to the thread `factory lessons`."
+    }
+  ]
+}

@@ -11,11 +11,18 @@
 //                                            skills' internal-data.json patterns
 //   lessons.mjs start --repo <dir> --slug <s> a lesson branch and worktree in that source repo
 //   lessons.mjs open [--repo <dir>,<dir>]     open lesson branches (default: every bundle source repo)
+//   lessons.mjs candidate --kind fact|pattern|harness --scope core|org --summary <text>
+//                      [--skill <name>] [--evidence <json array>] [--draft <patch>] [--fixed-when <json>]
+//                      [--slug <s>] [--session <id>] [--now | --queue]
+//                                            hand a lesson to its source repo; prints the lane and launch
+//   lessons.mjs queue [--scope core|org]     queued candidates, their source repo and launch command,
+//                                            and the open lesson branches: what's waiting
+//   lessons.mjs done --file <candidate> --outcome landed|dropped|merged
 //   lessons.mjs land --repo <dir> --branch <b> --reviewed <sha>
 //                                            fast-forward trunk to a reviewed branch, then clean up;
 //                                            only from a session started in that repo (wrong-session)
 //
-// start, open, land and classify live in landing.mjs. Exit 1 with {error, message} when one refuses.
+// start, open, land and classify live in landing.mjs; candidate, queue and done in candidates.mjs. Exit 1 with {error, message} when one refuses.
 //
 // Every lesson goes to <stateRoot>/lessons.jsonl. A core or org lesson also goes to
 // ~/.agents/factory/lessons-index.jsonl (or $FACTORY_HOME), which spans every repo. A fingerprint
@@ -26,6 +33,7 @@ import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { start, open, land, classify, LandingError } from './landing.mjs';
+import { writeCandidate, queue, markDone, sourceRepo, launchFor } from './candidates.mjs';
 
 export const THRESHOLD = 3, EXPIRY_DAYS = 90, PROMPTS_PER_SESSION = 3;
 const DAY = 86400000;
@@ -73,8 +81,10 @@ export function promptText(s) {
   return `We've seen "${s.summary || s.fingerprint}" ${s.occurrences} times across ${n} repo${n === 1 ? '' : 's'} (${s.projects.join(', ')}). Promote it to ${s.scope}? [promote / not now / never]`;
 }
 
+const SKILLS_DIR = dirname(dirname(dirname(realpathSync(import.meta.filename))));
 function context() {
-  const resolver = join(dirname(dirname(dirname(realpathSync(import.meta.filename)))), 'factory-context', 'scripts', 'resolve.mjs');
+  const resolver = join(SKILLS_DIR, 'factory-context', 'scripts', 'resolve.mjs');
+  if (!existsSync(resolver)) return { error: `no resolver at ${resolver}` };
   const r = spawnSync(process.execPath, [resolver], { encoding: 'utf8' });
   if (r.status !== 0) return { error: (r.stderr || '').trim() };
   return JSON.parse(r.stdout);
@@ -84,7 +94,8 @@ function parse(argv) {
   const o = { _: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith('--')) { const v = argv[i + 1]; if (v == null || v.startsWith('--')) fail(`${a} needs a value`); o[a.slice(2)] = v; i++; }
+    if (a === '--now' || a === '--queue') o[a.slice(2)] = true;
+    else if (a.startsWith('--')) { const v = argv[i + 1]; if (v == null || v.startsWith('--')) fail(`${a} needs a value`); o[a.slice(2)] = v; i++; }
     else o._.push(a);
   }
   return o;
@@ -157,11 +168,44 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     return { branches: open({ repos }) };
   }
   if (cmd === 'land') return land({ repo: o.repo || process.cwd(), branch: o.branch, reviewed: o.reviewed, trunk: o.trunk });
+  if (cmd === 'candidate') {
+    const json = (k) => { if (o[k] === undefined) return undefined; try { return JSON.parse(o[k]); } catch { throw new LandingError('usage', `--${k} is not valid JSON`); } };
+    const ctx = o.project ? { project: { name: o.project, root: o.root }, adapters: {} } : context();
+    if (ctx.error) fail(ctx.error);
+    const from = { project: ctx.project?.name, root: ctx.project?.root, ...(o.session ? { session: o.session } : {}) };
+    const w = writeCandidate({ home: home(env), kind: o.kind, scope: o.scope, skill: o.skill, summary: o.summary, evidence: json('evidence') ?? [],
+      draft: o.draft, fixedWhen: json('fixed-when'), from, slug: o.slug, now: o.now, queue: o.queue, at: now });
+    const repo = sourceRepo(o.scope, readJson(join(home(env), 'installs.json'), {}).sources);
+    const out = { file: w.file, lane: w.lane, kind: w.candidate.kind, scope: w.candidate.scope, repo };
+    if (!repo) return { ...out, note: `the ${o.scope} source repo isn't on this machine; the candidate waits until a session there runs factory-triage` };
+    if (from.root && repo === from.root) return { ...out, home: true, next: `you are in the source repo: run /factory-triage ${w.file}` };
+    // Fast lane: start the source repo's session now. Queue: the status hook there names it.
+    if (w.lane === 'now') return { ...out, launch: launchFor({ launcher: ctx.adapters?.sessionLauncher, skillsDir: o['skills-dir'] || SKILLS_DIR, repo, prompt: `/factory-triage ${w.file}` }) };
+    return { ...out, next: `queued: the next factory-triage session in ${repo} takes it` };
+  }
+  if (cmd === 'queue') {
+    const sources = readJson(join(home(env), 'installs.json'), {}).sources || {};
+    const scopes = o.scope ? [o.scope] : ['core', 'org'];
+    const repos = scopes.map((sc) => {
+      const items = queue(home(env), sc, now);
+      const repo = sourceRepo(sc, sources);
+      return { scope: sc, repo, queued: items.length, oldestDays: items.length ? Math.max(...items.map((c) => c.ageDays)) : null,
+        candidates: items.map(({ file, kind, skill, summary, lane, ageDays }) => ({ file, kind, skill, summary, lane, ageDays })),
+        ...(repo && items.length ? { start: `cd ${repo} && <your agent CLI>, then /factory-triage` } : {}) };
+    });
+    const branches = open({ repos: Object.values(sources) }).map(({ repo, branch, commits, worktree }) => ({ repo, branch, commits: commits.length, worktree }));
+    return { repos, branches };
+  }
+  if (cmd === 'done') {
+    if (!['landed', 'dropped', 'merged'].includes(o.outcome)) fail('--outcome must be landed, dropped or merged');
+    if (!o.file) fail('--file is required');
+    return markDone(home(env), o.file, o.outcome, now);
+  }
   if (cmd === 'classify') {
     if (o.text === undefined && !o.file) fail('classify needs --text or --file');
     return classify({ text: o.text ?? readFileSync(o.file, 'utf8'), skillsDir: o['skills-dir'] });
   }
-  fail('usage: lessons.mjs record|due|decide|known|target|start|open|land|classify (see the header of this file)');
+  fail('usage: lessons.mjs record|due|decide|known|target|candidate|queue|done|start|open|land|classify (see the header of this file)');
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.meta.filename)) {

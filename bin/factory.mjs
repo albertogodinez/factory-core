@@ -89,6 +89,7 @@ function git(cwd, ...args) {
 export function bundleSources(home = toolkitHome()) {
   const def = {
     core: join(FACTORY, 'bundles', 'core'),
+    launchers: join(FACTORY, 'bundles', 'launchers'),
     expedia: join(dirname(FACTORY), 'factory-org', 'bundles', 'expedia'),
     trips: join(dirname(FACTORY), 'factory-org', 'bundles', 'trips'),
   };
@@ -820,6 +821,30 @@ export function lessonLines(waiting, here) {
   for (const [root, ws] of away) lines.push(`factory: ${ws.length} lesson branch(es) wait for review in ${basename(root)}: ${list(ws)}. Review and land them from a session started there: cd ${root} && <your agent CLI>.`);
   return lines;
 }
+// Queued factory-reflect candidates (~/.agents/factory/candidates/<scope>/*.json). In a scope's source
+// repo the line asks for triage; elsewhere it counts this repo's own handoffs and names where to go.
+export function candidateLines(here, home = toolkitHome(), sources = bundleSources(home)) {
+  const lines = [];
+  for (const scope of ['core', 'org']) {
+    const dir = join(home, 'candidates', scope);
+    let names = [];
+    try { names = readdirSync(dir).filter((n) => n.endsWith('.json')); } catch { continue; }
+    if (!names.length) continue;
+    const repoOf = (d) => (d && existsSync(d) ? findGit(d, null)?.mainRoot : null) || null;
+    const core = repoOf(sources.core);
+    const root = scope === 'core' ? core : Object.entries(sources).filter(([b]) => b !== 'core').map(([, d]) => repoOf(d)).find((r) => r && r !== core) || null;
+    const items = names.map((n) => { try { return JSON.parse(readFileSync(join(dir, n), 'utf8')); } catch { return null; } }).filter(Boolean);
+    const days = (c) => Math.floor((Date.now() - (Date.parse(c.at) || Date.now())) / 864e5);
+    if (root && here.includes(root)) {
+      const oldest = Math.max(...items.map(days));
+      lines.push(`factory: ${items.length} ${scope} lesson candidate(s) wait here (oldest ${oldest} day${oldest === 1 ? '' : 's'}): /factory-triage reviews them.`);
+      continue;
+    }
+    const mine = items.filter((c) => here.includes(c.from?.root));
+    if (mine.length) lines.push(`factory: ${mine.length} lesson candidate(s) from this repo are queued for ${root ? basename(root) : `the ${scope} source repo`}. They're reviewed there${root ? `: cd ${root} && <your agent CLI>, then /factory-triage` : ''}.`);
+  }
+  return lines;
+}
 function readText(f) { try { return readFileSync(f, 'utf8'); } catch { return null; } }
 
 // ---------- the update log and per-session notices ----------
@@ -889,6 +914,7 @@ function hookStatus(opts) {
   if (!state || event === 'SessionStart') {
     status({ ...opts, to: opts.to || input.cwd, hint: false }); // the drift line, as at any session start
     for (const l of lessonLines(lessonBranches(), g.mainRoot)) out(l);
+    for (const l of candidateLines([g.mainRoot, g.toplevel])) out(l);
     if (file) {
       try { // forget sessions untouched for a week
         for (const f of readdirSync(SESSIONS())) if (now - statSync(join(SESSIONS(), f)).mtimeMs > 7 * 864e5) rmSync(join(SESSIONS(), f), { force: true });

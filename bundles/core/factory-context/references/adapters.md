@@ -37,3 +37,11 @@ Read from the **source repo** a lesson lands in (`resolve.mjs --cwd <repo>`), no
 - `adapters.reviewUI` names the review step for a lesson branch. `plannotator-review` runs `plannotator review <worktree> --gate --json` and reads its `decision`. Unset means the diff in chat, one commit at a time.
 - `adapters.lessonInbox` names where a notice goes when a lesson branch is left undecided. `plannotator-inbox` sends one message to the thread `factory lessons`. It is a notice only; approval is always the review step.
 - `adapters.lessonLanding`: `local-review` (default) fast-forwards trunk after approval and pushes; `pr` pushes the branch and opens a PR for a repo with other reviewers.
+
+## sessionLauncher
+
+Read from the repo the session runs in (it's per machine, so it fits a local-only `project.json`). `factory-reflect` uses it to hand a fact candidate to its source repo: `lessons.mjs candidate` prints the launch.
+
+- `adapters.sessionLauncher` names an installed skill that ships `launcher.json`: `{"argv": [...]}`, where `{repo}` is the source repo's main checkout and `{prompt}` the prompt the new session starts with. The skill's `tools.json` pins the CLI it runs.
+- The new session starts in the source repo, so it writes only its own repo. Starting it is the only cross-repo step.
+- Unset, or a launcher that isn't installed: the candidate prints `cd <repo> && <your agent CLI>` and the prompt, for the user to run.

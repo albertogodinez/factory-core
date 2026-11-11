@@ -470,6 +470,23 @@ test('status --hook: a session start names the lesson branches that still wait f
   assert.doesNotMatch(hook('l2', 'SessionStart'), /lesson branch/, 'landed or deleted branches drop out');
 });
 
+test('status --hook: queued candidates ask for triage in the source repo, and are counted where they came from', async () => {
+  const { candidateLines } = await import('../bin/factory.mjs');
+  const h = join(t.root, 'home-cands'); mkdirSync(h);
+  const src = makeRepo(join(t.root, 'cand-src'), {}); mkdirSync(join(src, 'bundles', 'core'), { recursive: true });
+  const shop = makeRepo(join(t.root, 'cand-shop'), {}), other = makeRepo(join(t.root, 'cand-other'), {});
+  const at = new Date(Date.now() - 2 * 864e5).toISOString();
+  write(join(h, 'candidates', 'core', '1-a.json'), { kind: 'fact', scope: 'core', summary: 'a', from: { root: shop }, at });
+  write(join(h, 'candidates', 'core', '2-b.json'), { kind: 'pattern', scope: 'core', summary: 'b', from: { root: other }, at });
+  write(join(h, 'candidates', 'core', 'done', '0-old.json'), { kind: 'fact', from: { root: shop }, at });
+  const sources = { core: join(src, 'bundles', 'core'), launchers: join(src, 'bundles', 'core') };
+  write(join(h, 'candidates', 'org', '3-c.json'), { kind: 'fact', scope: 'org', summary: 'c', from: { root: other }, at });
+  assert.deepEqual(candidateLines([other], h, sources).slice(1), ["factory: 1 lesson candidate(s) from this repo are queued for the org source repo. They're reviewed there."], 'a bundle in core\'s repo is not the org repo');
+  assert.deepEqual(candidateLines([src], h, sources), ['factory: 2 core lesson candidate(s) wait here (oldest 2 days): /factory-triage reviews them.']);
+  assert.deepEqual(candidateLines([shop], h, sources), [`factory: 1 lesson candidate(s) from this repo are queued for cand-src. They're reviewed there: cd ${src} && <your agent CLI>, then /factory-triage.`]);
+  assert.deepEqual(candidateLines([join(t.root, 'elsewhere')], h, sources), [], 'a repo with no handoffs hears nothing');
+});
+
 test('setup on a new machine: adds or repoints the status hooks, keeps other hooks, records committed installs, then is a no-op', () => {
   const machine = join(t.root, 'machine'), repos = join(machine, 'repos'), h = join(machine, 'toolkit');
   const claude = join(machine, 'claude'), codex = join(machine, 'codex');

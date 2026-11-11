@@ -18,6 +18,7 @@ Design rules:
 | Bundle | Holds | Lives in |
 |---|---|---|
 | `core` | Principles, writing, review, PR, plan, CI watch, recording, feature-map, formal-verify, dev-slot, registry/status, PR mining, the resolver, and the factory kit (reflect, ask, docs-validate, tool-sync, writing-for-agents) | `factory-core` |
+| `launchers` | Opt-in `adapters.sessionLauncher` adapters: `factory-launcher-hc` starts a session in a lesson's source repo with hc, and pins `hc` and `plannotator` | `factory-core` |
 | `expedia` | Tracker adapter (Jira link, `In Review` transition, Confluence), GHE host, the `cc-autoreply` marker policy, dev-slot's `eg-corporate` env profile, the EGDS persona, and the tarmac skills (deploy-preflight, oncall, telemetry, design-capture) | `factory-org` |
 | `trips` | Trip Expert auth, prototype and feature maps, CCUI and shared-ui testing, tarball linking, template blocks, RUM, dev-slot app configs, trips reviewer personas, trips data (mining cohorts, experiment map) | `factory-org` |
 
