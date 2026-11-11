@@ -111,7 +111,7 @@ STATE=$(node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoo
    highlights up through the cursor's glide, clear them right after the click, and look at the
    output's first frame. Both halves press the same control, or the removed control in before and
    its replacement in after, captioned so. The before half is the branch's merge base: name it in the
-   body from `<take>.take.json`. With one dev server, swap builds one at a time (a `factory-dev-slot` skill, if installed, gives each worktree its own).
+   body from `<take>.take.json`. Both halves use the same trip or record, brand and viewport; a before from another PR doesn't count. With one dev server, swap builds one at a time (a `factory-dev-slot` skill, if installed, gives each worktree its own).
    **Both takes on one saved conversation share its conversation**, so the after take proves only the new path: show
    separately that what the removed control was for still works, and run a take that sends an agent turn on a
    throwaway conversation. A timestamp taken after `ab record start` is about 2.1 s early, because
