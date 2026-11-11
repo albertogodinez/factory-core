@@ -91,7 +91,8 @@ export function importGuide({ worktree, guide, patch, pr, model, run = spawnSync
   try { g = JSON.parse(readFileSync(guide, 'utf8')); } catch (e) { throw new GuideError('bad-guide', `${guide}: ${e.message}`); }
   const problems = checkCoverage(g, patchFiles(readFileSync(patch, 'utf8')));
   if (problems.length) throw new GuideError('bad-guide', problems.join('; '));
-  if (model) g.generator = { engine: 'claude-code', model, ...(g.generator || {}) };
+  // The same provenance Plannotator's own guide writer records (engine claude, model sonnet).
+  if (model) g.generator = { engine: 'claude', model, generatedAt: Date.now(), ...(g.generator || {}) };
   writeFileSync(guide, JSON.stringify(g, null, 2) + '\n');
   const r = run('plannotator', ['guide', 'import', '--guide', guide, '--patch', patch, ...(pr ? ['--pr', pr] : [])], { cwd: resolve(worktree), encoding: 'utf8' });
   if (r.status !== 0) throw new GuideError('import-failed', (r.stderr || r.stdout || '').trim());

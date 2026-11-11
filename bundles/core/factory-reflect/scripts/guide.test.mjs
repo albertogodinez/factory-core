@@ -79,7 +79,9 @@ test('import refuses a guide that misses a file, records the model, and passes -
     const res = importGuide({ worktree: r.dir, guide: p.guide, patch: p.patch, pr: 'https://github.com/o/r/pull/7', model: 'sonnet', run });
     assert.equal(res.output, 'saved g_1');
     assert.deepEqual(calls[0], ['plannotator', ['guide', 'import', '--guide', p.guide, '--patch', p.patch, '--pr', 'https://github.com/o/r/pull/7'], r.dir]);
-    assert.deepEqual(JSON.parse(readFileSync(p.guide, 'utf8')).generator, { engine: 'claude-code', model: 'sonnet' });
+    const gen = JSON.parse(readFileSync(p.guide, 'utf8')).generator;
+    assert.deepEqual({ engine: gen.engine, model: gen.model }, { engine: 'claude', model: 'sonnet' }, 'the provenance Plannotator itself records');
+    assert.ok(Number.isInteger(gen.generatedAt));
     importGuide({ worktree: r.dir, guide: p.guide, patch: p.patch, run });
     assert.ok(!calls[1][1].includes('--pr'), 'local: no --pr');
   } finally { r.done(); }
