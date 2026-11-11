@@ -16,6 +16,10 @@
 // into the after take, as `caption` in record-lib.sh writes them.
 // Needs ffmpeg, ffprobe and magick (labels are PNG overlays, since not every ffmpeg build has drawtext).
 // Exit 0: written. 1: usage. 2: a tool is missing. 3: no pane change found, so the takes can't be synced.
+const trackOutput = !process.env.FACTORY_RUN_ID ? () => {}
+  : await import('../../factory-teardown/scripts/producer.mjs').then(m => m.trackOutput).catch(e => {
+    throw new Error('FACTORY_RUN_ID requires factory-teardown; install it or unset the run binding', { cause: e });
+  });
 import { execFile, execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -119,6 +123,7 @@ async function main() {
   const total = Math.round((lead + Math.max(...takes.map((t) => t.length - t.click)) + Number(o.tail)) * 10) / 10;
   console.log(takes.map((t) => `${t.label}: click at ${t.click.toFixed(2)} s`).join(', ') + `; ${total} s long`);
 
+  trackOutput(o.out);
   const work = mkdtempSync(join(tmpdir(), 'side-by-side-'));
   try {
     await Promise.all(takes.map((t, i) => labelFrames(t.label, join(work, `l${i}`), total)));

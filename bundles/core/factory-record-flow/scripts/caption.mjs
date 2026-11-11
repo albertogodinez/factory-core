@@ -9,6 +9,10 @@
 // from every `at`, for a video cut from the take at that point (side-by-side.mjs passes its trim).
 // Needs ffmpeg, ffprobe and magick (captions are PNG overlays, since not every ffmpeg build has drawtext).
 // Exit 0: written. 1: usage or a bad captions file. 2: a tool is missing.
+const trackOutput = !process.env.FACTORY_RUN_ID ? () => {}
+  : await import('../../factory-teardown/scripts/producer.mjs').then(m => m.trackOutput).catch(e => {
+    throw new Error('FACTORY_RUN_ID requires factory-teardown; install it or unset the run binding', { cause: e });
+  });
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -103,6 +107,7 @@ function main() {
   // libx264 with yuv420p needs even dimensions.
   const width = w - (w % 2);
   const height = h - (h % 2);
+  trackOutput(o.out);
   const work = mkdtempSync(join(tmpdir(), 'caption-'));
   try {
     const { inputs, chain } = captionFilter(captions, work, { width, height, offset: Number(o.offset), first: 1, inLabel: 'v0', outLabel: 'v' });

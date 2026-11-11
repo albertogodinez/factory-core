@@ -3,6 +3,10 @@
 // panel that is blank (the state it should show never appeared) or lacks its probe file.
 // Usage: node build-compare-grid.mjs <spec.json>
 // Spec shape: ../schemas/compare-grid.schema.json. Needs `magick` (ImageMagick 7) on PATH.
+const trackOutput = !process.env.FACTORY_RUN_ID ? () => {}
+  : await import('../../factory-teardown/scripts/producer.mjs').then(m => m.trackOutput).catch(e => {
+    throw new Error('FACTORY_RUN_ID requires factory-teardown; install it or unset the run binding', { cause: e });
+  });
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -75,6 +79,7 @@ export function build(specPath) {
   }));
   if (errs.length) return { ok: false, errors: errs };
 
+  trackOutput(abs(spec.out));
   const tmp = mkdtempSync(join(tmpdir(), 'compare-grid-'));
   try {
     // ImageMagick may have no default font, so name a file; GRID_FONT overrides.

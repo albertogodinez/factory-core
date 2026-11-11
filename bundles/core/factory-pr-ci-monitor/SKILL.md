@@ -91,8 +91,10 @@ A tick with a check still queued is not idle: CI hasn't run. When checks stay pe
 Persist state in `<stateRoot>/factory-pr-ci-monitor/pr-<NUMBER>.json`, since a scheduled prompt is static and can't hold it:
 
 ```json
-{ "head_sha": "<sha>", "checks": {"<name>": "<conclusion>"}, "comment_ids": [1,2], "review_ids": [3], "idle_ticks": 0, "delay_min": 5, "base_min": 5, "job_id": "<id>" }
+{ "head_sha": "<sha>", "checks": {"<name>": "<conclusion>"}, "comment_ids": [1,2], "review_ids": [3], "idle_ticks": 0, "delay_min": 5, "base_min": 5, "job_id": "<id>", "run_ids": [] }
 ```
+
+When creating recording, validation or server resources, register them through `factory-teardown` and append the returned run ID to `run_ids`. Reuse an existing parent run rather than duplicating ownership. Never infer ownership from a port or filename.
 
 On the 3rd consecutive idle tick: report that monitoring stopped for inactivity, say what the PR is waiting on, give the exact command to restart it, and schedule nothing. Don't call a parked PR finished: it looks the same as a finished one in `gh pr checks`, and conflating them is how a green but unmergeable PR gets mistaken for done. Restart is cheap: re-invoke the skill the moment the PR moves, and start it in the same turn as a push (3b).
 

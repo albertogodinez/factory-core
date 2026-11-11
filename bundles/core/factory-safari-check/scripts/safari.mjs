@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // Drive real Safari once through safaridriver (W3C WebDriver over plain fetch): open a URL,
 // run a probe, save a screenshot, close. Node built-ins only.
+const trackOutput = !process.env.FACTORY_RUN_ID ? () => {}
+  : await import('../../factory-teardown/scripts/producer.mjs').then(m => m.trackOutput).catch(e => {
+    throw new Error('FACTORY_RUN_ID requires factory-teardown; install it or unset the run binding', { cause: e });
+  });
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, statSync } from 'node:fs';
@@ -99,7 +103,7 @@ try {
   const ua = await call('POST', `${s}/execute/sync`, { script: 'return navigator.userAgent', args: [] });
   const out = { url, safari: ua.match(/Version\/([\d.]+)/)?.[1] ?? ua };
   if (args.probe) out.probe = await call('POST', `${s}/execute/sync`, { script: readFileSync(args.probe, 'utf8'), args: args.arg });
-  if (args.shot) { writeFileSync(args.shot, Buffer.from(await call('GET', `${s}/screenshot`), 'base64')); out.shot = resolve(args.shot); }
+  if (args.shot) { trackOutput(args.shot); writeFileSync(args.shot, Buffer.from(await call('GET', `${s}/screenshot`), 'base64')); out.shot = resolve(args.shot); }
   console.log(JSON.stringify(out, null, 1));
   await call('DELETE', s);
   cleanup.pop();

@@ -181,11 +181,13 @@ PR mining works the same way. Each repo's `project.json` holds its reviewer coho
 
 ## The factory CLI
 
-`factory-core/bin/factory.mjs`: one file, `node:` imports only, copies from local paths.
+`factory-core/bin/factory.mjs` and its cleanup coordinator use `node:` imports only and copy from local paths.
 
 ```
 node factory.mjs install core [expedia] [trips] [--to <repo>] [--local | --commit]
 node factory.mjs update [--all]       # re-copy changed skills; refuses if a local copy was edited
+node factory.mjs cleanup [--all] [--to <repo>] [--dry-run | --apply] [--json]
+node factory.mjs setup --cleanup-schedule [--dry-run] [--apply]
 node factory.mjs remove <skill|bundle>
 node factory.mjs link                 # add the skills to the current worktree (local-only installs)
 node factory.mjs doctor               # onboarding tests
@@ -229,6 +231,56 @@ It checks only the repo the session starts in. A skill is behind when a commit a
 - records the repo in `~/.agents/factory/installs.json`
 
 The lock keeps the `skills-lock.json` shape (`source`, `skillPath`, `computedHash`).
+
+## Temporary files, evidence and teardown
+
+`factory-teardown` provides one repo-local engine for recording, validation and post-merge cleanup.
+Each run gets `<stateRoot>/teardown/runs/<id>/files/` and a manifest of owned files and resources.
+Producers carry `FACTORY_RUN_ID` and `FACTORY_STATE_ROOT` across shells; final videos, screenshots,
+comparison grids and HTML reports register as evidence, while raw takes and generated review inputs
+register as intermediates. Raw recording inputs remain pending until every consumer is verified
+finished and the caller explicitly releases them with `release --verified`. The recording template creates a run when none is supplied. Direct helper
+calls without that binding remain compatible but are unregistered and never automatic GC candidates.
+
+- Targeted teardown runs after consumers finish and stops only registered processes, named browser
+  sessions and project-scoped dev slots. A failed stop leaves inputs for retry. Stop slots before
+  removing worktrees; never force-remove dirty worktrees.
+- Registered intermediates can be deleted. Evidence, lessons, handoffs, decision logs, pins and
+  unregistered legacy state are retained. Even published evidence currently has no automatic expiry.
+- The engine can create an owned short OS-temp scratch directory for tarballs. It verifies the
+  ownership marker and root before deleting it; arbitrary external paths cannot be registered for deletion.
+- `factory remove all --purge` is uninstall and deletes project metadata/config; it is not housekeeping.
+
+Use `factory cleanup --all --dry-run` to inspect installed engines across registered repos and their
+worktrees. Shared state roots are visited once. Missing engines are reported as upgrade skips rather
+than installing anything. `--apply` is still subject to each repo's policy; the engine's
+`configure --intermediate-hours <hours>` explicitly opts registered intermediates into age-based GC.
+A schedule or skill install never creates a retention policy. Unknown files, corrupt manifests,
+all active runs and runtime resources needing targeted teardown are preserved or reported.
+
+A daily backstop is optional:
+
+```bash
+node bin/factory.mjs setup --cleanup-schedule --dry-run  # inspect scheduler configuration
+node bin/factory.mjs setup --cleanup-schedule            # install daily reporting, no deletion
+```
+
+This configures one user-level launchd job on macOS, a systemd user timer on Linux, or a Task Scheduler
+job on Windows. It runs the factory coordinator, which invokes each repo's installed engine; downstream
+skills do not reach into factory-core. Scheduled results live at `~/.agents/factory/cleanup-last.json`;
+status hooks surface candidates, failures and repos needing an engine update once per result/session.
+After repo retention policies are configured, `setup --cleanup-schedule --apply` explicitly enables
+policy-protected GC. A later setup without `--apply` preserves that setting; edit the machine's
+`cleanup-schedule.json` to set `apply` to false to return to reporting. No job is installed by normal
+`factory setup` or skill installation. Scheduler activation failures and stale mutation locks are
+reported for inspection; locks are never stolen from concurrent cleanup.
+
+The install registry cannot enumerate every unregistered zero-config repo. Its cache, legacy shared
+workspace tmp, and user-chosen output overrides need explicit discovery/ownership; no all-disk sweep
+is performed. Inactive-owner notices are inspection hints; a transient shell disappearing does not prove abandonment.
+Use a stable owner PID for long work. Managed server launch uses a dedicated process-group supervisor.
+A worktree can store state in its main checkout, or physically inside the worktree:
+preserve retained evidence and durable records before removing the latter.
 
 ## Context budget
 

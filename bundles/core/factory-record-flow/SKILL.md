@@ -6,10 +6,22 @@ user_invocable: true
 
 # Record a flow
 
-Produces `<stateRoot>/recordings/<YYYY-MM-DD>-<slug>/`: `<slug>.mp4`, `contact-sheet.jpg`, and an
-optional local `README.md`. Raw takes and take scripts sit beside it in `<stateRoot>/recordings/`.
-Get `<stateRoot>` once with `node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoot`
-and `mkdir -p "<stateRoot>/recordings"`. In the examples below, `$STATE` is that path.
+Depends on `factory-context` and `factory-teardown`. Begin a managed run before capturing:
+
+```bash
+FACTORY_STATE_ROOT=$(node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoot)
+RUN=$(node .agents/skills/factory-teardown/scripts/lifecycle.mjs begin --kind recording --state-root "$FACTORY_STATE_ROOT")
+export FACTORY_STATE_ROOT FACTORY_RUN_ID=$(printf '%s' "$RUN" | jq -er .id)
+STATE=$(printf '%s' "$RUN" | jq -er .dir)
+mkdir -p "$STATE/recordings"
+```
+
+Here `$STATE` is the run's owned output directory, not all of `stateRoot`. Produces
+`$STATE/recordings/<YYYY-MM-DD>-<slug>/`: `<slug>.mp4`, `contact-sheet.jpg`, and optional local
+`README.md`. Raw takes, sidecars and take scripts sit beside it. The take template creates a run
+itself when none is supplied; carry its printed run ID into encoding/upload, and retain the same
+`FACTORY_STATE_ROOT` and `FACTORY_RUN_ID` in every shell. Helpers register raw takes as
+pending intermediates and final videos, sheets, grids and HTML pages as evidence when this binding exists.
 
 If a `factory-record-flow-*` companion is installed, read it first: it holds app-specific helpers
 and gotchas.
@@ -46,7 +58,7 @@ the flow from the project's feature map if it has one.
    #!/usr/bin/env bash
    set -euo pipefail
    RECORD_SESSION=my-app
-STATE=$(node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoot)
+# STATE and FACTORY_RUN_ID come from the run setup above
    source .agents/skills/factory-record-flow/scripts/record-lib.sh
    record_begin "$STATE/recordings/<slug>-take1.webm"
    slow_type "$(ref 'textbox "What are you looking for"')" "<prompt>"
@@ -138,6 +150,16 @@ STATE=$(node .agents/skills/factory-context/scripts/resolve.mjs --field stateRoo
    attribute, or `{{style}}`/`{{css:}}` inside a `<style>`, since each emits its own. Keep the
    `src.html` beside the output so the page can be rebuilt after an edit.
    `node --test scripts/build-page.test.mjs` covers the placeholders and the missing-file refusal.
+
+## Finish the run
+
+Once encoding, review and upload consumers have finished, register any additional README, screenshots
+or take scripts with `lifecycle.mjs add --run "$FACTORY_RUN_ID" --path <absolute-path> --class evidence`
+(or `intermediate` for rebuildable scripts). After verifying uploads, record publication through
+`lifecycle.mjs publish ... --verified`. Only after every encoder/comparison/upload consumer is done, call `release --run "$FACTORY_RUN_ID" --verified` to release the pending raw inputs. Then finish with `--status complete` (or `failed`) and call
+`teardown --run "$FACTORY_RUN_ID" --apply`, carrying `--state-root "$FACTORY_STATE_ROOT"`.
+This removes intermediates while preserving evidence. Do not finish a parent validation run while
+its server or inspection session is still needed. Never delete the entire state root.
 
 ## Gotchas
 
