@@ -14,7 +14,7 @@ If `writeAllowed` is false, confirm each destructive step with the user.
 4. **Leave the remote branch** unless the user asks. Report which remote refs remain. The durable fix is the repository's "automatically delete head branches" setting.
 5. **Fast-forward local trunk** (`git pull --ff-only` on `project.trunk`) and confirm it is clean, so the next branch starts from what actually merged.
 6. **Close out tracking.**
-   - If `adapters.tracker` is set, run the adapter's after-merge steps: comment the merge SHA and what shipped, then move the ticket to its terminal status. If it is unset, skip this and say so.
+   - If `adapters.tracker` is set, run the adapter's after-merge steps: comment the merge SHA and what shipped, then run `tracker.mjs close --ticket <KEY>`, which moves the ticket to its terminal status and sets the resolution to done. Never move the status by hand: a ticket closed that way keeps an empty resolution. If it is unset, skip this and say so.
    - If the repo has a feature map, clear entries that were waiting on this PR: `node .agents/skills/factory-feature-map/scripts/clear-pending-prs.mjs --pr <PR URL> --apply`, then commit the change. Skip it if that skill isn't installed.
    - Check any design decision records whose consequences describe code this PR changed: a "this stays" line about something the PR deleted is now false.
 7. **Remove completed monitor state.** Only after verified merge and successful teardown/closeout, delete this PR's `<stateRoot>/factory-pr-ci-monitor/pr-<N>.json`. Preserve it on partial failure so the next invocation can retry.

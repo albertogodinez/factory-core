@@ -11,12 +11,13 @@ tracker.mjs parse    --text <branch, title or commit message>   → {"status":"o
 tracker.mjs get      --ticket <KEY>                              → {"status":"ok","ticket":{"key","title","status","url","type"}}
 tracker.mjs link     --ticket <KEY> --url <PR url> [--title <t>] → {"status":"ok"|"exists","detail"}   adds a remote link, then reads it back
 tracker.mjs review   --ticket <KEY>                              → {"status":"ok"|"skipped","from","to","detail"}  moves to the review state; never backward
+tracker.mjs close    --ticket <KEY>                              → {"status":"ok"|"skipped","from","to","resolution","detail"}  moves to the terminal status and sets the resolution to the done value; never leaves it empty
 tracker.mjs publish  --file <plan.md> [--target <id>]            → {"status":"ok"|"skipped","url","detail"}       optional; plan copies
 ```
 
 - `status: "skipped"` carries a one-line `detail` that the core skill repeats to the user (e.g. "already In Review", "no transition to In Review from Blocked").
 - Credentials are the adapter's business. Core never reads them, and never passes them on the command line.
-- `writeAllowed: false` applies: a core skill asks the user before calling `link`, `review` or `publish`.
+- `writeAllowed: false` applies: a core skill asks the user before calling `link`, `review`, `close` or `publish`.
 
 ## commentMarker
 
