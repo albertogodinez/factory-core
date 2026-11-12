@@ -824,6 +824,16 @@ export function lessonLines(waiting, here) {
   for (const [root, ws] of away) lines.push(`factory: ${ws.length} lesson branch(es) wait for review in ${basename(root)}: ${list(ws)}. Review and land them from a session started there: cd ${root} && <your agent CLI>.`);
   return lines;
 }
+// Whether a scope's queue should be triaged now. The cadence (lessons.mjs cadence) sets the mode: due
+// when the mode's interval has passed, or an early trigger fires (a fact waits, the queue is 5+, or
+// the oldest candidate is 3+ days old). Shared by the status hook and anything that schedules triage.
+export function triageDue(items, st, now = Date.now()) {
+  const oldest = items.length ? Math.max(...items.map((c) => Math.floor((now - (Date.parse(c.at) || now)) / 864e5))) : 0;
+  if (!items.length) return { due: false, oldest, st };
+  const interval = (st?.mode === 'weekly' ? 7 : 1) * 864e5;
+  const byMode = !st?.lastRun || now - Date.parse(st.lastRun) >= interval;
+  return { due: byMode || items.length >= 5 || oldest >= 3 || items.some((c) => c.kind === 'fact'), oldest, st };
+}
 // Queued factory-reflect candidates (~/.agents/factory/candidates/<scope>/*.json). In a scope's source
 // repo the line asks for triage; elsewhere it counts this repo's own handoffs and names where to go.
 export function candidateLines(here, home = toolkitHome(), sources = bundleSources(home)) {
@@ -837,15 +847,9 @@ export function candidateLines(here, home = toolkitHome(), sources = bundleSourc
     const core = repoOf(sources.core);
     const root = scope === 'core' ? core : Object.entries(sources).filter(([b]) => b !== 'core').map(([, d]) => repoOf(d)).find((r) => r && r !== core) || null;
     const items = names.map((n) => { try { return JSON.parse(readFileSync(join(dir, n), 'utf8')); } catch { return null; } }).filter(Boolean);
-    const days = (c) => Math.floor((Date.now() - (Date.parse(c.at) || Date.now())) / 864e5);
     if (root && here.includes(root)) {
-      const oldest = Math.max(...items.map(days));
-      // The cadence (lessons.mjs cadence) decides when to nudge: when triage is due by its mode, or an
-      // early trigger fires (a fact waits, the queue is 5+, or the oldest is 3+ days).
-      const st = readJson(join(home, 'triage-state.json'), {})[scope];
-      const interval = (st?.mode === 'weekly' ? 7 : 1) * 864e5;
-      const due = !st?.lastRun || Date.now() - Date.parse(st.lastRun) >= interval;
-      if (!due && items.length < 5 && oldest < 3 && !items.some((c) => c.kind === 'fact')) continue;
+      const { due, oldest, st } = triageDue(items, readJson(join(home, 'triage-state.json'), {})[scope]);
+      if (!due) continue;
       const installed = existsSync(join(root, '.agents', 'skills', 'factory-triage', 'SKILL.md')) || !sources.core;
       const how = installed ? '/factory-triage reviews them' : `factory-triage reviews them (${join(sources.core, 'factory-triage', 'SKILL.md')})`;
       lines.push(`factory: ${items.length} ${scope} lesson candidate(s) wait here (oldest ${oldest} day${oldest === 1 ? '' : 's'}${st?.mode ? `, ${st.mode} triage` : ''}): ${how}.`);
