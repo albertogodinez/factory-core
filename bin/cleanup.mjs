@@ -140,27 +140,30 @@ export const JOBS = {
   cleanup: { marker: MARKER, label: 'local.factory.cleanup', unit: 'factory-cleanup', task: 'FactoryCleanup', log: 'cleanup-scheduler',
     wrapper: 'cleanup-scheduled.cmd', description: 'Factory cleanup inventory', args: ['cleanup', '--all', '--scheduled'], seconds: 86400, calendar: 'daily', windows: ['/SC', 'DAILY', '/ST', '10:00'] },
   triage: { marker: 'factory triage schedule', label: 'local.factory.triage', unit: 'factory-triage', task: 'FactoryTriage', log: 'triage-scheduler',
-    wrapper: 'triage-scheduled.cmd', description: 'Factory lesson triage when due', args: ['triage', '--due', '--scheduled'], seconds: 14400, calendar: '*-*-* 00/4:00:00', windows: ['/SC', 'HOURLY', '/MO', '4'] },
+    wrapper: 'triage-scheduled.cmd', description: 'Factory lesson triage when due', args: ['triage', '--due', '--scheduled'], seconds: 14400, calendar: '*-*-* 00/4:00:00', windows: ['/SC', 'HOURLY', '/MO', '4'],
+    // It starts the launcher and agent CLIs (hc, claude, codex), which a scheduler's bare PATH can't find.
+    keepPath: true },
 };
-export function scheduleDefinitions({ platform = process.platform, userHome = homedir(), factoryHome = defaultHome(), node = process.execPath, cli = FACTORY, uid = userInfo().uid, job = JOBS.cleanup } = {}) {
-  for (const value of [userHome, factoryHome, node, cli]) if (/[\r\n\0]/.test(value)) throw new Error('scheduler paths must not contain control characters');
+export function scheduleDefinitions({ platform = process.platform, userHome = homedir(), factoryHome = defaultHome(), node = process.execPath, cli = FACTORY, uid = userInfo().uid, job = JOBS.cleanup, envPath = process.env.PATH || '' } = {}) {
+  const keepPath = job.keepPath && envPath;
+  for (const value of [userHome, factoryHome, node, cli, keepPath ? envPath : '']) if (/[\r\n\0]/.test(value)) throw new Error('scheduler paths must not contain control characters');
   const argv = [node, cli, ...job.args];
   if (platform === 'darwin') {
     const path = join(userHome, 'Library', 'LaunchAgents', `${job.label}.plist`);
-    const contents = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- ${job.marker} -->\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>${job.label}</string>\n<key>ProgramArguments</key><array>${argv.map(a => `<string>${xml(a)}</string>`).join('')}</array>\n<key>EnvironmentVariables</key><dict><key>FACTORY_HOME</key><string>${xml(factoryHome)}</string></dict>\n<key>StartInterval</key><integer>${job.seconds}</integer>\n<key>RunAtLoad</key><true/>\n<key>StandardOutPath</key><string>${xml(join(factoryHome, `${job.log}.log`))}</string>\n<key>StandardErrorPath</key><string>${xml(join(factoryHome, `${job.log}-error.log`))}</string>\n</dict></plist>\n`;
+    const contents = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- ${job.marker} -->\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>${job.label}</string>\n<key>ProgramArguments</key><array>${argv.map(a => `<string>${xml(a)}</string>`).join('')}</array>\n<key>EnvironmentVariables</key><dict><key>FACTORY_HOME</key><string>${xml(factoryHome)}</string>${keepPath ? `<key>PATH</key><string>${xml(envPath)}</string>` : ''}</dict>\n<key>StartInterval</key><integer>${job.seconds}</integer>\n<key>RunAtLoad</key><true/>\n<key>StandardOutPath</key><string>${xml(join(factoryHome, `${job.log}.log`))}</string>\n<key>StandardErrorPath</key><string>${xml(join(factoryHome, `${job.log}-error.log`))}</string>\n</dict></plist>\n`;
     return { files: [{ path, contents }], commands: [{ bin: 'launchctl', args: ['bootout', `gui/${uid}`, path], allowFailure: true }, { bin: 'launchctl', args: ['bootstrap', `gui/${uid}`, path] }] };
   }
   if (platform === 'linux') {
     const dir = join(userHome, '.config', 'systemd', 'user');
     const timer = { path: join(dir, `${job.unit}.timer`), contents: `# ${job.marker}\n[Unit]\nDescription=${job.description}\n[Timer]\nOnCalendar=${job.calendar}\nPersistent=true\n[Install]\nWantedBy=timers.target\n` };
-    const service = { path: join(dir, `${job.unit}.service`), contents: `# ${job.marker}\n[Unit]\nDescription=${job.description}\n[Service]\nType=oneshot\nEnvironment=${systemdQuote(`FACTORY_HOME=${factoryHome}`, false)}\nExecStart=${argv.map(a => systemdQuote(a)).join(' ')}\n` };
+    const service = { path: join(dir, `${job.unit}.service`), contents: `# ${job.marker}\n[Unit]\nDescription=${job.description}\n[Service]\nType=oneshot\nEnvironment=${systemdQuote(`FACTORY_HOME=${factoryHome}`, false)}\n${keepPath ? `Environment=${systemdQuote(`PATH=${envPath}`, false)}\n` : ''}ExecStart=${argv.map(a => systemdQuote(a)).join(' ')}\n` };
     return { files: [timer, service], commands: [{ bin: 'systemctl', args: ['--user', 'daemon-reload'] }, { bin: 'systemctl', args: ['--user', 'enable', '--now', `${job.unit}.timer`] }] };
   }
   if (platform === 'win32') {
     const path = join(factoryHome, job.wrapper);
     for (const value of [factoryHome, node, cli]) if (value.includes('"')) throw new Error('Windows scheduler paths cannot contain quotes');
     const cmd = value => value.replaceAll('%', '%%');
-    const contents = `@echo off\r\nrem ${job.marker}\r\nset "FACTORY_HOME=${cmd(factoryHome)}"\r\n"${cmd(node)}" "${cmd(cli)}" ${job.args.join(' ')}\r\n`;
+    const contents = `@echo off\r\nrem ${job.marker}\r\nset "FACTORY_HOME=${cmd(factoryHome)}"\r\n${keepPath ? `set "PATH=${cmd(envPath)}"\r\n` : ''}"${cmd(node)}" "${cmd(cli)}" ${job.args.join(' ')}\r\n`;
     return { files: [{ path, contents }], commands: [{ bin: 'schtasks', args: ['/Create', ...job.windows, '/TN', job.task, '/TR', `cmd.exe /d /c ""${path}""`] }] };
   }
   throw new Error(`${job === JOBS.cleanup ? 'cleanup' : job.unit} scheduling is not supported on ${platform}`);

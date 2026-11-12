@@ -74,8 +74,9 @@ test('schedule definitions use one daily report-only job and escape machine path
 });
 
 test('the triage job gets its own label, unit and task, every 4 hours, and never touches the cleanup files', () => {
-  const common = { userHome: '/test/user home', factoryHome: '/test/factory home', node: '/test/node binary', cli: '/test/factory source/bin/factory.mjs', uid: 42, job: JOBS.triage };
+  const common = { userHome: '/test/user home', factoryHome: '/test/factory home', node: '/test/node binary', cli: '/test/factory source/bin/factory.mjs', uid: 42, job: JOBS.triage, envPath: '/test/bin:/usr/bin' };
   const mac = scheduleDefinitions({ ...common, platform: 'darwin' });
+  assert.match(mac.files[0].contents, /<key>PATH<\/key><string>\/test\/bin:\/usr\/bin<\/string>/, 'the launcher and agent CLIs are found under a scheduler');
   assert.match(mac.files[0].path, /local\.factory\.triage\.plist$/);
   assert.match(mac.files[0].contents, /<string>triage<\/string><string>--due<\/string><string>--scheduled<\/string>/);
   assert.match(mac.files[0].contents, /<integer>14400<\/integer>/);
@@ -83,10 +84,12 @@ test('the triage job gets its own label, unit and task, every 4 hours, and never
   const linux = scheduleDefinitions({ ...common, platform: 'linux' });
   assert.deepEqual(linux.files.map(f => f.path.split('/').pop()), ['factory-triage.timer', 'factory-triage.service']);
   assert.match(linux.files[0].contents, /OnCalendar=\*-\*-\* 00\/4:00:00/);
+  assert.match(linux.files[1].contents, /Environment="PATH=\/test\/bin:\/usr\/bin"/);
   const win = scheduleDefinitions({ ...common, platform: 'win32' });
   assert.ok(win.commands[0].args.includes('FactoryTriage') && win.commands[0].args.includes('HOURLY'));
   const cleanupMac = scheduleDefinitions({ ...common, job: undefined, platform: 'darwin' });
   assert.match(cleanupMac.files[0].path, /local\.factory\.cleanup\.plist$/, 'cleanup keeps its own file');
+  assert.ok(!cleanupMac.files[0].contents.includes('<key>PATH</key>'), 'cleanup runs only node: no PATH');
 });
 
 test('installSchedule writes the triage job once, refuses a file it does not own, and dry-runs to nothing', () => {
