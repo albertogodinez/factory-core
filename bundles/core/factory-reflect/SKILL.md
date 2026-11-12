@@ -1,11 +1,13 @@
 ---
 name: factory-reflect
-description: 'Run a retrospective on a session or PR and turn at most three durable lessons into structure: an automated check, a factory-review rule, a skill edit, a glossary term, or an AGENTS.md pointer. Three reviewer subagents mine the evidence, a synthesizer filters one-offs and labels each lesson repo, core or org, and a core or org lesson is handed to the repo that owns it as a candidate for triage. Use for /factory-reflect, "reflect", "retro", or a learnings phase.'
+description: 'Run a retrospective on a session or PR and turn durable lessons into structure, checks first: a check, review rule, skill edit, glossary term, or (last) an AGENTS.md pointer. Three reviewer subagents mine the evidence, a synthesizer filters one-offs and labels each lesson repo, core or org, and a core or org lesson is handed to the repo that owns it as a candidate for triage. Use for /factory-reflect, "reflect", "retro", or a learnings phase.'
 ---
 
 # Reflect
 
-Mine a session for **lessons** and encode each one in structure, so the next agent can't repeat the mistake. A one-off isn't a lesson. A lesson a check could enforce becomes the check, and only the check: the instruction is the symptom. **Accept at most three lessons per run.** There is always something to fix; three good edits beat ten nobody reviews.
+Mine a session for **lessons** and encode each one in structure, so the next agent can't repeat the mistake. A one-off isn't a lesson. A lesson a check could enforce becomes the check, and only the check: the instruction is the symptom. **Apply at most three repo-scope lessons per run.** They're edited here and reviewed one by one, and three good edits beat ten nobody reviews. **Core and org lessons have no cap:** each becomes a candidate, and triage dedupes and batches them into families before anyone reviews them.
+
+**Prefer a check to prose.** A lint rule, test, or script guard enforces itself and costs no context. A feature map entry comes next: skills read it to reach, drive and measure the app, so it acts almost like a check. `AGENTS.md` is always loaded, so it takes only a one-line navigation pointer, and only when nothing else fits. Never add a rule, a judgement call or an explanation there.
 
 ## 0. Resolve the project
 
@@ -30,7 +32,7 @@ Send one message with three parallel subagents. Give each one the prompt in `pro
 
 ## 3. Synthesize
 
-Fill `<KNOWN_FINGERPRINTS>` with the output of `node .agents/skills/factory-reflect/scripts/lessons.mjs known`. Then dispatch one subagent with `prompts/synthesizer.md` and the three reviewer outputs inlined. It returns Accepted (three at most, each with a scope and a fingerprint), Rejected and Backlog.
+Fill `<KNOWN_FINGERPRINTS>` with the output of `node .agents/skills/factory-reflect/scripts/lessons.mjs known`. Then dispatch one subagent with `prompts/synthesizer.md` and the three reviewer outputs inlined. It returns Accepted (each with a scope and a fingerprint; three at most with scope `repo`, any number with scope `core` or `org`), Rejected and Backlog.
 
 ## 4. Check for duplicates before proposing anything new
 
@@ -51,15 +53,15 @@ Pick the highest row that works. Mechanical beats judgement. Judgement goes to r
 | Lesson | Destination | Path |
 | --- | --- | --- |
 | Mechanical: a fixed pattern a script can detect (wrong path, banned API, missing field, bad import, file in the wrong place) | Automated check | The repo's own lint or test (`project.commands`), or a skill's own guard in its `scripts/` |
+| A feature gotcha, code anchor, driving step, or a state the app must be checked in | Feature map entry | `factory-feature-map`. A map installed from a bundle is scope `org`: its entry is a `fact` candidate |
 | The same mistake class seen twice or more | The `correct` skill, if installed | architecture, then types, then lint, then test, then docs |
 | A judgement call a reviewer of the diff would catch | factory-review rule | Repo-specific: `.agents/skills/factory-review-local/rules/<persona>/<slug>.md` (a persona pack the repo owns). Generic: a core rule (scope `core`) |
 | Review comments keep raising the same point across PRs | Mine it first | `factory-pr-mining`, if installed |
 | A skill the session used had a missing step, a stale command or a wrong fact | Edit that skill | Its `SKILL.md` or `references/`; see the installed-copy rule below |
 | A skill existed but didn't trigger | Tune its description | That skill's frontmatter `description` |
 | A recurring workflow with no home | New skill | `.agents/skills/<name>/`, self-contained |
-| A feature gotcha, code anchor or driving step | Feature map entry | `factory-feature-map`. A map installed from a bundle is scope `org`: its entry is a `fact` candidate |
 | A domain term the agent misread | Glossary term | The layer where it's true (factory-glossary's "Add or change a term"): the repo's `GLOSSARY.md` for a repo-only term, else a shared layer (scope `core` or `org`). A team repo with a local install keeps no glossary file. When `lookup.mjs --dupes` finds the term in two places, propose one entry in the shared layer and deleting the copies |
-| The agent couldn't find a file, doc or command | One-line navigation pointer | The closest scoped `AGENTS.md` or `CLAUDE.md` |
+| The agent couldn't find a file, doc or command, and no check, skill description or glossary entry would have led it there | One-line navigation pointer (last resort) | The closest scoped `AGENTS.md` or `CLAUDE.md`. If the edit is longer than one line, or the file already has a similar line, route it elsewhere |
 | A decision with lasting rationale | Rationale, not structure | The PR body, the commit message, or the repo's wiki |
 
 **Installed copies are never edited in place.** A skill listed in `.agents/factory-metadata/skills-lock.json` came from a bundle. An edit to that copy blocks `factory update`, and it never reaches other repos. Such a lesson has scope `core` or `org`: record it (§6) and change the skill at its source. A skill missing from the lock is the repo's own, so edit it here. In a linked worktree (`factory link`), `.agents/skills/<name>` is a link to the main checkout's installed copy, so an edit there is an in-place edit too.
@@ -68,7 +70,7 @@ Repo-local knowledge stays in its repo. In a local-only install, where the repo 
 
 ## 6. Record, apply after approval, and hand off upstream
 
-Present the synthesizer's output with its routed destinations, and wait for the user to pick rows; they may redirect a routing. When this skill runs as a background subagent, return the proposals instead and let the caller ask.
+Present the synthesizer's output with its routed destinations. Lead each row with its lane in brackets, e.g. `[apply here]`, `[now: fact]`, `[queue: pattern]`, `[queue: harness]`, one per repo when a row lands in two, so the user can see what runs now and what waits for triage. Then wait for the user to pick rows; they may redirect a routing. When this skill runs as a background subagent, return the proposals instead and let the caller ask.
 
 For each approved row:
 

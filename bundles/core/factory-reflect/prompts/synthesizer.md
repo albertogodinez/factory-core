@@ -41,18 +41,30 @@ Apply every criterion to every finding:
   tools, hosts, trackers) or changes a skill from an org bundle. `.agents/factory-metadata/skills-lock.json`
   lists each installed skill's bundle. An installed copy is never edited in place: a lesson that
   changes one is `core` or `org`.
-- **At most three Accepted.** Rank by how much each prevents, keep the top three, and move the
-  rest to Backlog with a one-line reason. There is always something to fix; three good edits beat
-  ten that nobody reviews.
+- **Prefer a check to prose, and AGENTS.md least of all.** In order: a test, lint or script guard;
+  a feature map entry (skills read it to reach, drive and measure the app, so it acts like a check);
+  a review rule; a skill edit or glossary term; and last, an `AGENTS.md` line. Accept an `AGENTS.md`
+  edit only as a one-line pointer when nothing else would have led the agent there.
+- **At most three Accepted with scope `repo`.** These are applied in this session and reviewed one by
+  one. Rank them by how much each prevents, keep the top three, and move the rest to Backlog with a
+  one-line reason.
+- **No cap on `core` or `org`.** Each one becomes a queued candidate, and triage dedupes and batches
+  candidates into families. Accept every one that passes the criteria above. Don't rank or trim them.
 
 Output exactly this, no preamble. One sentence per cell. Fingerprint: a kebab-case slug of the
 failure mode (3 to 6 words, no repo or ticket names), or a known one reused verbatim.
 
+Lane says what happens to the row once approved. Scope `repo` is `apply here`. A `core` or `org`
+row is a candidate, and its candidate kind picks the lane: `now (fact)` for something wrong today
+(a stale command, a wrong path, a broken script, a wrong feature map entry), `queue (pattern)` for a
+new rule, check or reworded skill, `queue (harness)` for permissions, hooks or settings. A row that
+lands in more than one repo gets one lane per repo, separated by `;`.
+
 ## Accepted
 
-| Problem | Proposal | Kind | Scope | Fingerprint | Destination |
-|---|---|---|---|---|---|
-| <failure mode> | <the concrete edit or check> | check / rule / skill edit / description / new skill / glossary / pointer | repo / core / org | <slug> | <path + section> |
+| Problem | Proposal | Kind | Scope | Lane | Fingerprint | Destination |
+|---|---|---|---|---|---|---|
+| <failure mode> | <the concrete edit or check> | check / feature map / rule / skill edit / description / new skill / glossary / pointer | repo / core / org | apply here / now (fact) / queue (pattern) / queue (harness) | <slug> | <path + section> |
 
 ## Rejected
 
