@@ -571,6 +571,7 @@ test('setup on a new machine: adds or repoints the status hooks, keeps other hoo
   assert.match(r.out, /claude-code: [^\n]*SessionEnd: capture added/);
   assert.match(r.out, /recorded: mine \(commit\)/);
   assert.match(r.out, /no install: team/);
+  assert.match(r.out, /triage schedule: not installed\. [^\n]*factory setup --triage-schedule/, 'setup names the optional triage schedule');
   const cfg = json(join(claude, 'settings.json'));
   const cmd = `node '${FACTORY}' status --hook 2>/dev/null || true`;
   assert.equal(cfg.model, 'x');

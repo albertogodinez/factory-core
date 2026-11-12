@@ -1084,6 +1084,7 @@ async function setup(opts) {
 
   for (const l of machineLauncher(toolkitHome(), opts)) out(l);
   for (const l of machineAgent(toolkitHome(), opts)) out(l);
+  if (!opts.triageSchedule && !readJson(join(toolkitHome(), 'triage-schedule.json'), {}).activated) out('triage schedule: not installed. To open a triage session whenever a lesson queue is due, run factory setup --triage-schedule');
 
   const root = resolve(opts.root || dirname(FACTORY));
   const known = readJson(join(toolkitHome(), 'installs.json'), { repos: {} }).repos;

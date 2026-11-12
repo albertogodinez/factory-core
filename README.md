@@ -345,6 +345,7 @@ node ~/Documents/repos/factory-core/bin/factory.mjs setup            # --root <d
 It does what a clone can't bring:
 - **The user hooks.** It adds the `status --hook` entries to `~/.claude/settings.json` and `~/.codex/hooks.json` (`CLAUDE_CONFIG_DIR` and `CODEX_HOME` move them). Trust them in the next interactive Codex session.
 - **installs.json.** A `--commit` repo's skills and lock arrive with the clone, but this machine's `~/.agents/factory/installs.json` doesn't list it, so `update --all` would skip it. `setup` records each repo under `--root` (default: factory-core's parent directory) that carries a lock.
+- **The triage schedule (optional).** `setup` says when it isn't installed. `setup --triage-schedule` adds it: every 4 hours, it opens a triage session in factory-core or factory-org when that repo's lesson queue is due (see Scheduled triage).
 - **Team repos.** A `--local` install is never tracked, so a clone has none. `setup` lists the repos with no install. Run `install … --local` in the ones you work in, then `/factory-repo-register`, because `project.json` was untracked too.
 
 Keep the resolver and scripts fast, small and free of dependencies. On Windows, `factory` copies skills instead of linking them, and every script runs without a shell.
