@@ -516,6 +516,38 @@ test('status --hook: proposed repo lessons are named in their repo until applied
   assert.deepEqual(repoLessonLines([join(t.root, 'elsewhere')], h, now), [], 'a repo with none hears nothing');
 });
 
+test('triage --due: launches a session per due scope, waits on a recent launch, stays quiet at night', async () => {
+  const { triageDueRun } = await import('../bin/factory.mjs');
+  const h = join(t.root, 'home-triage-due'); mkdirSync(h);
+  const src = makeRepo(join(t.root, 'td-src'), {}); mkdirSync(join(src, 'bundles', 'core'), { recursive: true });
+  write(join(h, 'sources.json'), { core: join(src, 'bundles', 'core'), launchers: join(src, 'bundles', 'launchers'), expedia: join(t.root, 'absent'), trips: join(t.root, 'absent') }); // every default, so the machine's own repos stay out
+  const noon = new Date(); noon.setHours(12, 0, 0, 0);
+  const now = noon.getTime(), at = new Date(now - 4 * 864e5).toISOString();
+  write(join(h, 'candidates', 'core', '1-a.json'), { kind: 'pattern', scope: 'core', summary: 'a', from: { root: '/x' }, at });
+  write(join(h, 'candidates', 'org', '2-b.json'), { kind: 'pattern', scope: 'org', summary: 'b', from: { root: '/x' }, at });
+  const launched = [], spawn = (argv) => { launched.push(argv); return {}; };
+
+  let r = await triageDueRun({ home: h, now, spawn });
+  assert.equal(r.scopes.find((x) => x.scope === 'core').action, 'due', 'no launcher: only recorded');
+  assert.equal(r.scopes.find((x) => x.scope === 'org').reason, 'source repo not on this machine');
+  assert.equal(launched.length, 0);
+
+  write(join(src, 'bundles', 'launchers', 'launch-x', 'launcher.json'), { argv: ['tool', '--cwd', '{repo}', '{agent}', '{prompt}'] });
+  write(join(h, 'config.json'), { adapters: { sessionLauncher: 'launch-x', agentCLI: 'codex' } });
+  r = await triageDueRun({ home: h, now, dryRun: true, spawn });
+  assert.equal(r.scopes[0].action, 'would launch'); assert.equal(launched.length, 0, 'dry run launches nothing');
+  r = await triageDueRun({ home: h, now, spawn });
+  assert.equal(r.scopes[0].action, 'launched');
+  assert.deepEqual(launched[0].slice(0, 4), ['tool', '--cwd', src, 'codex'], 'no session: the machine agent');
+  assert.match(launched[0][4], /--scheduled/);
+  r = await triageDueRun({ home: h, now: now + 2 * 36e5, spawn });
+  assert.match(r.scopes[0].reason, /waiting on that session/); assert.equal(launched.length, 1);
+  const night = new Date(now); night.setHours(23);
+  assert.equal((await triageDueRun({ home: h, now: night.getTime(), spawn })).skipped, 'quiet hours');
+  const failing = await triageDueRun({ home: h, now: now + 3 * 864e5, spawn: () => ({ error: 'hc: not found' }) });
+  assert.equal(failing.scopes[0].action, 'failed');
+});
+
 test('setup on a new machine: adds or repoints the status hooks, keeps other hooks, records committed installs, then is a no-op', () => {
   const machine = join(t.root, 'machine'), repos = join(machine, 'repos'), h = join(machine, 'toolkit');
   const claude = join(machine, 'claude'), codex = join(machine, 'codex');

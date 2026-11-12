@@ -134,36 +134,44 @@ async function performCleanup(opts, runtime) {
 const MARKER = 'factory cleanup schedule';
 const xml = text => String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
 const systemdQuote = (text, expandDollars = true) => '"' + String(text).replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%').replaceAll('$', expandDollars ? '$$' : '$') + '"';
-export function scheduleDefinitions({ platform = process.platform, userHome = homedir(), factoryHome = defaultHome(), node = process.execPath, cli = FACTORY, uid = userInfo().uid } = {}) {
+// The scheduled jobs factory installs. Each is one user-level launchd agent, systemd timer or Task
+// Scheduler task that runs `factory <args>`; its marker proves a file is ours before it's replaced.
+export const JOBS = {
+  cleanup: { marker: MARKER, label: 'local.factory.cleanup', unit: 'factory-cleanup', task: 'FactoryCleanup', log: 'cleanup-scheduler',
+    wrapper: 'cleanup-scheduled.cmd', description: 'Factory cleanup inventory', args: ['cleanup', '--all', '--scheduled'], seconds: 86400, calendar: 'daily', windows: ['/SC', 'DAILY', '/ST', '10:00'] },
+  triage: { marker: 'factory triage schedule', label: 'local.factory.triage', unit: 'factory-triage', task: 'FactoryTriage', log: 'triage-scheduler',
+    wrapper: 'triage-scheduled.cmd', description: 'Factory lesson triage when due', args: ['triage', '--due', '--scheduled'], seconds: 14400, calendar: '*-*-* 00/4:00:00', windows: ['/SC', 'HOURLY', '/MO', '4'] },
+};
+export function scheduleDefinitions({ platform = process.platform, userHome = homedir(), factoryHome = defaultHome(), node = process.execPath, cli = FACTORY, uid = userInfo().uid, job = JOBS.cleanup } = {}) {
   for (const value of [userHome, factoryHome, node, cli]) if (/[\r\n\0]/.test(value)) throw new Error('scheduler paths must not contain control characters');
-  const argv = [node, cli, 'cleanup', '--all', '--scheduled'];
+  const argv = [node, cli, ...job.args];
   if (platform === 'darwin') {
-    const path = join(userHome, 'Library', 'LaunchAgents', 'local.factory.cleanup.plist');
-    const contents = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- ${MARKER} -->\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>local.factory.cleanup</string>\n<key>ProgramArguments</key><array>${argv.map(a => `<string>${xml(a)}</string>`).join('')}</array>\n<key>EnvironmentVariables</key><dict><key>FACTORY_HOME</key><string>${xml(factoryHome)}</string></dict>\n<key>StartInterval</key><integer>86400</integer>\n<key>RunAtLoad</key><true/>\n<key>StandardOutPath</key><string>${xml(join(factoryHome, 'cleanup-scheduler.log'))}</string>\n<key>StandardErrorPath</key><string>${xml(join(factoryHome, 'cleanup-scheduler-error.log'))}</string>\n</dict></plist>\n`;
+    const path = join(userHome, 'Library', 'LaunchAgents', `${job.label}.plist`);
+    const contents = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- ${job.marker} -->\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>${job.label}</string>\n<key>ProgramArguments</key><array>${argv.map(a => `<string>${xml(a)}</string>`).join('')}</array>\n<key>EnvironmentVariables</key><dict><key>FACTORY_HOME</key><string>${xml(factoryHome)}</string></dict>\n<key>StartInterval</key><integer>${job.seconds}</integer>\n<key>RunAtLoad</key><true/>\n<key>StandardOutPath</key><string>${xml(join(factoryHome, `${job.log}.log`))}</string>\n<key>StandardErrorPath</key><string>${xml(join(factoryHome, `${job.log}-error.log`))}</string>\n</dict></plist>\n`;
     return { files: [{ path, contents }], commands: [{ bin: 'launchctl', args: ['bootout', `gui/${uid}`, path], allowFailure: true }, { bin: 'launchctl', args: ['bootstrap', `gui/${uid}`, path] }] };
   }
   if (platform === 'linux') {
     const dir = join(userHome, '.config', 'systemd', 'user');
-    const timer = { path: join(dir, 'factory-cleanup.timer'), contents: `# ${MARKER}\n[Unit]\nDescription=Factory cleanup inventory\n[Timer]\nOnCalendar=daily\nPersistent=true\n[Install]\nWantedBy=timers.target\n` };
-    const service = { path: join(dir, 'factory-cleanup.service'), contents: `# ${MARKER}\n[Unit]\nDescription=Factory cleanup inventory\n[Service]\nType=oneshot\nEnvironment=${systemdQuote(`FACTORY_HOME=${factoryHome}`, false)}\nExecStart=${argv.map(a => systemdQuote(a)).join(' ')}\n` };
-    return { files: [timer, service], commands: [{ bin: 'systemctl', args: ['--user', 'daemon-reload'] }, { bin: 'systemctl', args: ['--user', 'enable', '--now', 'factory-cleanup.timer'] }] };
+    const timer = { path: join(dir, `${job.unit}.timer`), contents: `# ${job.marker}\n[Unit]\nDescription=${job.description}\n[Timer]\nOnCalendar=${job.calendar}\nPersistent=true\n[Install]\nWantedBy=timers.target\n` };
+    const service = { path: join(dir, `${job.unit}.service`), contents: `# ${job.marker}\n[Unit]\nDescription=${job.description}\n[Service]\nType=oneshot\nEnvironment=${systemdQuote(`FACTORY_HOME=${factoryHome}`, false)}\nExecStart=${argv.map(a => systemdQuote(a)).join(' ')}\n` };
+    return { files: [timer, service], commands: [{ bin: 'systemctl', args: ['--user', 'daemon-reload'] }, { bin: 'systemctl', args: ['--user', 'enable', '--now', `${job.unit}.timer`] }] };
   }
   if (platform === 'win32') {
-    const path = join(factoryHome, 'cleanup-scheduled.cmd');
+    const path = join(factoryHome, job.wrapper);
     for (const value of [factoryHome, node, cli]) if (value.includes('"')) throw new Error('Windows scheduler paths cannot contain quotes');
     const cmd = value => value.replaceAll('%', '%%');
-    const contents = `@echo off\r\nrem ${MARKER}\r\nset "FACTORY_HOME=${cmd(factoryHome)}"\r\n"${cmd(node)}" "${cmd(cli)}" cleanup --all --scheduled\r\n`;
-    return { files: [{ path, contents }], commands: [{ bin: 'schtasks', args: ['/Create', '/SC', 'DAILY', '/ST', '10:00', '/TN', 'FactoryCleanup', '/TR', `cmd.exe /d /c ""${path}""`] }] };
+    const contents = `@echo off\r\nrem ${job.marker}\r\nset "FACTORY_HOME=${cmd(factoryHome)}"\r\n"${cmd(node)}" "${cmd(cli)}" ${job.args.join(' ')}\r\n`;
+    return { files: [{ path, contents }], commands: [{ bin: 'schtasks', args: ['/Create', ...job.windows, '/TN', job.task, '/TR', `cmd.exe /d /c ""${path}""`] }] };
   }
-  throw new Error(`cleanup scheduling is not supported on ${platform}`);
+  throw new Error(`${job === JOBS.cleanup ? 'cleanup' : job.unit} scheduling is not supported on ${platform}`);
 }
 
-function existingWindowsTask(wrapper, managedWrapper) {
-  const result = spawnSync('schtasks', ['/Query', '/TN', 'FactoryCleanup', '/XML'], { timeout: 15000, windowsHide: true });
+export function existingWindowsTask(wrapper, managedWrapper, task = 'FactoryCleanup') {
+  const result = spawnSync('schtasks', ['/Query', '/TN', task, '/XML'], { timeout: 15000, windowsHide: true });
   if (result.status !== 0) {
     const message = result.error?.message || result.stderr?.toString().trim() || result.stdout?.toString().trim() || `exit ${result.status}`;
     if (!result.error && /cannot find (?:the file|the specified task)|does not exist|not found/i.test(message)) return false;
-    throw new Error(`cannot inspect existing FactoryCleanup task: ${message.trim()}`);
+    throw new Error(`cannot inspect existing ${task} task: ${message.trim()}`);
   }
   const output = result.stdout;
   const text = output[0] === 0xff && output[1] === 0xfe ? output.subarray(2).toString('utf16le') : output.toString('utf8');
@@ -172,7 +180,7 @@ function existingWindowsTask(wrapper, managedWrapper) {
   const action = actions.length === 1 && actions[0][1].match(/^\s*<Exec(?:\s[^>]*)?>\s*<Command>([^<]*)<\/Command>\s*<Arguments>([^<]*)<\/Arguments>\s*<\/Exec>\s*$/);
   const decode = text => text.replace(/&(?:quot|apos|lt|gt|amp);/g, entity => ({ '&quot;': '"', '&apos;': "'", '&lt;': '<', '&gt;': '>', '&amp;': '&' })[entity]);
   if (!managedWrapper || !action || decode(action[1]) !== 'cmd.exe' || decode(action[2]) !== `/d /c ""${wrapper}""`) {
-    throw new Error('existing FactoryCleanup task is not provably owned; scheduler files left unchanged');
+    throw new Error(`existing ${task} task is not provably owned; scheduler files left unchanged`);
   }
   return true;
 }
@@ -205,5 +213,36 @@ export async function setupCleanupSchedule(opts = {}, runtime = {}) {
     if (r.status !== 0 && !command.allowFailure) throw new Error(`${command.bin}: ${r.error?.message || r.stderr?.trim() || `exit ${r.status}`}; scheduler files were saved but activation failed`);
   }
   atomic(join(home, 'cleanup-schedule.json'), JSON.stringify({ version: 1, apply, activated: true }, null, 2) + '\n');
+  return { ...result, changed, commands: reuseTask ? [] : result.commands };
+}
+
+// Install or refresh a scheduled job other than cleanup (cleanup keeps its own apply/lock state).
+// Same ownership rules: a file without the job's marker, or a symlink, is never replaced; a changed
+// file is backed up first; activation runs only when something changed or it never activated.
+export function installSchedule(job, opts = {}, runtime = {}) {
+  const home = resolve(runtime.home || defaultHome());
+  const definition = scheduleDefinitions({ platform: runtime.platform, userHome: runtime.userHome, factoryHome: home, job });
+  const stateFile = join(home, `${job.unit.replace(/^factory-/, '')}-schedule.json`);
+  const result = { dryRun: !!opts.dryRun, files: definition.files.map(f => f.path), commands: definition.commands };
+  if (opts.dryRun) return result;
+  for (const f of definition.files) {
+    if (!existsSync(f.path)) continue;
+    if (lstatSync(f.path).isSymbolicLink() || !readFileSync(f.path, 'utf8').includes(job.marker)) throw new Error(`unmanaged scheduler file left unchanged: ${f.path}`);
+  }
+  const previouslyInstalled = definition.files.every(f => existsSync(f.path));
+  const reuseTask = (runtime.platform || process.platform) === 'win32' && existingWindowsTask(definition.files[0].path, previouslyInstalled, job.task);
+  const existing = readJson(stateFile, {});
+  let changed = false;
+  for (const f of definition.files) {
+    if (existsSync(f.path) && readFileSync(f.path, 'utf8') === f.contents) continue;
+    if (existsSync(f.path)) cpSync(f.path, `${f.path}.bak-${Date.now()}`);
+    atomic(f.path, f.contents); changed = true;
+  }
+  if (!reuseTask && (changed || !existing.activated) && !runtime.skipActivation) for (const command of definition.commands) {
+    if (command.allowFailure && !previouslyInstalled) continue;
+    const r = spawnSync(command.bin, command.args, { encoding: 'utf8', timeout: 15000, windowsHide: true });
+    if (r.status !== 0 && !command.allowFailure) throw new Error(`${command.bin}: ${r.error?.message || r.stderr?.trim() || `exit ${r.status}`}; scheduler files were saved but activation failed`);
+  }
+  atomic(stateFile, JSON.stringify({ version: 1, activated: !runtime.skipActivation }, null, 2) + '\n');
   return { ...result, changed, commands: reuseTask ? [] : result.commands };
 }

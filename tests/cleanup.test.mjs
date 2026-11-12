@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chmodSync, existsSync, mkdirSync, writeFileSync, readFileSync, cpSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanup, scheduleDefinitions, setupCleanupSchedule } from '../bin/cleanup.mjs';
+import { cleanup, scheduleDefinitions, setupCleanupSchedule, installSchedule, JOBS } from '../bin/cleanup.mjs';
 import { beginRun, addArtifact, finishRun, configure } from '../bundles/core/factory-teardown/scripts/lifecycle.mjs';
 import { tempRoot, makeRepo, git, write } from './fixtures/make.mjs';
 
@@ -71,6 +71,34 @@ test('schedule definitions use one daily report-only job and escape machine path
   assert.ok(linux.files.some(f => f.contents.includes('"/test/node binary"')));
   const win = scheduleDefinitions({ ...common, platform: 'win32' });
   assert.ok(win.commands.some(c => c.bin === 'schtasks'));
+});
+
+test('the triage job gets its own label, unit and task, every 4 hours, and never touches the cleanup files', () => {
+  const common = { userHome: '/test/user home', factoryHome: '/test/factory home', node: '/test/node binary', cli: '/test/factory source/bin/factory.mjs', uid: 42, job: JOBS.triage };
+  const mac = scheduleDefinitions({ ...common, platform: 'darwin' });
+  assert.match(mac.files[0].path, /local\.factory\.triage\.plist$/);
+  assert.match(mac.files[0].contents, /<string>triage<\/string><string>--due<\/string><string>--scheduled<\/string>/);
+  assert.match(mac.files[0].contents, /<integer>14400<\/integer>/);
+  assert.match(mac.files[0].contents, /factory triage schedule/);
+  const linux = scheduleDefinitions({ ...common, platform: 'linux' });
+  assert.deepEqual(linux.files.map(f => f.path.split('/').pop()), ['factory-triage.timer', 'factory-triage.service']);
+  assert.match(linux.files[0].contents, /OnCalendar=\*-\*-\* 00\/4:00:00/);
+  const win = scheduleDefinitions({ ...common, platform: 'win32' });
+  assert.ok(win.commands[0].args.includes('FactoryTriage') && win.commands[0].args.includes('HOURLY'));
+  const cleanupMac = scheduleDefinitions({ ...common, job: undefined, platform: 'darwin' });
+  assert.match(cleanupMac.files[0].path, /local\.factory\.cleanup\.plist$/, 'cleanup keeps its own file');
+});
+
+test('installSchedule writes the triage job once, refuses a file it does not own, and dry-runs to nothing', () => {
+  const t = tempRoot(); try {
+    const runtime = { home: join(t.root, 'factory'), userHome: join(t.root, 'user'), platform: 'darwin', skipActivation: true };
+    const dry = installSchedule(JOBS.triage, { dryRun: true }, runtime);
+    assert.ok(!existsSync(dry.files[0]), 'dry run writes nothing');
+    assert.equal(installSchedule(JOBS.triage, {}, runtime).changed, true);
+    assert.equal(installSchedule(JOBS.triage, {}, runtime).changed, false, 'unchanged: no rewrite');
+    writeFileSync(dry.files[0], '<plist>someone else</plist>');
+    assert.throws(() => installSchedule(JOBS.triage, {}, runtime), /unmanaged scheduler file/);
+  } finally { t.cleanup(); }
 });
 
 test('schedule dry-run creates nothing and returns proposed paths', async () => {

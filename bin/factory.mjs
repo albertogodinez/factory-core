@@ -14,6 +14,9 @@
 //   factory status [--to <repo>]          one line when installed skills are behind; else silent
 //   factory status --hook                 the same as a hook: also says, once per session, which skills
 //                                         were updated or edited in place after the session started
+//   factory setup --triage-schedule [--dry-run]   every 4 hours: open a triage session when it's due
+//   factory triage --due [--dry-run] [--scheduled]  per scope: when its queue is due for triage, start a
+//                                         session in its source repo through the machine's launcher
 //   factory setup [--root <dir>] [--dry-run]   a new machine: add the status hooks to Claude Code and
 //                                         Codex, and record the repos under <dir> that carry an install
 //
@@ -28,7 +31,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
-import { cleanup, setupCleanupSchedule } from './cleanup.mjs';
+import { cleanup, setupCleanupSchedule, installSchedule, JOBS } from './cleanup.mjs';
 import { findGit, toolkitHome, parseRemote } from '../bundles/core/factory-context/scripts/resolve.mjs';
 
 const FACTORY = dirname(dirname(realpathSync(import.meta.filename)));
@@ -1049,6 +1052,11 @@ function hookFiles(env = process.env) {
   ].map((h) => ({ ...h, path: join(h.dir, h.file) }));
 }
 async function setup(opts) {
+  if (opts.triageSchedule) {
+    const schedule = installSchedule(JOBS.triage, opts);
+    out(`triage schedule: every 4 hours, opens a triage session when one is due${schedule.dryRun ? ' (dry run)' : ''}`);
+    for (const file of schedule.files) out(`  ${file}`);
+  }
   if (opts.cleanupSchedule) {
     const schedule = await setupCleanupSchedule(opts);
     out(`cleanup schedule: ${schedule.apply ? 'policy-protected apply' : 'report only'}${schedule.dryRun ? ' (dry run)' : ''}`);
@@ -1099,13 +1107,61 @@ async function setup(opts) {
   }
 }
 
+// ---------- triage --due: the scheduled triage job ----------
+// Run by the triage schedule (setup --triage-schedule). For each scope whose queue is due by
+// triageDue, start one interactive triage session in its source repo through the machine's
+// launcher. That session clusters the queue, sends the clusters to the Inbox and waits for the
+// answer. A scope launched in the last 20 hours waits on that session; nothing launches at night.
+// With no launcher, the run only records that triage is due: the status hook in the source repo
+// already says so at its next session start.
+export const RELAUNCH_HOURS = 20, QUIET_HOURS = [22, 7];
+export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dryRun = false, spawn = spawnLaunch } = {}) {
+  const hour = new Date(now).getHours();
+  if (hour >= QUIET_HOURS[0] || hour < QUIET_HOURS[1]) return { at: new Date(now).toISOString(), skipped: 'quiet hours', scopes: [] };
+  const c = await import('../bundles/core/factory-reflect/scripts/candidates.mjs'); // only here: the hook never loads it
+  const sources = bundleSources(home), machine = readJson(join(home, 'config.json'), {});
+  const stateFile = join(home, 'triage-state.json'), state = readJson(stateFile, {});
+  const scopes = [];
+  for (const scope of ['core', 'org']) {
+    const dir = join(home, 'candidates', scope);
+    let names = []; try { names = readdirSync(dir).filter((n) => n.endsWith('.json')); } catch {}
+    const items = names.map((n) => readJson(join(dir, n), null)).filter(Boolean);
+    const repo = c.sourceRepo(scope, sources);
+    const row = { scope, queued: items.length, repo };
+    if (!items.length) { scopes.push({ ...row, action: 'none', reason: 'queue empty' }); continue; }
+    if (!repo) { scopes.push({ ...row, action: 'none', reason: 'source repo not on this machine' }); continue; }
+    const { due } = triageDue(items, state[scope], now);
+    if (!due) { scopes.push({ ...row, action: 'none', reason: 'not due' }); continue; }
+    const last = Date.parse(state[scope]?.lastLaunch || '');
+    if (now - last < RELAUNCH_HOURS * 36e5) { scopes.push({ ...row, action: 'none', reason: `launched ${state[scope].lastLaunch}; waiting on that session` }); continue; }
+    const repoAdapters = readJson(join(repo, '.agents', 'factory-metadata', 'project.json'), {}).adapters || {};
+    const agent = c.pickAgent(machine, { repoAdapters, env: {} }); // no session: the repo's, else the machine's
+    const prompt = c.triagePrompt(repo, '--scheduled', sources, agent);
+    const launch = c.launchFor({ launcher: c.pickLauncher(repoAdapters, machine), skillsDirs: [join(repo, '.agents', 'skills'), sources.launchers], repo, prompt, agent });
+    if (!launch.argv) { scopes.push({ ...row, action: 'due', reason: launch.note || 'no sessionLauncher: the status hook in the source repo names it', command: launch.command, prompt }); continue; }
+    if (!dryRun) {
+      const r = spawn(launch.argv);
+      if (r.error) { scopes.push({ ...row, action: 'failed', reason: r.error, command: launch.command }); continue; }
+      state[scope] = { ...(state[scope] || {}), lastLaunch: new Date(now).toISOString() };
+    }
+    scopes.push({ ...row, action: dryRun ? 'would launch' : 'launched', agent: agent.name, command: launch.command });
+  }
+  if (!dryRun) writeJson(stateFile, state);
+  return { at: new Date(now).toISOString(), scopes };
+}
+// A launcher starts a session that outlives this job (hc run --bg returns at once); 30 s is a ceiling.
+function spawnLaunch(argv) {
+  const r = spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] });
+  return r.status === 0 ? {} : { error: (r.error?.message || r.stderr || `exit ${r.status}`).trim() };
+}
+
 // ---------- CLI ----------
 function parse(argv) {
   const o = { _: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--to' || a === '--marker' || a === '--root') { o[a.slice(2)] = argv[++i]; if (o[a.slice(2)] == null) die(`${a} needs a value`, 2); }
-    else if (['--commit', '--local', '--force', '--dry-run', '--all', '--purge', '--live', '--json', '--hook', '--apply', '--scheduled', '--cleanup-schedule'].includes(a)) o[a.slice(2).replace(/-(.)/g, (_, c) => c.toUpperCase())] = true;
+    else if (['--commit', '--local', '--force', '--dry-run', '--all', '--purge', '--live', '--json', '--hook', '--apply', '--scheduled', '--cleanup-schedule', '--triage-schedule', '--due'].includes(a)) o[a.slice(2).replace(/-(.)/g, (_, c) => c.toUpperCase())] = true;
     else if (a === '-h' || a === '--help') o.help = true;
     else if (a.startsWith('--')) die(`unknown flag ${a}`, 2);
     else o._.push(a);
@@ -1132,6 +1188,15 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.met
   else if (cmd === 'cleanup') {
     try { const report = await cleanup(o); out(JSON.stringify(report, null, o.json ? 0 : 2)); if (report.summary.failed) process.exitCode = 1; }
     catch (e) { die(e.message); }
+  }
+  else if (cmd === 'triage') {
+    if (!o.due) die('usage: factory triage --due [--dry-run] [--scheduled]', 2);
+    try {
+      const r = await triageDueRun({ dryRun: o.dryRun });
+      if (o.scheduled) writeJson(join(toolkitHome(), 'triage-last.json'), r);
+      out(JSON.stringify(r, null, 2));
+      if (r.scopes.some((x) => x.action === 'failed')) process.exitCode = 1;
+    } catch (e) { die(e.message); }
   }
   else if (cmd === 'status') { try { o.hook ? hookStatus(o) : status(o); } catch {} process.exitCode = 0; }
   else die(`unknown command ${cmd} (see factory help)`, 2);

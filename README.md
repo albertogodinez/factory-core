@@ -275,6 +275,25 @@ policy-protected GC. A later setup without `--apply` preserves that setting; edi
 `factory setup` or skill installation. Scheduler activation failures and stale mutation locks are
 reported for inspection; locks are never stolen from concurrent cleanup.
 
+### Scheduled triage
+
+Lesson triage can run on a schedule, too:
+
+```bash
+node bin/factory.mjs triage --due --dry-run              # what would launch right now, per scope
+node bin/factory.mjs setup --triage-schedule --dry-run   # inspect scheduler configuration
+node bin/factory.mjs setup --triage-schedule             # install: checks every 4 hours
+```
+
+Every 4 hours, the job runs `factory triage --due`. For each scope (core, org) whose queue is due by
+its cadence, it starts one interactive triage session in the source repo through the machine's
+`sessionLauncher`. The session opens the repo's `adapters.agentCLI`, else the machine's. It clusters
+the queue, sends the clusters to the Inbox, and waits for your answer before building anything. The
+job launches a scope at most once every 20 hours and never between 22:00 and 07:00. With no launcher,
+it only records the due scope in `~/.agents/factory/triage-last.json`, and the status hook in the
+source repo names the queue at its next session start. Like the cleanup job, normal `factory setup`
+doesn't install it.
+
 The install registry cannot enumerate every unregistered zero-config repo. Its cache, legacy shared
 workspace tmp, and user-chosen output overrides need explicit discovery/ownership; no all-disk sweep
 is performed. Inactive-owner notices are inspection hints; a transient shell disappearing does not prove abandonment.

@@ -21,6 +21,7 @@ Triage only the scopes whose `repo` is this session's repo (`project.root`'s mai
 
 - **Review now** (you were given a candidate file): take that candidate, plus the queued candidates for the same skill (`queue --skill <its skill>`), because a fix to that file should account for them. Leave the rest for the scheduled run.
 - **Whole queue** (no file): every queued candidate for this repo's scopes.
+- **Scheduled** (`--scheduled`): the triage schedule (`factory setup --triage-schedule`) started this session because the queue was due, and nobody is watching it. Take the whole queue. At the cluster step (§2), when `adapters.lessonInbox` is set, send the clusters to the Inbox (thread `factory lessons`): one question per cluster, with its members, edit and slug, and a keep, split, drop or never choice. Then end your turn and wait for the reply, and build nothing before it. With no Inbox adapter, show them here and wait.
 
 Drop what's already decided. `lessons.mjs known --never` lists the families the user refused. A candidate in one of them goes straight to `done --outcome dropped`.
 
