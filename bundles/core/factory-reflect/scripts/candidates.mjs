@@ -126,21 +126,31 @@ export function sourceRepo(scope, sources) {
   return null;
 }
 
-// The prompt that starts triage in the source repo: the slash command where factory-triage is
-// installed, else the bundle's SKILL.md by path (a bundle's own repo doesn't install it).
-// The agent CLIs a launcher can start, and how each is told to run a skill. A machine picks one with
-// adapters.agentCLI in ~/.agents/factory/config.json (factory setup sets it from what's on PATH); the
-// same file's `agents` map adds one or overrides a built-in. {skill} is the skill's name, {skillPath}
-// its SKILL.md, {target} what it runs on, and {forTarget} " for <target>" or nothing.
+// The agent CLIs a launcher can start, and how each is told to run a skill. adapters.agentCLI (repo or
+// machine config) names one; the machine config's `agents` map adds one or overrides a built-in.
+// {skill} is the skill's name, {skillPath} its SKILL.md, {target} what it runs on, and {forTarget}
+// " for <target>" or nothing.
 export const AGENT_CLIS = {
   claude: { bin: 'claude', skill: '/{skill} {target}' },
   codex: { bin: 'codex', skill: 'Read {skillPath} and follow it{forTarget}.' },
 };
 const BY_PATH = 'Read {skillPath} and follow it{forTarget}.';
-export function pickAgent(machine = {}) {
-  const name = machine?.adapters?.agentCLI || 'claude';
+
+// The agent a session runs in, from the marker each one leaves in its commands' environment.
+export function sessionAgent(env = process.env) {
+  if (env.CLAUDECODE) return 'claude';
+  if (env.CODEX_THREAD_ID) return 'codex';
+  return null;
+}
+
+// Which agent a launch opens, first match wins: the repo's adapters.agentCLI, the agent of the session
+// doing the handoff, the machine's adapters.agentCLI, then claude. A scheduled job has no session, so
+// it lands on the machine's.
+export function pickAgent(machine = {}, { repoAdapters = {}, env = {} } = {}) {
+  const from = repoAdapters?.agentCLI ? 'repo' : sessionAgent(env) ? 'session' : machine?.adapters?.agentCLI ? 'machine' : 'default';
+  const name = { repo: repoAdapters?.agentCLI, session: sessionAgent(env), machine: machine?.adapters?.agentCLI, default: 'claude' }[from];
   const a = { ...AGENT_CLIS, ...(machine?.agents || {}) }[name];
-  return { name, bin: a?.bin || name, skill: a?.skill || BY_PATH, configured: !!machine?.adapters?.agentCLI };
+  return { name, bin: a?.bin || name, skill: a?.skill || BY_PATH, from, configured: from !== 'default' };
 }
 
 // The prompt that starts triage in the source repo, in the agent's own way of running a skill. A skill

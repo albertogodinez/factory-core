@@ -12,7 +12,8 @@ import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sour
 const LESSONS = join(dirname(fileURLToPath(import.meta.url)), 'lessons.mjs');
 const T0 = Date.parse('2026-11-11T12:00:00Z');
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
-for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete ENV[k];
+// The agent markers too: a launch names the handing-off session's agent, and the suite runs inside one.
+for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'CLAUDECODE', 'CODEX_THREAD_ID']) delete ENV[k];
 
 function sandbox() {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'af-cand-')));
@@ -89,7 +90,13 @@ test('the agent: machine config picks claude or codex, {agent} fills the argv, a
     assert.equal(pickAgent({}).configured, false);
     const codex = pickAgent({ adapters: { agentCLI: 'codex' } });
     assert.deepEqual([codex.bin, codex.configured], ['codex', true]);
-    assert.deepEqual(pickAgent({ adapters: { agentCLI: 'pi' }, agents: { pi: { bin: 'pi-cli', skill: 'run {skill}' } } }), { name: 'pi', bin: 'pi-cli', skill: 'run {skill}', configured: true }, 'the machine can add one');
+    assert.deepEqual(pickAgent({ adapters: { agentCLI: 'pi' }, agents: { pi: { bin: 'pi-cli', skill: 'run {skill}' } } }), { name: 'pi', bin: 'pi-cli', skill: 'run {skill}', from: 'machine', configured: true }, 'the machine can add one');
+    // First match wins: the repo's setting, the handing-off session's agent, the machine's, then claude.
+    const m = { adapters: { agentCLI: 'claude' } };
+    assert.equal(pickAgent(m, { env: { CODEX_THREAD_ID: 't1' } }).bin, 'codex', 'a Codex session hands off to Codex');
+    assert.equal(pickAgent({ adapters: { agentCLI: 'codex' } }, { env: { CLAUDECODE: '1' } }).bin, 'claude', 'a Claude Code session hands off to Claude');
+    assert.equal(pickAgent(m, { env: { CODEX_THREAD_ID: 't1' }, repoAdapters: { agentCLI: 'claude' } }).from, 'repo', 'the repo overrides the session');
+    assert.equal(pickAgent(m, { env: {} }).from, 'machine', 'no session (a scheduled job): the machine');
     assert.equal(pickAgent({ adapters: { agentCLI: 'other' } }).skill, 'Read {skillPath} and follow it{forTarget}.', 'an unknown agent reads the skill by path');
 
     const skills = join(s.dir, 'skills'); mkdirSync(join(skills, 'launch-x'), { recursive: true });
@@ -139,6 +146,13 @@ test('the CLI: a downstream fact prints its launch; a pattern queues; queue list
     const launched = run('candidate', '--kind', 'fact', '--summary', 'machine launch', ...base);
     assert.equal(launched.out.launch.via, 'launch-x');
     assert.deepEqual(launched.out.launch.argv.slice(0, 3), ['tool', '--cwd', src]);
+    // A Codex session hands off to Codex, and the candidate records which agent found it.
+    writeFileSync(join(src, 'bundles', 'launchers', 'launch-x', 'launcher.json'), JSON.stringify({ argv: ['tool', '--cwd', '{repo}', '{agent}', '{prompt}'] }));
+    const cx = spawnSync(process.execPath, [LESSONS, 'candidate', '--kind', 'fact', '--summary', 'from codex', ...base], { encoding: 'utf8', env: { ...ENV, FACTORY_HOME: s.home, CODEX_THREAD_ID: 't1' } });
+    const cxOut = JSON.parse(cx.stdout);
+    assert.equal(cxOut.launch.argv[3], 'codex');
+    assert.match(cxOut.launch.prompt, /^Use the factory-triage skill for /, 'no SKILL.md in this fixture: Codex is told the skill by name');
+    assert.equal(JSON.parse(readFileSync(cxOut.file, 'utf8')).from.agent, 'codex');
     rmSync(join(s.home, 'config.json'));
     const pat = run('candidate', '--kind', 'pattern', '--summary', 'new rule', ...base);
     assert.equal(pat.out.lane, 'queue');
@@ -149,7 +163,7 @@ test('the CLI: a downstream fact prints its launch; a pattern queues; queue list
     assert.equal(home.out.home, true, 'in the source repo itself there is nothing to launch');
     const q = run('queue');
     assert.equal(q.out.repos[0].repo, src);
-    assert.equal(q.out.repos[0].queued, 5);
+    assert.equal(q.out.repos[0].queued, 6);
     assert.equal(q.out.repos[0].start, `cd ${src} && <your agent CLI>`);
     assert.equal(q.out.repos[0].prompt, '/factory-triage', 'no bundle SKILL.md in this fixture');
     // A bundle repo that doesn't install core gets the SKILL.md by path.

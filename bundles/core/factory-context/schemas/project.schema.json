@@ -70,7 +70,8 @@
         "reviewUI": { "type": ["string", "null"], "description": "How factory-reflect asks the user to approve a lesson branch in this source repo, e.g. plannotator-review (a guided review by a Sonnet subagent, then the gate; on the PR when one is open). Unset: the diff in chat." },
         "lessonInbox": { "type": ["string", "null"], "description": "Where factory-reflect leaves a notice about a lesson branch nobody decided on, e.g. plannotator-inbox. Unset: the status hook and the report only." },
         "lessonLanding": { "enum": ["local-review", "pr"], "description": "local-review (default): approve, fast-forward trunk and push. pr: push the lesson branch and open a PR, for a source repo with other reviewers." },
-        "sessionLauncher": { "type": ["string", "null"], "description": "Overrides the machine's launcher (~/.agents/factory/config.json) for this repo: a skill whose launcher.json starts a session in a lesson's source repo, e.g. factory-launcher-hc; null turns it off. Unset: the machine's." }
+        "sessionLauncher": { "type": ["string", "null"], "description": "Overrides the machine's launcher (~/.agents/factory/config.json) for this repo: a skill whose launcher.json starts a session in a lesson's source repo, e.g. factory-launcher-hc; null turns it off. Unset: the machine's." },
+        "agentCLI": { "type": ["string", "null"], "description": "The agent CLI a launch opens in this repo (claude, codex, or a name the machine config's agents map defines). Unset: the agent of the session doing the handoff, else the machine's adapters.agentCLI." }
       }
     },
     "review": {

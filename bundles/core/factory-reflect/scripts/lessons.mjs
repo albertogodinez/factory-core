@@ -39,7 +39,7 @@ import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { start, open, land, classify, LandingError } from './landing.mjs';
-import { writeCandidate, queue, markDone, sourceRepo, launchFor, triagePrompt, pickLauncher, pickAgent } from './candidates.mjs';
+import { writeCandidate, queue, markDone, sourceRepo, launchFor, triagePrompt, pickLauncher, pickAgent, sessionAgent } from './candidates.mjs';
 import { report } from './metrics.mjs';
 import { cadence } from './cadence.mjs';
 
@@ -207,7 +207,7 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     const json = (k) => { if (o[k] === undefined) return undefined; try { return JSON.parse(o[k]); } catch { throw new LandingError('usage', `--${k} is not valid JSON`); } };
     const ctx = o.project ? { project: { name: o.project, root: o.root }, adapters: {} } : context();
     if (ctx.error) fail(ctx.error);
-    const from = { project: ctx.project?.name, root: ctx.project?.root, ...(o.session ? { session: o.session } : {}) };
+    const from = { project: ctx.project?.name, root: ctx.project?.root, ...(o.session ? { session: o.session } : {}), ...(sessionAgent(env) ? { agent: sessionAgent(env) } : {}) };
     const w = writeCandidate({ home: home(env), kind: o.kind, scope: o.scope, skill: o.skill, summary: o.summary, evidence: json('evidence') ?? [],
       draft: o.draft, fixedWhen: json('fixed-when'), from, slug: o.slug, now: o.now, queue: o.queue, at: now });
     const sources = readJson(join(home(env), 'installs.json'), {}).sources || {};
@@ -215,7 +215,7 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     const out = { file: w.file, lane: w.lane, kind: w.candidate.kind, scope: w.candidate.scope, repo };
     if (!repo) return { ...out, note: `the ${o.scope} source repo isn't on this machine; the candidate waits until a session there runs factory-triage` };
     const machine = readJson(join(home(env), 'config.json'), {});
-    const agent = pickAgent(machine);
+    const agent = pickAgent(machine, { repoAdapters: readJson(join(repo, '.agents/factory-metadata', 'project.json'), {}).adapters, env });
     const prompt = triagePrompt(repo, w.file, sources, agent);
     if (from.root && repo === from.root) return { ...out, home: true, next: `you are in the source repo: ${prompt}` };
     // Fast lane: start the source repo's session now. Queue: the status hook there names it.
@@ -229,10 +229,11 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
   if (cmd === 'queue') {
     const sources = readJson(join(home(env), 'installs.json'), {}).sources || {};
     const scopes = o.scope ? [o.scope] : ['core', 'org'];
-    const agent = pickAgent(readJson(join(home(env), 'config.json'), {}));
+    const machine = readJson(join(home(env), 'config.json'), {});
     const repos = scopes.map((sc) => {
       const items = queue(home(env), sc, now).filter((c) => !o.skill || c.skill === o.skill);
       const repo = sourceRepo(sc, sources);
+      const agent = pickAgent(machine, { repoAdapters: repo && readJson(join(repo, '.agents/factory-metadata', 'project.json'), {}).adapters, env });
       return { scope: sc, repo, queued: items.length, oldestDays: items.length ? Math.max(...items.map((c) => c.ageDays)) : null,
         candidates: items.map(({ file, kind, skill, summary, lane, ageDays }) => ({ file, kind, skill, summary, lane, ageDays })),
         ...(repo && items.length ? { start: `cd ${repo} && ${agent.configured ? agent.bin : '<your agent CLI>'}`, prompt: triagePrompt(repo, '', sources, agent) } : {}) };
