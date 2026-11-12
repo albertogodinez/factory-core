@@ -46,7 +46,7 @@ test('the exact-slug threshold is retired: no due command, no third-time prompt'
     assert.ok(!('due' in s.rec('r9', 'same-slug', T0 + 4)));
     const p = cli(s.env, 'due');
     assert.equal(p.status, 2);
-    assert.match(p.stderr, /usage: lessons\.mjs record\|decide\|/);
+    assert.match(p.stderr, /usage: lessons\.mjs record\|pending\|decide\|/);
   } finally { s.done(); }
 });
 
@@ -79,4 +79,24 @@ test('fingerprints normalize, and the CLI refuses bad input', () => {
   assert.equal(r.status, 2);
   assert.match(r.stderr, /--scope must be repo, core or org/);
   assert.ok(existsSync(LESSONS));
+});
+
+test('a repo lesson stays pending until a later record says applied or dropped, in that repo only', () => {
+  const s = sandbox();
+  try {
+    const rec = (project, fp, at, status) => run('record', {
+      scope: 'repo', fingerprint: fp, summary: `summary of ${fp}`, status, project, root: join(s.dir, project),
+      'state-root': join(s.dir, project, '.agents/factory-metadata', 'state', 'main'),
+    }, s.env, at);
+    assert.equal(rec('shop', 'nav-rail-states', T0, 'proposed').pending, 1);
+    assert.equal(rec('shop', 'stale-dev-port', T0 + DAY, 'proposed').pending, 2);
+    rec('trips', 'other-repo-lesson', T0, 'proposed');
+    const pend = (project, at) => run('pending', { root: join(s.dir, project) }, s.env, at).pending.map((p) => p.fingerprint);
+    assert.deepEqual(pend('shop', T0 + 2 * DAY), ['nav-rail-states', 'stale-dev-port'], 'oldest first, this repo only');
+    rec('shop', 'nav-rail-states', T0 + 3 * DAY, 'applied');
+    rec('shop', 'stale-dev-port', T0 + 3 * DAY, 'dropped');
+    assert.deepEqual(pend('shop', T0 + 4 * DAY), [], 'applied and dropped clear it');
+    assert.deepEqual(pend('trips', T0 + 100 * DAY), [], 'expired after 90 days');
+    assert.equal(cli(s.env, 'record', '--scope', 'repo', '--fingerprint', 'x', '--summary', 'y', '--status', 'maybe', '--project', 'p', '--root', s.dir, '--state-root', s.dir).status, 2, 'unknown status refused');
+  } finally { s.done(); }
 });

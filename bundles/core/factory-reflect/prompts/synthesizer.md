@@ -46,8 +46,8 @@ Apply every criterion to every finding:
   a review rule; a skill edit or glossary term; and last, an `AGENTS.md` line. Accept an `AGENTS.md`
   edit only as a one-line pointer when nothing else would have led the agent there.
 - **At most three Accepted with scope `repo`.** These are applied in this session and reviewed one by
-  one. Rank them by how much each prevents, keep the top three, and move the rest to Backlog with a
-  one-line reason.
+  one. Rank them by how much each prevents, keep the top three, and move the rest to Backlog as
+  `(cap) <fingerprint>: <one line>`, so the parent can keep them pending.
 - **No cap on `core` or `org`.** Each one becomes a queued candidate, and triage dedupes and batches
   candidates into families. Accept every one that passes the criteria above. Don't rank or trim them.
 
@@ -73,3 +73,4 @@ lands in more than one repo gets one lane per repo, separated by `;`.
 ## Backlog
 
 - <pattern>, <what was hit>, <suggested mechanism and where it would live>
+- (cap) <fingerprint>: <a repo lesson past the top three, one line>

@@ -497,6 +497,25 @@ test('status --hook: queued candidates ask for triage in the source repo, and ar
   assert.match(candidateLines([src], h, sources)[0], /1 core lesson candidate\(s\) wait here \(oldest 0 days, weekly triage\)/, 'due again after a week');
 });
 
+test('status --hook: proposed repo lessons are named in their repo until applied or dropped', async () => {
+  const { repoLessonLines } = await import('../bin/factory.mjs');
+  const h = join(t.root, 'home-repo-lessons'); mkdirSync(h);
+  const shop = join(t.root, 'rl-shop'), wt = join(t.root, 'rl-shop-wt'), trips = join(t.root, 'rl-trips');
+  const now = Date.now(), at = (d) => new Date(now - d * 864e5).toISOString();
+  const rows = [
+    { ts: at(4), fingerprint: 'a', root: wt, main: shop, status: 'proposed' },
+    { ts: at(2), fingerprint: 'b', root: shop, main: shop, status: 'proposed' },
+    { ts: at(1), fingerprint: 'c', root: shop, main: shop, status: 'proposed' },
+    { ts: at(0), fingerprint: 'c', root: shop, main: shop, status: 'applied' },
+    { ts: at(1), fingerprint: 'd', root: trips, main: trips, status: 'proposed' },
+    { ts: at(120), fingerprint: 'e', root: shop, main: shop, status: 'proposed' },
+  ];
+  writeFileSync(join(h, 'repo-lessons.jsonl'), rows.map((r) => JSON.stringify(r)).join('\n') + '\nnot json\n');
+  assert.deepEqual(repoLessonLines([shop, shop], h, now), ['factory: 2 proposed repo lesson(s) wait here (oldest 4 days): lessons.mjs pending lists them; /factory-reflect applies or drops them.'], 'a worktree\'s lesson counts in the main checkout; applied and expired ones do not');
+  assert.equal(repoLessonLines([trips], h, now).length, 1);
+  assert.deepEqual(repoLessonLines([join(t.root, 'elsewhere')], h, now), [], 'a repo with none hears nothing');
+});
+
 test('setup on a new machine: adds or repoints the status hooks, keeps other hooks, records committed installs, then is a no-op', () => {
   const machine = join(t.root, 'machine'), repos = join(machine, 'repos'), h = join(machine, 'toolkit');
   const claude = join(machine, 'claude'), codex = join(machine, 'codex');

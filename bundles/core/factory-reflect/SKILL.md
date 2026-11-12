@@ -24,6 +24,8 @@ Inputs, in order of preference:
 - **The current session** (default). Claude Code: the newest `~/.claude/projects/<cwd-with-slashes-as-dashes>/*.jsonl` whose first user message matches this conversation's opening prompt. Codex: the newest file under `~/.codex/sessions/`. Stay inside the session's own project directory; never glob across other projects. If nothing matches, write a tight digest of the session instead.
 - **A PR or branch** the user names: `gh pr view <N> --comments` (with `GH_HOST` from `project.remote.host`), its review threads (factory-review's `fetch-pr-threads` script, if installed), its commits, reverts and CI failures.
 
+- **Pending repo lessons**, when the user asks for them or the status hook named them: `node .agents/skills/factory-reflect/scripts/lessons.mjs pending`. Skip §2 to §4, show each one as an Accepted row with lane `[apply here]`, and go to §6. Record each one you apply as `applied`, and each the user turns down as `dropped`.
+
 Skip the run when the session is trivial, or when every correction is already covered by a skill the agent followed correctly. Say so and stop.
 
 ## 2. Fan out three reviewers
@@ -96,6 +98,8 @@ For each approved row:
    - **fixedWhen** names the signal that should drop once the lesson lands.
    - **lane `now`**: with `launch.argv`, run it; it starts a session in the source repo with the triage prompt. With `launch.via: print`, give the user `launch.command` and `launch.prompt` (they can run it with `!`). **lane `queue`**: the status hook in the source repo names it; a `harness` candidate also gets an Inbox notice (thread `factory lessons`, when `adapters.lessonInbox` is set), since it touches the user's config.
    - **`home: true`**: this session is in the source repo, so run `/factory-triage` on it here.
+
+**Repo lessons left over stay pending.** Record every repo-scope row the user didn't apply this run (not picked yet, or a `(cap)` Backlog row) with `--status proposed`. The status hook names them at each session start in that repo until a later run records them `applied` or `dropped`. A row the user turns down is `dropped`.
 
 A lesson the user rejects for good is a **never**: `lessons.mjs decide --fingerprint <slug> --decision never`. `known` lists it, and triage drops its family from then on.
 

@@ -856,6 +856,22 @@ export function candidateLines(here, home = toolkitHome(), sources = bundleSourc
   }
   return lines;
 }
+// Repo lessons a reflect run proposed but nobody applied or dropped (~/.agents/factory/repo-lessons.jsonl,
+// written by lessons.mjs record --scope repo). The newest record per fingerprint decides; 90 days expire it.
+export function repoLessonLines(here, home = toolkitHome(), now = Date.now()) {
+  const latest = new Map();
+  for (const line of (readText(join(home, 'repo-lessons.jsonl')) || '').split('\n')) {
+    let e; try { e = JSON.parse(line); } catch { continue; }
+    const t = Date.parse(e?.ts);
+    if (!Number.isFinite(t) || !(here.includes(e.root) || here.includes(e.main))) continue;
+    const prev = latest.get(e.fingerprint);
+    if (!prev || t >= prev.t) latest.set(e.fingerprint, { t, first: prev ? prev.first : t, status: e.status });
+  }
+  const open = [...latest.values()].filter((e) => e.status === 'proposed' && now - e.t <= 90 * 864e5);
+  if (!open.length) return [];
+  const oldest = Math.floor((now - Math.min(...open.map((e) => e.first))) / 864e5);
+  return [`factory: ${open.length} proposed repo lesson(s) wait here (oldest ${oldest} day${oldest === 1 ? '' : 's'}): lessons.mjs pending lists them; /factory-reflect applies or drops them.`];
+}
 function readText(f) { try { return readFileSync(f, 'utf8'); } catch { return null; } }
 
 // ---------- the update log and per-session notices ----------
@@ -934,6 +950,7 @@ function hookStatus(opts) {
     status({ ...opts, to: opts.to || input.cwd, hint: false }); // the drift line, as at any session start
     for (const l of lessonLines(lessonBranches(), g.mainRoot)) out(l);
     for (const l of candidateLines([g.mainRoot, g.toplevel])) out(l);
+    for (const l of repoLessonLines([g.mainRoot, g.toplevel])) out(l);
     if (file) {
       try { // forget sessions untouched for a week
         for (const f of readdirSync(SESSIONS())) if (now - statSync(join(SESSIONS(), f)).mtimeMs > 7 * 864e5) rmSync(join(SESSIONS(), f), { force: true });
