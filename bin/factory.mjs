@@ -997,6 +997,17 @@ export function machineLauncher(home, opts = {}, env = process.env) {
   if (!opts.dryRun) { mkdirSync(home, { recursive: true }); writeJson(f, cfg); }
   return [`machine config: sessionLauncher factory-launcher-hc, since hc is on PATH (${f}${opts.dryRun ? ', dry run' : ''})`];
 }
+// The agent CLI a launcher starts ({agent} in launcher.json): the first of claude, codex on PATH, kept
+// in the machine config. A value set by hand stays.
+export function machineAgent(home, opts = {}, env = process.env) {
+  const f = join(home, 'config.json'), cfg = readJson(f, {});
+  if (cfg.adapters?.agentCLI) return [`machine config: agentCLI already ${cfg.adapters.agentCLI} (${f})`];
+  const found = ['claude', 'codex'].filter((b) => onPath(b, env));
+  if (!found.length) return ['machine config: no claude or codex on PATH, so launches name <your agent CLI>'];
+  cfg.adapters = { ...(cfg.adapters || {}), agentCLI: found[0] };
+  if (!opts.dryRun) { mkdirSync(home, { recursive: true }); writeJson(f, cfg); }
+  return [`machine config: agentCLI ${found[0]}${found.length > 1 ? ` (also on PATH: ${found.slice(1).join(', ')}; change it in ${f})` : ''} (${f}${opts.dryRun ? ', dry run' : ''})`];
+}
 // A new machine. Committed installs arrive with a clone, but the user hooks and installs.json don't,
 // so sessions never hear about updates and `update --all` skips those repos. A hook file is backed up
 // before it's written; a run that changes nothing writes nothing.
@@ -1064,6 +1075,7 @@ async function setup(opts) {
   if (codexChanged) out('  codex: trust the new hooks in the next interactive session (codex exec runs no user hooks)');
 
   for (const l of machineLauncher(toolkitHome(), opts)) out(l);
+  for (const l of machineAgent(toolkitHome(), opts)) out(l);
 
   const root = resolve(opts.root || dirname(FACTORY));
   const known = readJson(join(toolkitHome(), 'installs.json'), { repos: {} }).repos;

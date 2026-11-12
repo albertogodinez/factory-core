@@ -128,10 +128,31 @@ export function sourceRepo(scope, sources) {
 
 // The prompt that starts triage in the source repo: the slash command where factory-triage is
 // installed, else the bundle's SKILL.md by path (a bundle's own repo doesn't install it).
-export function triagePrompt(repo, target, sources = {}) {
-  if (existsSync(join(repo, '.agents', 'skills', 'factory-triage', 'SKILL.md'))) return `/factory-triage ${target}`.trim();
-  const md = sources.core && join(sources.core, 'factory-triage', 'SKILL.md');
-  return md && existsSync(md) ? `Read ${md} and follow it${target ? ` for ${target}` : ''}.` : `/factory-triage ${target}`.trim();
+// The agent CLIs a launcher can start, and how each is told to run a skill. A machine picks one with
+// adapters.agentCLI in ~/.agents/factory/config.json (factory setup sets it from what's on PATH); the
+// same file's `agents` map adds one or overrides a built-in. {skill} is the skill's name, {skillPath}
+// its SKILL.md, {target} what it runs on, and {forTarget} " for <target>" or nothing.
+export const AGENT_CLIS = {
+  claude: { bin: 'claude', skill: '/{skill} {target}' },
+  codex: { bin: 'codex', skill: 'Read {skillPath} and follow it{forTarget}.' },
+};
+const BY_PATH = 'Read {skillPath} and follow it{forTarget}.';
+export function pickAgent(machine = {}) {
+  const name = machine?.adapters?.agentCLI || 'claude';
+  const a = { ...AGENT_CLIS, ...(machine?.agents || {}) }[name];
+  return { name, bin: a?.bin || name, skill: a?.skill || BY_PATH, configured: !!machine?.adapters?.agentCLI };
+}
+
+// The prompt that starts triage in the source repo, in the agent's own way of running a skill. A skill
+// the repo doesn't install (a bundle repo, where core isn't installed) can only be reached by path.
+export function triagePrompt(repo, target, sources = {}, agent = AGENT_CLIS.claude) {
+  const installed = join(repo, '.agents', 'skills', 'factory-triage', 'SKILL.md');
+  const bundled = sources.core && join(sources.core, 'factory-triage', 'SKILL.md');
+  const path = existsSync(installed) ? installed : (bundled && existsSync(bundled) ? bundled : null);
+  let t = path === installed ? agent.skill : path ? BY_PATH : agent.skill;
+  if (!path && t.includes('{skillPath}')) t = 'Use the {skill} skill{forTarget}.';
+  return t.replaceAll('{skill}', 'factory-triage').replaceAll('{skillPath}', path || '').replaceAll('{target}', target || '')
+    .replaceAll('{forTarget}', target ? ` for ${target}` : '').trim();
 }
 
 const sh = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${String(s).replace(/'/g, `'\\''`)}'`);
@@ -146,14 +167,14 @@ export function pickLauncher(repoAdapters = {}, machine = {}) {
 // How to start the source repo's session: the launcher's argv, read from the first of `skillsDirs`
 // holding <launcher>/launcher.json (the repo's installed skills, then the launchers bundle itself, so
 // no repo has to install it), else a command for the user to run (with ! in their own session).
-export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo, prompt }) {
-  const manual = { via: 'print', command: `cd ${sh(repo)} && <your agent CLI>`, prompt };
+export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo, prompt, agent = AGENT_CLIS.claude }) {
+  const manual = { via: 'print', command: `cd ${sh(repo)} && ${agent.configured ? agent.bin : '<your agent CLI>'}`, prompt };
   if (!launcher) return manual;
   const files = skillsDirs.filter(Boolean).map((d) => join(d, launcher, 'launcher.json'));
   let spec, f;
   for (const c of files) { try { spec = JSON.parse(readFileSync(c, 'utf8')); f = c; break; } catch {} }
   if (!spec) return { ...manual, note: `sessionLauncher is ${launcher}, but no valid launcher.json in ${files.join(', ')}` };
   if (!Array.isArray(spec.argv) || !spec.argv.length) return { ...manual, note: `${f} needs an "argv" array` };
-  const argv = spec.argv.map((a) => String(a).replaceAll('{repo}', repo).replaceAll('{prompt}', prompt));
+  const argv = spec.argv.map((a) => String(a).replaceAll('{repo}', repo).replaceAll('{agent}', agent.bin).replaceAll('{prompt}', prompt));
   return { via: launcher, argv, command: argv.map(sh).join(' '), prompt };
 }

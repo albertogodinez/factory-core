@@ -10,4 +10,4 @@ An adapter for `adapters.sessionLauncher` (contract: `factory-context/references
 
 `tools.json` pins `hc` and `plannotator`: the lesson flow runs the review gate and the Inbox through plannotator, and this adapter starts sessions through hc. `factory-tool-sync` reports either one as MISSING, BELOW or BEHIND.
 
-To use another agent CLI than `claude`, change the program in `launcher.json` and keep `{prompt}` as its first argument.
+`{agent}` is the agent CLI the machine picks (`adapters.agentCLI` in `~/.agents/factory/config.json`; `claude` when unset), and `{prompt}` is that agent's way of running the triage skill.

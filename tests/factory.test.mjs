@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync, lstatSync, readlinkSync, appendFileSync, rmSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync, lstatSync, readlinkSync, appendFileSync, rmSync, readdirSync, chmodSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tempRoot, makeRepo, write, git } from './fixtures/make.mjs';
@@ -571,6 +571,25 @@ test('setup: the session launcher is machine config, set once when hc is on PATH
   assert.deepEqual(JSON.parse(readFileSync(join(h, 'config.json'), 'utf8')), { adapters: { sessionLauncher: 'factory-launcher-hc' } });
   writeFileSync(join(h, 'config.json'), JSON.stringify({ adapters: { sessionLauncher: null } }));
   assert.match(machineLauncher(h, {}, { PATH: bin })[0], /already off/, 'a choice made by hand stays');
+});
+
+test('setup picks the agent CLI a launcher starts: the first of claude, codex on PATH; a set value stays', async () => {
+  const { machineAgent } = await import('../bin/factory.mjs');
+  const h = join(t.root, 'home-agent'), both = join(t.root, 'bin-both'), codexOnly = join(t.root, 'bin-codex');
+  for (const [d, names] of [[both, ['claude', 'codex']], [codexOnly, ['codex']]]) {
+    mkdirSync(d, { recursive: true });
+    for (const n of names) { writeFileSync(join(d, n), '#!/bin/sh\n'); chmodSync(join(d, n), 0o755); }
+  }
+  assert.match(machineAgent(h, {}, { PATH: join(t.root, 'nowhere') })[0], /no claude or codex on PATH/);
+  assert.match(machineAgent(h, { dryRun: true }, { PATH: both })[0], /dry run/);
+  assert.ok(!existsSync(join(h, 'config.json')), 'dry run writes nothing');
+  assert.match(machineAgent(h, {}, { PATH: both })[0], /agentCLI claude \(also on PATH: codex/);
+  assert.equal(JSON.parse(readFileSync(join(h, 'config.json'), 'utf8')).adapters.agentCLI, 'claude');
+  writeFileSync(join(h, 'config.json'), JSON.stringify({ adapters: { agentCLI: 'codex', sessionLauncher: 'x' } }));
+  assert.match(machineAgent(h, {}, { PATH: both })[0], /already codex/, 'a choice made by hand stays');
+  rmSync(join(h, 'config.json'));
+  machineAgent(h, {}, { PATH: codexOnly });
+  assert.equal(JSON.parse(readFileSync(join(h, 'config.json'), 'utf8')).adapters.agentCLI, 'codex');
 });
 
 test('setup leaves a hook file it cannot parse alone, and --dry-run writes nothing', () => {

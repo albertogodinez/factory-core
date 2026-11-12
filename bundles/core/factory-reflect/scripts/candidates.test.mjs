@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, realpathSync, writeFileSync, mkdirSync, existsSync
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sourceRepo, triagePrompt, pickLauncher } from './candidates.mjs';
+import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sourceRepo, triagePrompt, pickLauncher, pickAgent } from './candidates.mjs';
 
 const LESSONS = join(dirname(fileURLToPath(import.meta.url)), 'lessons.mjs');
 const T0 = Date.parse('2026-11-11T12:00:00Z');
@@ -79,6 +79,31 @@ test('launch: the adapter argv when sessionLauncher names an installed launcher.
     assert.match(launchFor({ launcher: 'missing', skillsDir: skills, repo: '/r', prompt: 'p' }).note, /no valid launcher\.json/);
     // The launchers bundle itself is the fallback, so no repo has to install the launcher.
     assert.deepEqual(launchFor({ launcher: 'launch-x', skillsDirs: [join(s.dir, 'none'), skills], repo: '/r', prompt: 'p' }).argv, ['tool', 'run', '--cwd', '/r', 'agent', 'p']);
+  } finally { s.done(); }
+});
+
+test('the agent: machine config picks claude or codex, {agent} fills the argv, and each gets its own skill prompt', () => {
+  const s = sandbox();
+  try {
+    assert.equal(pickAgent({}).bin, 'claude', 'claude when unset');
+    assert.equal(pickAgent({}).configured, false);
+    const codex = pickAgent({ adapters: { agentCLI: 'codex' } });
+    assert.deepEqual([codex.bin, codex.configured], ['codex', true]);
+    assert.deepEqual(pickAgent({ adapters: { agentCLI: 'pi' }, agents: { pi: { bin: 'pi-cli', skill: 'run {skill}' } } }), { name: 'pi', bin: 'pi-cli', skill: 'run {skill}', configured: true }, 'the machine can add one');
+    assert.equal(pickAgent({ adapters: { agentCLI: 'other' } }).skill, 'Read {skillPath} and follow it{forTarget}.', 'an unknown agent reads the skill by path');
+
+    const skills = join(s.dir, 'skills'); mkdirSync(join(skills, 'launch-x'), { recursive: true });
+    writeFileSync(join(skills, 'launch-x', 'launcher.json'), JSON.stringify({ argv: ['tool', '--cwd', '{repo}', '{agent}', '{prompt}'] }));
+    assert.deepEqual(launchFor({ launcher: 'launch-x', skillsDir: skills, repo: '/r', prompt: 'p', agent: codex }).argv, ['tool', '--cwd', '/r', 'codex', 'p']);
+    assert.deepEqual(launchFor({ launcher: 'launch-x', skillsDir: skills, repo: '/r', prompt: 'p' }).argv, ['tool', '--cwd', '/r', 'claude', 'p'], 'claude by default');
+    assert.equal(launchFor({ skillsDir: skills, repo: '/r', prompt: 'p', agent: codex }).command, 'cd /r && codex', 'a configured agent is named in the printed command');
+
+    const repo = join(s.dir, 'src'), md = join(repo, '.agents', 'skills', 'factory-triage', 'SKILL.md');
+    assert.equal(triagePrompt(repo, '/h/c.json', {}, codex), 'Use the factory-triage skill for /h/c.json.', 'no SKILL.md anywhere: name the skill');
+    mkdirSync(dirname(md), { recursive: true }); writeFileSync(md, 'x');
+    assert.equal(triagePrompt(repo, '/h/c.json', {}, codex), `Read ${md} and follow it for /h/c.json.`);
+    assert.equal(triagePrompt(repo, '', {}, codex), `Read ${md} and follow it.`);
+    assert.equal(triagePrompt(repo, '/h/c.json', {}), '/factory-triage /h/c.json', 'claude keeps the slash command');
   } finally { s.done(); }
 });
 

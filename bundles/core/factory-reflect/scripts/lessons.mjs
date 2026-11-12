@@ -39,7 +39,7 @@ import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { start, open, land, classify, LandingError } from './landing.mjs';
-import { writeCandidate, queue, markDone, sourceRepo, launchFor, triagePrompt, pickLauncher } from './candidates.mjs';
+import { writeCandidate, queue, markDone, sourceRepo, launchFor, triagePrompt, pickLauncher, pickAgent } from './candidates.mjs';
 import { report } from './metrics.mjs';
 import { cadence } from './cadence.mjs';
 
@@ -214,25 +214,28 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     const repo = sourceRepo(o.scope, sources);
     const out = { file: w.file, lane: w.lane, kind: w.candidate.kind, scope: w.candidate.scope, repo };
     if (!repo) return { ...out, note: `the ${o.scope} source repo isn't on this machine; the candidate waits until a session there runs factory-triage` };
-    const prompt = triagePrompt(repo, w.file, sources);
+    const machine = readJson(join(home(env), 'config.json'), {});
+    const agent = pickAgent(machine);
+    const prompt = triagePrompt(repo, w.file, sources, agent);
     if (from.root && repo === from.root) return { ...out, home: true, next: `you are in the source repo: ${prompt}` };
     // Fast lane: start the source repo's session now. Queue: the status hook there names it.
     if (w.lane === 'now') {
-      const launcher = pickLauncher(ctx.adapters, readJson(join(home(env), 'config.json'), {}));
+      const launcher = pickLauncher(ctx.adapters, machine);
       const bundle = sources.core && join(dirname(sources.core), 'launchers');
-      return { ...out, launch: launchFor({ launcher, skillsDirs: [o['skills-dir'] || SKILLS_DIR, bundle], repo, prompt }) };
+      return { ...out, launch: launchFor({ launcher, skillsDirs: [o['skills-dir'] || SKILLS_DIR, bundle], repo, prompt, agent }) };
     }
     return { ...out, next: `queued: the next factory-triage session in ${repo} takes it` };
   }
   if (cmd === 'queue') {
     const sources = readJson(join(home(env), 'installs.json'), {}).sources || {};
     const scopes = o.scope ? [o.scope] : ['core', 'org'];
+    const agent = pickAgent(readJson(join(home(env), 'config.json'), {}));
     const repos = scopes.map((sc) => {
       const items = queue(home(env), sc, now).filter((c) => !o.skill || c.skill === o.skill);
       const repo = sourceRepo(sc, sources);
       return { scope: sc, repo, queued: items.length, oldestDays: items.length ? Math.max(...items.map((c) => c.ageDays)) : null,
         candidates: items.map(({ file, kind, skill, summary, lane, ageDays }) => ({ file, kind, skill, summary, lane, ageDays })),
-        ...(repo && items.length ? { start: `cd ${repo} && <your agent CLI>`, prompt: triagePrompt(repo, '', sources) } : {}) };
+        ...(repo && items.length ? { start: `cd ${repo} && ${agent.configured ? agent.bin : '<your agent CLI>'}`, prompt: triagePrompt(repo, '', sources, agent) } : {}) };
     });
     const branches = open({ repos: Object.values(sources) }).map(({ repo, branch, commits, worktree }) => ({ repo, branch, commits: commits.length, worktree }));
     return { repos, branches };
