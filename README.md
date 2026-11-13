@@ -164,7 +164,7 @@ candidate → ~/.agents/factory/candidates/<core|org>/   (pointers to evidence, 
 /factory-triage in the source repo → clusters → one lesson branch, one commit per cluster
         │ review gate
         ▼
-land and push from that session → consumers pull at their next session start
+land and push from that session → trunk moved: every installed repo is updated in the background
 ```
 
 - A session writes only its home repo plus `~/.agents/factory/`. `lessons.mjs land` refuses anywhere else.
@@ -200,6 +200,8 @@ node factory.mjs setup [--root <dir>] # a new machine: the status and metrics ho
 `status --hook` reads the hook's JSON from stdin (`session_id`, `hook_event_name`, `cwd`). It answers the session-start check the same way, and on later prompts it tells a running session, once, what changed since it last checked:
 - Skills `factory update` copied in. `update` appends each copy to `~/.agents/factory/updates.jsonl`.
 - Installed copies someone edited in place, found by a file newer than the lock and then confirmed by hash.
+
+**Updates are pushed when trunk moves.** factory-core's `.githooks/reference-transaction` hook sees every new commit on trunk (a commit, merge, pull, or a lesson land's `update-ref`) and starts `bin/auto-update.mjs` in the background. It runs `factory update --all` from the main checkout, so local-only installs get the copy and commit-mode installs get the diff to commit, and each running session hears about it at its next prompt. It skips when the main checkout isn't on trunk or has uncommitted tracked changes, since `update` copies from that working tree; the session-start "changed upstream" line still covers a skipped run. A burst of commits shares one worker. Runs are logged to `~/.agents/factory/auto-update.log`. Opt out with `FACTORY_AUTO_UPDATE=0` or `git config factory.autoUpdate false`. Another bundle source repo (a company bundle) gets the same behaviour by calling `node <factory-core>/bin/auto-update.mjs hook` from its own `reference-transaction` hook.
 
 A skill read earlier in a session stays in that session's context, so the notice says to read its SKILL.md again. Per-session state lives in `~/.agents/factory/sessions/` and is pruned after a week. It runs on every prompt with no git spawns, and `status.guard.mjs` holds its overhead limit.
 

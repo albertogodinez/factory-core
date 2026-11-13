@@ -143,8 +143,9 @@ export function land({ repo, branch, reviewed, trunk: trunkArg, cwd = process.cw
     next: landNext(mainRoot, trunk) };
 }
 
-// A land ends at its own repo's push. Consumers pull at their next session start; the one exception
-// is a source repo that installs bundles into itself, which refreshes its own copies.
+// A land ends at its own repo's push. Consumers get the change from the source repo's trunk hook
+// (factory-core's bin/auto-update.mjs); the one exception is a source repo that installs bundles
+// into itself, which refreshes its own copies.
 export function landNext(mainRoot, trunk) {
   const next = [`git -C ${mainRoot} push origin ${trunk}`];
   if (existsSync(join(mainRoot, '.agents', 'factory-metadata', 'skills-lock.json'))) next.push(`factory update --to ${mainRoot}`);

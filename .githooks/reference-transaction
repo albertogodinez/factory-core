@@ -1,0 +1,8 @@
+#!/bin/sh
+# When trunk gets a new commit (a commit, merge, pull or a lesson land's update-ref), copy it into
+# every installed repo in the background. See bin/auto-update.mjs. Never fails the git command.
+[ "$1" = committed ] || exit 0
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$top/bin/auto-update.mjs" ] || exit 0
+node "$top/bin/auto-update.mjs" hook || true
+exit 0
