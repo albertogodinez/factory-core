@@ -28,7 +28,7 @@ import {
 } from 'node:fs';
 import { join, dirname, resolve, relative, basename, sep } from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
 import { cleanup, setupCleanupSchedule, installSchedule, JOBS } from './cleanup.mjs';
@@ -861,7 +861,29 @@ export function candidateLines(here, home = toolkitHome(), sources = bundleSourc
     const mine = items.filter((c) => here.includes(c.from?.root));
     if (mine.length) lines.push(`factory: ${mine.length} lesson candidate(s) from this repo are queued for ${root ? basename(root) : `the ${scope} source repo`}. They're reviewed there${root ? `: cd ${root} && <your agent CLI>, then /factory-triage` : ''}.`);
   }
+  // This repo's own queue: repo lessons a session here found, triaged and landed here.
+  const own = repoQueue(home).filter((c) => here.includes(c.repo));
+  if (own.length) {
+    const { due, oldest, st } = triageDue(own, readJson(join(home, 'triage-state.json'), {})[`repo:${own[0].repo}`]);
+    if (due) lines.push(`factory: ${own.length} repo lesson candidate(s) for this repo wait here (oldest ${oldest} day${oldest === 1 ? '' : 's'}${st?.mode ? `, ${st.mode} triage` : ''}): /factory-triage reviews them.`);
+  }
   return lines;
+}
+function repoQueue(home) {
+  const dir = join(home, 'candidates', 'repo');
+  let names = [];
+  try { names = readdirSync(dir).filter((n) => n.endsWith('.json')); } catch { return []; }
+  return names.map((n) => readJson(join(dir, n), null)).filter((c) => c?.repo);
+}
+// A session start launches triage for a due queue without waiting for the schedule, which misses
+// runs while the machine is off. triage --due keeps the quiet hours and the one-launch-per-20-hours
+// rule, so starting several sessions launches one triage session, not several.
+function launchDueTriage() {
+  if (process.env.FACTORY_NO_TRIAGE_LAUNCH === '1') return;
+  try {
+    const child = spawn(process.execPath, [join(FACTORY, 'bin', 'factory.mjs'), 'triage', '--due', '--scheduled'], { detached: true, stdio: 'ignore' });
+    child.unref();
+  } catch {}
 }
 // Repo lessons a reflect run proposed but nobody applied or dropped (~/.agents/factory/repo-lessons.jsonl,
 // written by lessons.mjs record --scope repo). The newest record per fingerprint decides; 90 days expire it.
@@ -877,7 +899,7 @@ export function repoLessonLines(here, home = toolkitHome(), now = Date.now()) {
   const open = [...latest.values()].filter((e) => e.status === 'proposed' && now - e.t <= 90 * 864e5);
   if (!open.length) return [];
   const oldest = Math.floor((now - Math.min(...open.map((e) => e.first))) / 864e5);
-  return [`factory: ${open.length} proposed repo lesson(s) wait here (oldest ${oldest} day${oldest === 1 ? '' : 's'}): lessons.mjs pending lists them; /factory-reflect applies or drops them.`];
+  return [`factory: ${open.length} proposed repo lesson(s) wait here (oldest ${oldest} day${oldest === 1 ? '' : 's'}): lessons.mjs pending lists them; /factory-reflect queues them for triage.`];
 }
 function readText(f) { try { return readFileSync(f, 'utf8'); } catch { return null; } }
 
@@ -956,7 +978,9 @@ function hookStatus(opts) {
   if (!state || event === 'SessionStart') {
     status({ ...opts, to: opts.to || input.cwd, hint: false }); // the drift line, as at any session start
     for (const l of lessonLines(lessonBranches(), g.mainRoot)) out(l);
-    for (const l of candidateLines([g.mainRoot, g.toplevel])) out(l);
+    const due = candidateLines([g.mainRoot, g.toplevel]);
+    for (const l of due) out(l);
+    if (due.some((l) => / wait here /.test(l))) launchDueTriage();
     for (const l of repoLessonLines([g.mainRoot, g.toplevel])) out(l);
     if (file) {
       try { // forget sessions untouched for a week
@@ -1111,8 +1135,8 @@ async function setup(opts) {
 // ---------- triage --due: the scheduled triage job ----------
 // Run by the triage schedule (setup --triage-schedule). For each scope whose queue is due by
 // triageDue, start one interactive triage session in its source repo through the machine's
-// launcher. That session clusters the queue, sends the clusters to the Inbox and waits for the
-// answer. A scope launched in the last 20 hours waits on that session; nothing launches at night.
+// launcher, and the same for each repo with its own repo-lesson queue. That session clusters the
+// queue, builds the lesson branch and opens the review gate, the one place it waits. A scope launched in the last 20 hours waits on that session; nothing launches at night.
 // With no launcher, the run only records that triage is due: the status hook in the source repo
 // already says so at its next session start.
 export const RELAUNCH_HOURS = 20, QUIET_HOURS = [22, 7];
@@ -1123,18 +1147,22 @@ export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dry
   const sources = bundleSources(home), machine = readJson(join(home, 'config.json'), {});
   const stateFile = join(home, 'triage-state.json'), state = readJson(stateFile, {});
   const scopes = [];
-  for (const scope of ['core', 'org']) {
+  const queues = ['core', 'org'].map((scope) => {
     const dir = join(home, 'candidates', scope);
     let names = []; try { names = readdirSync(dir).filter((n) => n.endsWith('.json')); } catch {}
-    const items = names.map((n) => readJson(join(dir, n), null)).filter(Boolean);
-    const repo = c.sourceRepo(scope, sources);
+    return { scope, key: scope, items: names.map((n) => readJson(join(dir, n), null)).filter(Boolean), repo: c.sourceRepo(scope, sources) };
+  });
+  const byRepo = new Map();
+  for (const it of repoQueue(home)) byRepo.set(it.repo, [...(byRepo.get(it.repo) || []), it]);
+  for (const [repo, items] of byRepo) queues.push({ scope: 'repo', key: `repo:${repo}`, items, repo: existsSync(repo) ? repo : null });
+  for (const { scope, key, items, repo } of queues) {
     const row = { scope, queued: items.length, repo };
     if (!items.length) { scopes.push({ ...row, action: 'none', reason: 'queue empty' }); continue; }
     if (!repo) { scopes.push({ ...row, action: 'none', reason: 'source repo not on this machine' }); continue; }
-    const { due } = triageDue(items, state[scope], now);
+    const { due } = triageDue(items, state[key], now);
     if (!due) { scopes.push({ ...row, action: 'none', reason: 'not due' }); continue; }
-    const last = Date.parse(state[scope]?.lastLaunch || '');
-    if (now - last < RELAUNCH_HOURS * 36e5) { scopes.push({ ...row, action: 'none', reason: `launched ${state[scope].lastLaunch}; waiting on that session` }); continue; }
+    const last = Date.parse(state[key]?.lastLaunch || '');
+    if (now - last < RELAUNCH_HOURS * 36e5) { scopes.push({ ...row, action: 'none', reason: `launched ${state[key].lastLaunch}; waiting on that session` }); continue; }
     const repoAdapters = readJson(join(repo, '.agents', 'factory-metadata', 'project.json'), {}).adapters || {};
     const agent = c.pickAgent(machine, { repoAdapters, env: {} }); // no session: the repo's, else the machine's
     const prompt = c.triagePrompt(repo, '--scheduled', sources, agent);
@@ -1143,7 +1171,7 @@ export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dry
     if (!dryRun) {
       const r = spawn(launch.argv);
       if (r.error) { scopes.push({ ...row, action: 'failed', reason: r.error, command: launch.command }); continue; }
-      state[scope] = { ...(state[scope] || {}), lastLaunch: new Date(now).toISOString() };
+      state[key] = { ...(state[key] || {}), lastLaunch: new Date(now).toISOString() };
     }
     scopes.push({ ...row, action: dryRun ? 'would launch' : 'launched', agent: agent.name, command: launch.command });
   }

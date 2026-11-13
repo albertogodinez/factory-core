@@ -155,20 +155,21 @@ Every accepted reflect lesson has a scope:
 The flow:
 
 ```
-reflect run (≤3 accepted) → repo lessons: fixed in the repo, in the PR that taught them
-        │ core or org?
+reflect run (no questions, no cap) → every accepted lesson becomes a candidate
+        │ owned by: this repo (repo) · core's source repo · the org source repo
         ▼
-candidate → ~/.agents/factory/candidates/<core|org>/   (pointers to evidence, a draft, fixedWhen)
-        │ fact: launch a session in the source repo now · pattern / harness: queue
+candidate → ~/.agents/factory/candidates/<core|org|repo>/   (pointers to evidence, a draft, fixedWhen)
+        │ fact: launch triage in the owner repo now · pattern / harness: queue until due
         ▼
-/factory-triage in the source repo → clusters → one lesson branch, one commit per cluster
-        │ review gate
+/factory-triage in the owner repo → clusters → one lesson branch, one commit per cluster
+        │ review gate: the only place the user decides (keep, drop, split, never)
         ▼
 land and push from that session → trunk moved: every installed repo is updated in the background
 ```
 
 - A session writes only its home repo plus `~/.agents/factory/`. `lessons.mjs land` refuses anywhere else.
-- Nothing counts to three. Triage reads the whole queue and clusters it; a cluster's size is the count that matters.
+- Nothing counts to three, and nothing asks before the review. Triage reads the whole queue and clusters it; a cluster's size is the count that matters.
+- A repo lesson queues in its own repo and lands there, through a PR in a team repo. A session start in a repo whose queue is due launches triage (`factory triage --due`, which keeps its quiet hours and one launch per 20 hours), so a schedule missed while the machine was off is caught at the next session.
 - "Never" is remembered per family (`lessons.mjs decide --decision never`), and triage drops its candidates.
 - `adapters.sessionLauncher` starts the source repo's session. It's machine config (`~/.agents/factory/config.json`), set by `factory setup` when `hc` is on PATH; a repo's `project.json` can override it or set `null`. Unset, reflect prints the command. `adapters.agentCLI` (also machine config) names the agent CLI the launcher starts, `claude` or `codex`; `factory setup` sets it to the first one on PATH.
 - `/factory-ask` answers "what's waiting" from `lessons.mjs queue`.

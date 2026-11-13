@@ -497,6 +497,40 @@ test('status --hook: queued candidates ask for triage in the source repo, and ar
   assert.match(candidateLines([src], h, sources)[0], /1 core lesson candidate\(s\) wait here \(oldest 0 days, weekly triage\)/, 'due again after a week');
 });
 
+test('status --hook: a repo\'s own lesson queue asks for triage in that repo only', async () => {
+  const { candidateLines } = await import('../bin/factory.mjs');
+  const h = join(t.root, 'home-repo-cands'); mkdirSync(h);
+  const shop = makeRepo(join(t.root, 'rc-shop'), {}), trips = makeRepo(join(t.root, 'rc-trips'), {});
+  const at = new Date(Date.now() - 864e5).toISOString();
+  write(join(h, 'candidates', 'repo', '1-a.json'), { kind: 'pattern', scope: 'repo', repo: shop, summary: 'a', from: { root: shop }, at });
+  write(join(h, 'candidates', 'repo', '2-b.json'), { kind: 'pattern', scope: 'repo', repo: shop, summary: 'b', from: { root: shop }, at });
+  const sources = { core: join(t.root, 'absent') };
+  assert.deepEqual(candidateLines([shop], h, sources), ['factory: 2 repo lesson candidate(s) for this repo wait here (oldest 1 day): /factory-triage reviews them.']);
+  assert.deepEqual(candidateLines([trips], h, sources), [], 'another repo\'s lessons stay there');
+  write(join(h, 'triage-state.json'), { [`repo:${shop}`]: { mode: 'daily', lastRun: new Date().toISOString() } });
+  assert.deepEqual(candidateLines([shop], h, sources), [], 'ran today: not due');
+});
+
+test('status --hook: a session start with a due queue launches triage in the background', () => {
+  const h = join(t.root, 'home-launch-due'); mkdirSync(h);
+  const shop = makeRepo(join(t.root, 'ld-shop'), {});
+  assert.equal(factory(['install', 'core', '--commit', '--to', shop, '--marker', 'off'], shop, { FACTORY_HOME: h }).status, 0);
+  write(join(h, 'candidates', 'repo', '1-a.json'), { kind: 'fact', scope: 'repo', repo: shop, summary: 'a', from: { root: shop }, at: new Date().toISOString() });
+  const env = { ...process.env, FACTORY_HOME: h, FACTORY_CONFIG: '', FACTORY_HARNESSES: 'none' };
+  delete env.FACTORY_NO_TRIAGE_LAUNCH;
+  const r = spawnSync(process.execPath, [FACTORY, 'status', '--hook'], { cwd: shop, encoding: 'utf8', env,
+    input: JSON.stringify({ session_id: 'ld1', hook_event_name: 'SessionStart', cwd: shop }) });
+  assert.match(r.stdout, /repo lesson candidate\(s\) for this repo wait here/);
+  // The detached triage --due run writes triage-last.json; with no launcher it only records the queue as due.
+  const last = join(h, 'triage-last.json'), end = Date.now() + 10000;
+  while (!existsSync(last) && Date.now() < end) spawnSync(process.execPath, ['-e', 'setTimeout(()=>{},100)']);
+  const hour = new Date().getHours();
+  if (hour >= 22 || hour < 7) return assert.equal(JSON.parse(readFileSync(last, 'utf8')).skipped, 'quiet hours');
+  const row = JSON.parse(readFileSync(last, 'utf8')).scopes.find((x) => x.scope === 'repo');
+  assert.equal(row.repo, shop);
+  assert.equal(row.action, 'due');
+});
+
 test('status --hook: proposed repo lessons are named in their repo until applied or dropped', async () => {
   const { repoLessonLines } = await import('../bin/factory.mjs');
   const h = join(t.root, 'home-repo-lessons'); mkdirSync(h);
@@ -511,7 +545,7 @@ test('status --hook: proposed repo lessons are named in their repo until applied
     { ts: at(120), fingerprint: 'e', root: shop, main: shop, status: 'proposed' },
   ];
   writeFileSync(join(h, 'repo-lessons.jsonl'), rows.map((r) => JSON.stringify(r)).join('\n') + '\nnot json\n');
-  assert.deepEqual(repoLessonLines([shop, shop], h, now), ['factory: 2 proposed repo lesson(s) wait here (oldest 4 days): lessons.mjs pending lists them; /factory-reflect applies or drops them.'], 'a worktree\'s lesson counts in the main checkout; applied and expired ones do not');
+  assert.deepEqual(repoLessonLines([shop, shop], h, now), ['factory: 2 proposed repo lesson(s) wait here (oldest 4 days): lessons.mjs pending lists them; /factory-reflect queues them for triage.'], 'a worktree\'s lesson counts in the main checkout; applied and expired ones do not');
   assert.equal(repoLessonLines([trips], h, now).length, 1);
   assert.deepEqual(repoLessonLines([join(t.root, 'elsewhere')], h, now), [], 'a repo with none hears nothing');
 });

@@ -22,5 +22,8 @@ const files = [...walk(join(ROOT, 'tests')), ...walk(join(ROOT, 'bundles')), ...
 // one set it themselves.
 const env = { ...process.env };
 for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_PREFIX', 'FACTORY_RUN_ID', 'FACTORY_STATE_ROOT']) delete env[k];
+// A session start launches triage for a due queue; fixtures must not start real sessions. The test
+// that proves the launch unsets it.
+env.FACTORY_NO_TRIAGE_LAUNCH = '1';
 const r = spawnSync(process.execPath, ['--test', ...(process.env.CI || process.argv.includes('--tap') ? [] : ['--test-reporter=dot']), ...files.filter((f) => f !== '--tap')], { cwd: ROOT, stdio: 'inherit', env });
 process.exit(r.status ?? 1);

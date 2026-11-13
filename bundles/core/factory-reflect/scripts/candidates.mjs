@@ -1,8 +1,9 @@
 // candidates.mjs: the handoff from a downstream session to the source repo that owns a lesson.
 // lessons.mjs is the CLI; these are its candidate and queue commands.
 //
-// A candidate is one JSON file at <home>/candidates/<core|org>/<ts>-<slug>.json, machine-local and
-// untracked. It points at evidence; it never carries pasted transcript content. Its kind sets the
+// A candidate is one JSON file at <home>/candidates/<core|org|repo>/<ts>-<slug>.json, machine-local and
+// untracked. A repo candidate is a lesson for the repo the session ran in; its `repo` field (that repo's
+// main checkout) owns it, and a triage session there lands it. It points at evidence; it never carries pasted transcript content. Its kind sets the
 // lane: a fact is wrong today, so it launches a session in the source repo now; a pattern or a
 // harness lesson waits in the queue for triage, which batches it with its family. The queue is the
 // files still in the folder; triage moves each one to done/ when it lands or is dropped.
@@ -12,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { LandingError, slugify } from './landing.mjs';
 
 export const KINDS = ['fact', 'pattern', 'harness'];
-export const SCOPES = ['core', 'org'];
+export const SCOPES = ['core', 'org', 'repo'];
 export const DONE_DAYS = 90;
 const EVIDENCE_KEYS = ['transcript', 'grep', 'pr', 'thread', 'commit', 'file', 'line', 'url', 'note'];
 const DAY = 86400000;
@@ -42,9 +43,10 @@ export function checkEvidence(list) {
 const dirOf = (home, scope) => join(home, 'candidates', scope);
 const stamp = (t) => new Date(t).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
 
-export function writeCandidate({ home, kind, scope, skill, summary, evidence = [], draft, fixedWhen, from = {}, slug, now: nowFlag, queue, at = Date.now() }) {
+export function writeCandidate({ home, kind, scope, skill, summary, evidence = [], draft, fixedWhen, from = {}, repo, slug, now: nowFlag, queue, at = Date.now() }) {
   if (!KINDS.includes(kind)) throw new LandingError('usage', `--kind must be ${KINDS.join(', ')}`);
-  if (!SCOPES.includes(scope)) throw new LandingError('usage', '--scope must be core or org (a repo-scope lesson stays in its PR)');
+  if (!SCOPES.includes(scope)) throw new LandingError('usage', `--scope must be ${SCOPES.join(', ')}`);
+  if (scope === 'repo' && !repo) throw new LandingError('usage', 'a repo candidate needs the repo that owns it (run it inside that repo)');
   if (!summary) throw new LandingError('usage', '--summary is required');
   const problem = checkEvidence(evidence);
   if (problem) throw new LandingError('bad-evidence', problem);
@@ -59,15 +61,15 @@ export function writeCandidate({ home, kind, scope, skill, summary, evidence = [
     copyFileSync(draft, join(dir, `${name}.patch`));
     draftRel = `candidates/${scope}/${name}.patch`;
   }
-  const candidate = { kind, scope, ...(skill ? { skill } : {}), summary, evidence, ...(draftRel ? { draft: draftRel } : {}),
+  const candidate = { kind, scope, ...(scope === 'repo' ? { repo } : {}), ...(skill ? { skill } : {}), summary, evidence, ...(draftRel ? { draft: draftRel } : {}),
     ...(fixedWhen ? { fixedWhen } : {}), from, lane, at: new Date(at).toISOString() };
   const file = join(dir, `${name}.json`);
   writeFileSync(file, JSON.stringify(candidate, null, 2) + '\n');
   return { file, lane, candidate };
 }
 
-// The queue: candidates not yet done, oldest first, optionally for one scope.
-export function queue(home, scope, at = Date.now()) {
+// The queue: candidates not yet done, oldest first, optionally for one scope (and, for repo, one repo).
+export function queue(home, scope, at = Date.now(), repo) {
   const out = [];
   for (const s of scope ? [scope] : SCOPES) {
     let names = [];
@@ -76,6 +78,7 @@ export function queue(home, scope, at = Date.now()) {
       const file = join(dirOf(home, s), n);
       let c;
       try { c = JSON.parse(readFileSync(file, 'utf8')); } catch { continue; }
+      if (repo && c.repo !== repo) continue;
       out.push({ file, ...c, ageDays: Math.floor((at - (Date.parse(c.at) || at)) / DAY) });
     }
   }
@@ -107,7 +110,13 @@ export function prune(done, at = Date.now()) {
   return removed;
 }
 
+// The repos with repo candidates queued, for the status hook and the schedule.
+export function repoOwners(home) {
+  return [...new Set(queue(home, 'repo').map((c) => c.repo).filter(Boolean))].sort();
+}
+
 // The source repo a scope's lessons land in: core's bundle repo, or the first other repo holding bundles.
+// A repo lesson lands in its own repo, which the candidate names.
 export function sourceRepo(scope, sources) {
   const rootOf = (d) => {
     if (!d || !existsSync(d)) return null;

@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, realpathSync, writeFileSync, mkdirSync, existsSync
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sourceRepo, triagePrompt, pickLauncher, pickAgent } from './candidates.mjs';
+import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sourceRepo, repoOwners, triagePrompt, pickLauncher, pickAgent } from './candidates.mjs';
 
 const LESSONS = join(dirname(fileURLToPath(import.meta.url)), 'lessons.mjs');
 const T0 = Date.parse('2026-11-11T12:00:00Z');
@@ -52,7 +52,12 @@ test('a candidate is one file in its scope folder; done moves it and its draft o
     assert.ok(!('want' in c), 'no want field: the kind decides');
     writeCandidate({ home: s.home, kind: 'pattern', scope: 'org', summary: 'p', at: T0 });
     assert.deepEqual(queue(s.home, null, T0 + 3 * 86400000).map((q) => [q.scope, q.lane, q.ageDays]), [['core', 'now', 3], ['org', 'queue', 3]]);
-    assert.throws(() => writeCandidate({ home: s.home, kind: 'fact', scope: 'repo', summary: 'x' }), /repo-scope lesson stays in its PR/);
+    assert.throws(() => writeCandidate({ home: s.home, kind: 'fact', scope: 'repo', summary: 'x' }), /needs the repo that owns it/);
+    const r = writeCandidate({ home: s.home, kind: 'pattern', scope: 'repo', repo: '/r/shop', summary: 'shop rule', at: T0 });
+    assert.equal(JSON.parse(readFileSync(r.file, 'utf8')).repo, '/r/shop');
+    writeCandidate({ home: s.home, kind: 'pattern', scope: 'repo', repo: '/r/trips', summary: 'trips rule', at: T0 });
+    assert.deepEqual(queue(s.home, 'repo', T0, '/r/shop').map((q) => q.summary), ['shop rule'], 'a repo queue holds only its own repo');
+    assert.deepEqual(repoOwners(s.home), ['/r/shop', '/r/trips']);
     const d = markDone(s.home, w.file, 'landed', T0);
     assert.ok(!existsSync(w.file));
     assert.deepEqual(readdirSync(join(s.home, 'candidates', 'core', 'done')).sort(), [
@@ -174,5 +179,30 @@ test('the CLI: a downstream fact prints its launch; a pattern queues; queue list
     writeFileSync(join(src, '.agents', 'skills', 'factory-triage', 'SKILL.md'), 'x');
     assert.equal(triagePrompt(src, '/h/c.json', { core: join(src, 'bundles', 'core') }), '/factory-triage /h/c.json', 'installed: the slash command');
     assert.equal(q.out.repos[1].queued, 0);
+  } finally { s.done(); }
+});
+
+test('the CLI: a repo lesson queues in the repo that found it, and a repo fact asks for triage here', () => {
+  const s = sandbox();
+  try {
+    const shop = join(s.dir, 'shop'); mkdirSync(shop, { recursive: true });
+    git(shop, 'init', '-q', '-b', 'main');
+    const run = (...a) => { const p = spawnSync(process.execPath, [LESSONS, ...a], { encoding: 'utf8', env: { ...ENV, FACTORY_HOME: s.home } }); return { status: p.status, out: p.stdout ? JSON.parse(p.stdout) : null, err: p.stderr }; };
+    const base = ['--scope', 'repo', '--project', 'shop', '--root', shop];
+    const pat = run('candidate', '--kind', 'pattern', '--summary', 'feature map gotcha', ...base);
+    assert.equal(pat.status, 0, pat.err);
+    assert.equal(pat.out.repo, shop);
+    assert.equal(pat.out.home, true);
+    assert.equal(pat.out.lane, 'queue');
+    assert.match(pat.out.next, /queued here/);
+    const fact = run('candidate', '--kind', 'fact', '--summary', 'stale test command', ...base);
+    assert.equal(fact.out.lane, 'now');
+    assert.match(fact.out.next, /owner repo: \/factory-triage /);
+    const q = run('queue', '--scope', 'repo');
+    assert.deepEqual(q.out.repos.map((r) => [r.scope, r.repo, r.queued]), [['repo', shop, 2]]);
+    const c = run('cadence', '--scope', 'repo', '--repo', shop);
+    assert.equal(c.out.scopes[0].repo, shop);
+    assert.equal(c.out.scopes[0].queued, 2);
+    assert.ok(JSON.parse(readFileSync(join(s.home, 'triage-state.json'), 'utf8'))[`repo:${shop}`], 'its cadence is keyed by the repo');
   } finally { s.done(); }
 });
