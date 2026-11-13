@@ -31,12 +31,12 @@ Data, not a skill. See `factory-pr-comment/references/github-pr-comments.md` §1
 
 `adapters.personas` (from `review.personas`) lists factory-review personas. Each one is found in `factory-review/personas/` or in a persona pack, `factory-review-*/personas/`.
 
-## reviewUI, lessonInbox, lessonLanding
+## reviewUI, lessonLanding
 
 Read from the **source repo** a lesson lands in (`resolve.mjs --cwd <repo>`), not from the repo the session ran in. `factory-reflect` uses them in "Landing a lesson branch".
 
 - `adapters.reviewUI` names the review step for a lesson branch. `plannotator-review` writes a guided review first (`factory-reflect/scripts/guide.mjs`, the guide by a subagent on the newest Sonnet), then runs `plannotator review <worktree | PR URL> --gate --json` and reads its `decision`. When the branch has an open PR, the guide and the review both go to the PR, and its comments are posted there when the review's destination is GitHub (the default). Plannotator has no flag that writes a guide on open, so the guide is written first and imported. Unset means the diff in chat, one commit at a time.
-- `adapters.lessonInbox` names where a notice goes when a lesson branch is left undecided. `plannotator-inbox` sends one message to the thread `factory lessons`. It is a notice only; approval is always the review step.
+- `adapters.lessonInbox` is no longer read. An undecided lesson branch is named by the status hook at the next session start in its repo; the review step is the only place a lesson is decided.
 - `adapters.lessonLanding`: `local-review` (default) fast-forwards trunk after approval and pushes; `pr` pushes the branch and opens a PR for a repo with other reviewers.
 
 ## sessionLauncher

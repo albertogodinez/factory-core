@@ -288,10 +288,10 @@ node bin/factory.mjs setup --triage-schedule --dry-run   # inspect scheduler con
 node bin/factory.mjs setup --triage-schedule             # install: checks every 4 hours
 ```
 
-Every 4 hours, the job runs `factory triage --due`. For each scope (core, org) whose queue is due by
+Every 4 hours, the job runs `factory triage --due`. For each queue (core, org, and each repo's own) that is due by
 its cadence, it starts one interactive triage session in the source repo through the machine's
 `sessionLauncher`. The session opens the repo's `adapters.agentCLI`, else the machine's. It clusters
-the queue, sends the clusters to the Inbox, and waits for your answer before building anything. The
+the queue, builds the lesson branch and opens the review gate, the only place it waits for you. The
 job launches a scope at most once every 20 hours and never between 22:00 and 07:00. With no launcher,
 it only records the due scope in `~/.agents/factory/triage-last.json`, and the status hook in the
 source repo names the queue at its next session start. Like the cleanup job, normal `factory setup`

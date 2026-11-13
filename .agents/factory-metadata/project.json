@@ -4,7 +4,6 @@
   "name": "factory-core",
   "adapters": {
     "reviewUI": "plannotator-review",
-    "lessonInbox": "plannotator-inbox",
     "lessonLanding": "local-review"
   }
 }
