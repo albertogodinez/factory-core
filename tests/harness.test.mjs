@@ -100,3 +100,17 @@ test('factory harness: shows the change, --apply writes it with a backup, a stat
     assert.deepEqual(read(join(claude, 'settings.json')).permissions, { allow: ['Bash(ls:*)'] }, 'entries dropped from the fragment are removed');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('the shipped commit guard refuses a git commit whose output goes to /dev/null', () => {
+  const frag = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bundles', 'core', 'harness', 'claude-code.json'), 'utf8'));
+  assert.equal(checkFragment(frag), null);
+  const group = frag.hooks.PreToolUse.find((g) => g.matcher === 'Bash');
+  const run = (command) => spawnSync('sh', ['-c', group.hooks[0].command], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command } }), encoding: 'utf8' });
+  for (const bad of ['git commit -m x >/dev/null', 'git add -A && git commit -m "x" > /dev/null 2>&1', 'git commit -m x 2>/dev/null', 'git -C wt commit -qm x &>/dev/null']) {
+    const r = run(bad);
+    assert.equal(r.status, 2, bad);
+    assert.match(r.stderr, /hides a pre-commit hook failure/);
+  }
+  for (const ok of ['git commit -m x', 'git commit -m x 2>&1 | tail -5', 'git log >/dev/null', 'git commit -m x && ls >/dev/null', 'pnpm test > /dev/null']) assert.equal(run(ok).status, 0, ok);
+  assert.equal(run('').status, 0);
+});

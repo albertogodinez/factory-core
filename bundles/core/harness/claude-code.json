@@ -1,4 +1,19 @@
 {
-  "hooks": {},
-  "permissions": { "allow": [], "deny": [] }
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{let c='';try{c=JSON.parse(s).tool_input.command||''}catch{}if(/\\bgit\\b[^|;&\\n]*\\bcommit\\b(?:[^|;&\\n]|&>)*?(?:&>|[0-9]?>>?)\\s*\\/dev\\/null/.test(c)){console.error('Refused: this git commit sends its output to /dev/null, which hides a pre-commit hook failure. Run it again without the redirect.');process.exit(2)}})\""
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [],
+    "deny": []
+  }
 }

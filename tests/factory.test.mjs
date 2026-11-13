@@ -384,6 +384,9 @@ test('status --hook: a running session hears once about an update or an edited c
   makeRepo(src, { files: { 'bundles/hb/alpha/SKILL.md': skill('alpha'), 'bundles/hb/beta/SKILL.md': skill('beta') } });
   const env = { FACTORY_HOME: h };
   write(join(h, 'sources.json'), { core: CORE, hb: join(src, 'bundles', 'hb') });
+  // core ships harness settings; this session has applied them, so only skill changes are news.
+  const { fragments: harnessFragments } = await import('../bin/harness.mjs');
+  write(join(h, 'harness-applied.json'), Object.fromEntries(['claude-code', 'codex'].map((name) => [name, { sources: Object.fromEntries(harnessFragments({ core: CORE }, name, { git: false }).map((f) => [f.bundle, { hash: f.hash }])) }])));
   const d = personalRepo('phook');
   assert.equal(factory(['install', 'core', 'hb', '--commit'], d, env).status, 0);
   const hook = (sid, event) => {
