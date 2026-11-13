@@ -196,7 +196,10 @@ node factory.mjs list
 node factory.mjs status               # one line when installed skills are behind their source; else silent
 node factory.mjs status --hook        # as a hook: also tells a running session about updates and edited copies
 node factory.mjs setup [--root <dir>] # a new machine: the status and metrics hooks, the session launcher, and installs.json for repos already cloned
+node factory.mjs harness [--apply]    # the harness bundle's hooks and permission rules: show the change, or merge it into your settings
 ```
+
+**The harness bundle.** Hooks and permission rules that factory manages live in git, in each bundle's `harness/claude-code.json` and `harness/codex.json`, so a harness lesson is a commit with the same branch, review and trailers as any other. `factory harness` shows what applying them would change; `factory harness --apply` (also run by `factory setup`) merges them into `~/.claude/settings.json` and `~/.codex/hooks.json`, with a backup. Factory records what it applied in `~/.agents/factory/harness-applied.json`: an entry dropped from a fragment is removed on the next apply, and entries you added yourself are never touched. A fragment holds only `hooks` and `permissions.allow`/`deny`, and a broad allow (`Bash`, `Bash(*)`) is refused. When a fragment changes upstream, the status hook says so at session start. Each metrics row records the applied harness revision, so a harness lesson is measured across every session on the machine.
 
 `status --hook` reads the hook's JSON from stdin (`session_id`, `hook_event_name`, `cwd`). It answers the session-start check the same way, and on later prompts it tells a running session, once, what changed since it last checked:
 - Skills `factory update` copied in. `update` appends each copy to `~/.agents/factory/updates.jsonl`.

@@ -210,11 +210,22 @@ export function lockRevs(cwd) {
   return Object.fromEntries(Object.entries(count).map(([l, m]) => [l, Object.entries(m).sort((a, b) => b[1] - a[1])[0][0]]));
 }
 
+// The harness bundle revision each layer had applied on this machine (factory harness --apply), as
+// harness-core / harness-org, for the harness this session ran in.
+export function harnessRevs(env, harness) {
+  let applied = {};
+  try { applied = JSON.parse(readFileSync(join(home(env), 'harness-applied.json'), 'utf8')); } catch { return {}; }
+  const out = {};
+  for (const [bundle, s] of Object.entries(applied?.[harness]?.sources || {})) {
+    if (REV.test(String(s?.rev || ''))) out[`harness-${bundle === 'core' ? 'core' : 'org'}`] = s.rev;
+  }
+  return out;
+}
 export function capture({ transcript, session, cwd, harness }, env = process.env, now = Date.now()) {
   const lines = readFileSync(transcript, 'utf8').split('\n');
   const evs = events(lines);
   const h = harness || (/\.codex\//.test(transcript) ? 'codex' : 'claude-code');
-  const row = summarizeSession(evs, { session: session || basename(transcript).replace(/\.jsonl$/, ''), harness: h, project: basename(resolve(cwd || '.')), layerOf: layerMap(cwd), revs: lockRevs(cwd) });
+  const row = summarizeSession(evs, { session: session || basename(transcript).replace(/\.jsonl$/, ''), harness: h, project: basename(resolve(cwd || '.')), layerOf: layerMap(cwd), revs: { ...lockRevs(cwd), ...harnessRevs(env, h) } });
   return { ...store(row, env, now), session: row.session };
 }
 
@@ -250,11 +261,14 @@ export function trend(rows, landed, layer, { days = 90, now = Date.now(), contai
   const lessons = landed.filter((c) => c.scope === layer && Date.parse(c.done?.at) >= from).map((c) => {
     const t = Date.parse(c.done.at), f = c.fixedWhen;
     const mean = (w) => (w.length && f && SIGNALS[f.metric] ? +(w.reduce((s, r) => s + SIGNALS[f.metric](r, f.match), 0) / w.length).toFixed(2) : null);
-    const within = (a, b) => mine.filter((r) => { const x = Date.parse(r.at); return x >= a && x < b; });
-    const near = within(t - 14 * DAY, t + 14 * DAY).filter((r) => r.revs?.[layer]);
+    // A harness lesson changes every session on the machine, not only those using a skill of its layer.
+    const key = c.kind === 'harness' ? `harness-${layer}` : layer;
+    const pool = c.kind === 'harness' ? rows : mine;
+    const within = (a, b) => pool.filter((r) => { const x = Date.parse(r.at); return x >= a && x < b; });
+    const near = within(t - 14 * DAY, t + 14 * DAY).filter((r) => r.revs?.[key]);
     let before, after, by = 'date';
     if (c.done.commit && contains && near.length) {
-      const ran = near.filter((r) => contains(r.revs[layer], c.done.commit));
+      const ran = near.filter((r) => contains(r.revs[key], c.done.commit));
       before = mean(near.filter((r) => !ran.includes(r))); after = mean(ran); by = 'revision';
     } else { before = mean(within(t - 7 * DAY, t)); after = mean(within(t, t + 7 * DAY)); }
     return { at: c.done.at, summary: c.summary, metric: f?.metric || null, match: f?.match || null, ...(c.done.commit ? { commit: c.done.commit } : {}),

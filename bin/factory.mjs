@@ -15,6 +15,8 @@
 //   factory status --hook                 the same as a hook: also says, once per session, which skills
 //                                         were updated or edited in place after the session started
 //   factory setup --triage-schedule [--dry-run]   every 4 hours: open a triage session when it's due
+//   factory harness [--apply] [--dry-run]         the harness bundle's hooks and permission rules: show the
+//                                                 change, or merge it into ~/.claude/settings.json and ~/.codex/hooks.json
 //   factory triage --due [--dry-run] [--scheduled]  per scope: when its queue is due for triage, start a
 //                                         session in its source repo through the machine's launcher
 //   factory setup [--root <dir>] [--dry-run]   a new machine: add the status hooks to Claude Code and
@@ -32,6 +34,7 @@ import { spawnSync, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
 import { cleanup, setupCleanupSchedule, installSchedule, JOBS } from './cleanup.mjs';
+import { fragments as harnessFragments, merge as harnessMerge, drifted as harnessDrifted } from './harness.mjs';
 import { findGit, toolkitHome, parseRemote } from '../bundles/core/factory-context/scripts/resolve.mjs';
 
 const FACTORY = dirname(dirname(realpathSync(import.meta.filename)));
@@ -982,6 +985,7 @@ function hookStatus(opts) {
     for (const l of due) out(l);
     if (due.some((l) => / wait here /.test(l))) launchDueTriage();
     for (const l of repoLessonLines([g.mainRoot, g.toplevel])) out(l);
+    for (const l of harnessLines()) out(l);
     if (file) {
       try { // forget sessions untouched for a week
         for (const f of readdirSync(SESSIONS())) if (now - statSync(join(SESSIONS(), f)).mtimeMs > 7 * 864e5) rmSync(join(SESSIONS(), f), { force: true });
@@ -1009,6 +1013,45 @@ function hookStatus(opts) {
   if (file) {
     try { writeJson(file, { root: g.mainRoot, seen: now, cleanupAt, edited: [...told, ...edited.map((e) => e.name)], hinted: [...hinted] }); } catch {}
   }
+}
+
+// ---------- harness ----------
+// The harness bundle (bin/harness.mjs): hooks and permission rules kept in each bundle's harness/.
+const HARNESS_APPLIED = () => join(toolkitHome(), 'harness-applied.json');
+export function harnessLines(sources = bundleSources(), applied = readJson(HARNESS_APPLIED(), {})) {
+  const lines = [];
+  for (const h of ['claude-code', 'codex']) {
+    const changed = harnessDrifted(sources, applied, h);
+    if (changed.length) lines.push(`factory: harness settings for ${h} changed upstream (${changed.join(', ')}). See and apply them: node ${join(FACTORY, 'bin', 'factory.mjs')} harness, then harness --apply`);
+  }
+  return lines;
+}
+export function harness(opts = {}, sources = bundleSources()) {
+  const applied = readJson(HARNESS_APPLIED(), {}), stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+  const write = opts.apply && !opts.dryRun;
+  let pending = 0;
+  for (const h of hookFiles()) {
+    const frags = harnessFragments(sources, h.harness);
+    for (const f of frags) if (!f.problem && h.harness === 'codex' && f.fragment.permissions) f.problem = `${f.file}: Codex keeps its rules in ~/.codex/rules, not in hooks.json; drop permissions here`;
+    const bad = frags.filter((f) => f.problem);
+    if (bad.length) { for (const f of bad) warn(f.problem); process.exitCode = 1; continue; }
+    if (!existsSync(h.dir)) { out(`harness ${h.harness}: skipped (no ${h.dir})`); continue; }
+    let cfg = {};
+    if (existsSync(h.path)) { try { cfg = JSON.parse(readFileSync(h.path, 'utf8')); } catch { warn(`${h.path} isn't valid JSON; left alone`); process.exitCode = 1; continue; } }
+    const { changes, record } = harnessMerge(cfg, frags, applied[h.harness]);
+    if (!changes.length) { out(`harness ${h.harness}: up to date (${frags.map((f) => `${f.bundle}${f.rev ? `@${f.rev}` : ''}`).join(', ') || 'no fragments'})`); if (write) applied[h.harness] = record; continue; }
+    pending++;
+    out(`harness ${h.harness}${write ? '' : ' (not applied)'}:`);
+    for (const c of changes) out(`  ${c}`);
+    if (write) {
+      if (existsSync(h.path)) cpSync(h.path, `${h.path}.bak-${stamp}`);
+      writeJson(h.path, cfg);
+      applied[h.harness] = record;
+      out(`  wrote ${h.path}${existsSync(`${h.path}.bak-${stamp}`) ? ` (backup .bak-${stamp})` : ''}`);
+    }
+  }
+  if (write) writeJson(HARNESS_APPLIED(), { ...applied, at: new Date().toISOString() });
+  else if (pending && !opts.quiet) out(`Apply: node ${join(FACTORY, 'bin', 'factory.mjs')} harness --apply`);
 }
 
 // ---------- setup ----------
@@ -1105,6 +1148,7 @@ async function setup(opts) {
     out(`  ${h.harness}: ${changes.join(', ')}${opts.dryRun ? ' (dry run)' : ` (${h.path}${existsSync(`${h.path}.bak-${stamp}`) ? `, backup .bak-${stamp}` : ''})`}`);
   }
   if (codexChanged) out('  codex: trust the new hooks in the next interactive session (codex exec runs no user hooks)');
+  harness({ apply: true, dryRun: opts.dryRun });
 
   for (const l of machineLauncher(toolkitHome(), opts)) out(l);
   for (const l of machineAgent(toolkitHome(), opts)) out(l);
@@ -1227,6 +1271,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(import.met
       if (r.scopes.some((x) => x.action === 'failed')) process.exitCode = 1;
     } catch (e) { die(e.message); }
   }
+  else if (cmd === 'harness') harness(o);
   else if (cmd === 'status') { try { o.hook ? hookStatus(o) : status(o); } catch {} process.exitCode = 0; }
   else die(`unknown command ${cmd} (see factory help)`, 2);
 }

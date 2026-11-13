@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, realpathSync, writeFileSync, mkdirSync, readFileSy
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { head, events, summarizeSession, checkRow, store, readRows, capture, trend, report, lockRevs, verdict } from './metrics.mjs';
+import { head, events, summarizeSession, checkRow, store, readRows, capture, trend, report, lockRevs, verdict, harnessRevs } from './metrics.mjs';
 
 const METRICS = join(dirname(fileURLToPath(import.meta.url)), 'metrics.mjs');
 const T0 = Date.parse('2026-11-01T10:00:00Z'), MIN = 60000, DAY = 86400000;
@@ -168,6 +168,23 @@ test('the report splits a land by installed revision when it recorded its commit
     const [byDate] = trend(rows, [{ ...lesson, done: { ...lesson.done, commit: undefined } }], 'core', { days: 28, now: T0 + 28 * DAY, contains }).lessons;
     assert.equal(byDate.by, 'date', 'no commit recorded: the date split');
     assert.deepEqual([verdict(2, 0), verdict(1, 1), verdict(1, 2), verdict(null, 1)], ['better', 'flat', 'worse', null]);
+  } finally { s.done(); }
+});
+
+test('harness lessons: rows carry the applied harness revision, and the split covers every session', () => {
+  const s = sandbox();
+  try {
+    mkdirSync(s.env.FACTORY_HOME, { recursive: true });
+    writeFileSync(join(s.env.FACTORY_HOME, 'harness-applied.json'), JSON.stringify({ 'claude-code': { sources: { core: { hash: 'h', rev: 'ddddddd' }, trips: { hash: 'h', rev: 'eeeeeee' } } } }));
+    assert.deepEqual(harnessRevs(s.env, 'claude-code'), { 'harness-core': 'ddddddd', 'harness-org': 'eeeeeee' });
+    assert.deepEqual(harnessRevs(s.env, 'codex'), {});
+    const base = summarizeSession([], { session: 'x', harness: 'h', project: 'p' });
+    const land = T0 + 14 * DAY;
+    const rows = Array.from({ length: 28 }, (_, d) => ({ ...base, session: `s${d}`, at: new Date(T0 + d * DAY).toISOString(), layers: [],
+      revs: { 'harness-core': d < 14 ? 'aaaaaaa' : 'ddddddd' }, hookBlocks: { total: d < 14 ? 4 : 1, heads: {} } }));
+    const lesson = { kind: 'harness', scope: 'core', summary: 'guard hook', fixedWhen: { metric: 'hook_blocks' }, done: { outcome: 'landed', at: new Date(land).toISOString(), commit: 'ddddddd' } };
+    const [l] = trend(rows, [lesson], 'core', { days: 28, now: T0 + 28 * DAY, contains: (rev, c) => rev === c }).lessons;
+    assert.deepEqual([l.before, l.after, l.by, l.verdict], [4, 1, 'revision', 'better'], 'no session used a core skill, and the harness lesson still measures');
   } finally { s.done(); }
 });
 
