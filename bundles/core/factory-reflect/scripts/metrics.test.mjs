@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, realpathSync, writeFileSync, mkdirSync, readFileSy
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { head, events, summarizeSession, checkRow, store, readRows, capture, trend, report } from './metrics.mjs';
+import { head, events, summarizeSession, checkRow, store, readRows, capture, trend, report, lockRevs, verdict } from './metrics.mjs';
 
 const METRICS = join(dirname(fileURLToPath(import.meta.url)), 'metrics.mjs');
 const T0 = Date.parse('2026-11-01T10:00:00Z'), MIN = 60000, DAY = 86400000;
@@ -130,6 +130,44 @@ test('the report: weekly rates per layer, a before/after per landed lesson, the 
     assert.doesNotMatch(html, /dropped/, 'only landed lessons are markers');
     assert.equal(readdirSync(reports).filter((n) => n.endsWith('-core.html')).length, 12);
     assert.ok(!existsSync(join(reports, '2026-01-01-core.html')) && !existsSync(join(reports, '2026-01-02-core.html')));
+  } finally { s.done(); }
+});
+
+test('a row records the revision each layer was installed at, and the schema holds it to commit ids', () => {
+  const s = sandbox();
+  try {
+    const repo = join(s.dir, 'shop'); mkdirSync(join(repo, '.git'), { recursive: true }); mkdirSync(join(repo, '.agents', 'factory-metadata'), { recursive: true });
+    writeFileSync(join(repo, '.agents', 'factory-metadata', 'skills-lock.json'), JSON.stringify({ skills: {
+      a: { bundle: 'core', sourceRev: 'aaaaaaa' }, b: { bundle: 'core', sourceRev: 'aaaaaaa' }, c: { bundle: 'core', sourceRev: 'bbbbbbb' },
+      d: { bundle: 'trips', sourceRev: 'ccccccc' }, e: { bundle: 'core', sourceRev: 'not a sha' } } }));
+    assert.deepEqual(lockRevs(join(repo, 'src')), { core: 'aaaaaaa', org: 'ccccccc' }, 'the most common rev per layer, found from a subdirectory');
+    assert.deepEqual(lockRevs(s.dir), {}, 'no lock: no revs');
+    const ok = summarizeSession([], { session: 's', harness: 'h', project: 'p', revs: { core: 'aaaaaaa' } });
+    assert.equal(checkRow(ok), null);
+    assert.equal(checkRow(summarizeSession([], { session: 's', harness: 'h', project: 'p' })), null, 'revs is optional: older rows still pass');
+    assert.match(checkRow({ ...ok, revs: { core: 'main; rm -rf' } }), /row\.revs must map layers to commit ids/);
+  } finally { s.done(); }
+});
+
+test('the report splits a land by installed revision when it recorded its commit, and calls a rise worse', () => {
+  const s = sandbox();
+  try {
+    const base = summarizeSession([], { session: 'x', harness: 'h', project: 'p' });
+    const land = T0 + 14 * DAY;
+    // Old revision 'aaaaaaa' keeps running after the land in some repos: a date split would mix them.
+    const rows = [];
+    for (let d = 0; d < 28; d++) {
+      const rev = d < 14 || d % 2 ? 'aaaaaaa' : 'bbbbbbb';
+      const denied = rev === 'bbbbbbb' ? 3 : 1;
+      rows.push({ ...base, session: `s${d}`, at: new Date(T0 + d * DAY).toISOString(), layers: ['core'], revs: { core: rev }, denials: { total: denied, heads: {} } });
+    }
+    const lesson = { scope: 'core', summary: 'made it worse', fixedWhen: { metric: 'permission_denials' }, done: { outcome: 'landed', at: new Date(land).toISOString(), commit: 'bbbbbbb' } };
+    const contains = (rev, commit) => rev === commit;
+    const [byRev] = trend(rows, [lesson], 'core', { days: 28, now: T0 + 28 * DAY, contains }).lessons;
+    assert.deepEqual([byRev.before, byRev.after, byRev.by, byRev.verdict], [1, 3, 'revision', 'worse']);
+    const [byDate] = trend(rows, [{ ...lesson, done: { ...lesson.done, commit: undefined } }], 'core', { days: 28, now: T0 + 28 * DAY, contains }).lessons;
+    assert.equal(byDate.by, 'date', 'no commit recorded: the date split');
+    assert.deepEqual([verdict(2, 0), verdict(1, 1), verdict(1, 2), verdict(null, 1)], ['better', 'flat', 'worse', null]);
   } finally { s.done(); }
 });
 

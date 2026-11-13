@@ -54,7 +54,7 @@ Then do the landing steps in order: the internal-data screen, the review gate (w
 After the land, mark each member:
 
 ```bash
-node <lessons.mjs> done --file <candidate> --outcome landed     # its cluster landed
+node <lessons.mjs> done --file <candidate> --outcome landed --commit <its cluster's commit on trunk>
 node <lessons.mjs> done --file <candidate> --outcome dropped    # dropped in step 1, 2 or the review
 ```
 
@@ -66,6 +66,6 @@ Check the pinned CLIs against their latest releases: `node .agents/skills/factor
 
 Record the run, with the size of the largest cluster: `node <lessons.mjs> cadence --scope <scope> --ran --clusters <largest>` (for a repo queue, `--scope repo --repo <this checkout>`). The script sets the mode: daily until two quiet weeks, then weekly, and back to daily on an early trigger (a queue of 5 or more, a candidate 3 or more days old, a cluster of 3 or more, or a lesson whose signal didn't drop). The status hook nudges by that mode. Say when it switches, and why. The user can pin a mode: `cadence --pin daily|weekly`, or `--pin off`.
 
-Write the trend report: `node <lessons.mjs> report`. It writes one HTML file per layer under `~/.agents/factory/reports/`, from the counted metrics every session's end captures. It shows weekly per-session rates, a marker for each landed lesson, and each lesson's `fixedWhen` signal for the 7 days before and after. A lesson whose signal stayed flat didn't work: queue a `pattern` candidate that says so, so the next triage reopens that cluster.
+Write the trend report: `node <lessons.mjs> report`. It writes one HTML file per layer under `~/.agents/factory/reports/`, from the counted metrics every session's end captures. It shows weekly per-session rates, a marker for each landed lesson, and each lesson's `fixedWhen` signal for the 7 days before and after. Each lesson carries a `verdict`, split by the revision each session had installed when its land recorded `--commit`, else by date. **flat**: it didn't work, so queue a `pattern` candidate that says so, and the next triage reopens that cluster. **worse** (listed in the report's `worse`): it made things worse, so queue a `fact` candidate to revert or rework it, with the commit as evidence (`{"commit":"<sha>"}`).
 
 End with a short summary here: the repo, the clusters with their member counts, what landed and what was dropped, the candidates still queued, and the report's path.

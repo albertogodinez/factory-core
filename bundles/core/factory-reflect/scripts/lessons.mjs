@@ -21,7 +21,7 @@
 //   lessons.mjs queue [--scope core|org|repo] [--skill <name>] [--repo <dir>]
 //                                            queued candidates, their owner repo and launch command,
 //                                            and the open lesson branches: what's waiting
-//   lessons.mjs done --file <candidate> --outcome landed|dropped|merged
+//   lessons.mjs done --file <candidate> --outcome landed|dropped|merged [--commit <sha>]
 //   lessons.mjs cadence [--scope core|org|repo [--repo <dir>]] [--pin daily|weekly|off] [--ran --clusters <largest>]
 //                                            triage's mode per scope (cadence.mjs); triage ends with --ran
 //   lessons.mjs report [--days 90]           the trend report per layer (metrics.mjs), for triage to post
@@ -250,7 +250,8 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
   if (cmd === 'done') {
     if (!['landed', 'dropped', 'merged'].includes(o.outcome)) fail('--outcome must be landed, dropped or merged');
     if (!o.file) fail('--file is required');
-    return markDone(home(env), o.file, o.outcome, now);
+    if (o.commit && !/^[0-9a-f]{7,40}$/.test(o.commit)) fail('--commit must be a commit id');
+    return markDone(home(env), o.file, o.outcome, now, o.commit);
   }
   if (cmd === 'cadence') {
     if (o.scope && !['core', 'org', 'repo'].includes(o.scope)) fail('--scope must be core, org or repo');

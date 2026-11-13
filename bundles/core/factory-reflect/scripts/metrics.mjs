@@ -13,6 +13,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, realpathSync, statSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { sourceRepo } from './candidates.mjs';
 
 export const KEEP_DAYS = 180, CAP_BYTES = 5 * 1024 * 1024, REPORTS_KEPT = 12, IDLE_MIN = 10;
 const DAY = 86400000;
@@ -85,7 +87,7 @@ const SKILL_CMD = /<command-name>\/?([\w:-]+)<\/command-name>/;
 const bump = (m, k, n = 1) => { if (k) m[k] = (m[k] || 0) + n; };
 
 // The counted row for one session's events. `layerOf(skill)` maps a skill to core or org.
-export function summarizeSession(evs, { session, harness, project, layerOf = () => null }) {
+export function summarizeSession(evs, { session, harness, project, layerOf = () => null, revs }) {
   const tools = {}, heads = {}, failHeads = {}, hookBlocks = {}, denialHeads = {};
   let failures = 0, denials = 0, interrupts = 0, rejects = 0, redirects = 0, idle = 0, streaks = 0, streak = 0, turns = 0;
   const skills = new Set(), cmdCount = {};
@@ -126,6 +128,7 @@ export function summarizeSession(evs, { session, harness, project, layerOf = () 
     denials: { total: denials, heads: denialHeads },
     stuck: { retries: Object.values(cmdCount).filter((n) => n >= 3).length, failStreaks: streaks, idleGaps: idle },
     corrections: { interrupts, rejects, redirects, heuristic: true },
+    ...(revs && Object.keys(revs).length ? { revs } : {}),
   };
 }
 
@@ -134,12 +137,18 @@ export function summarizeSession(evs, { session, harness, project, layerOf = () 
 const TOKEN = /^[\w@./:+ -]{0,60}$/;
 const SHAPE = { v: 'n', session: 's', harness: 's', project: 's', at: 'iso', minutes: 'n', turns: 'n', tools: 'map', heads: 'map', layers: 'list', skills: 'list',
   failures: { total: 'n', heads: 'map' }, hookBlocks: { total: 'n', heads: 'map' }, denials: { total: 'n', heads: 'map' },
-  stuck: { retries: 'n', failStreaks: 'n', idleGaps: 'n' }, corrections: { interrupts: 'n', rejects: 'n', redirects: 'n', heuristic: 'b' } };
+  stuck: { retries: 'n', failStreaks: 'n', idleGaps: 'n' }, corrections: { interrupts: 'n', rejects: 'n', redirects: 'n', heuristic: 'b' },
+  revs: 'revs?' };
+const REV = /^[0-9a-f]{7,40}$/;
 export function checkRow(row, shape = SHAPE, path = 'row') {
   if (!row || typeof row !== 'object') return `${path} must be an object`;
   for (const k of Object.keys(row)) if (!(k in shape)) return `${path}.${k} is not a metrics field`;
   for (const [k, t] of Object.entries(shape)) {
     const v = row[k], p = `${path}.${k}`;
+    if (t === 'revs?') {
+      if (v !== undefined && !(v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([kk, r]) => TOKEN.test(kk) && typeof r === 'string' && REV.test(r)))) return `${p} must map layers to commit ids`;
+      continue;
+    }
     if (typeof t === 'object') { const e = checkRow(v, t, p); if (e) return e; continue; }
     if (t === 'n' && !(Number.isInteger(v) && v >= 0)) return `${p} must be a count`;
     if (t === 'b' && typeof v !== 'boolean') return `${p} must be a boolean`;
@@ -173,28 +182,39 @@ export function store(row, env = process.env, now = Date.now(), cap = CAP_BYTES)
   return { file: f, rows: lines.length };
 }
 
-// core or org per installed skill, from the session repo's skills-lock.json.
-export function layerMap(cwd) {
+// The session repo's skills-lock.json skills, found by walking up to the repo root.
+function lockSkills(cwd) {
   let dir = resolve(cwd || '.');
   for (;;) {
     const lock = join(dir, '.agents', 'factory-metadata', 'skills-lock.json');
-    if (existsSync(lock)) {
-      try {
-        const skills = JSON.parse(readFileSync(lock, 'utf8')).skills || {};
-        return (s) => (skills[s]?.bundle ? (skills[s].bundle === 'core' ? 'core' : 'org') : null);
-      } catch { break; }
-    }
-    if (existsSync(join(dir, '.git')) || dirname(dir) === dir) break;
+    if (existsSync(lock)) { try { return JSON.parse(readFileSync(lock, 'utf8')).skills || {}; } catch { return null; } }
+    if (existsSync(join(dir, '.git')) || dirname(dir) === dir) return null;
     dir = dirname(dir);
   }
-  return () => null;
+}
+const layerOfBundle = (b) => (b ? (b === 'core' ? 'core' : 'org') : null);
+// core or org per installed skill, from the session repo's skills-lock.json.
+export function layerMap(cwd) {
+  const skills = lockSkills(cwd);
+  return skills ? (s) => layerOfBundle(skills[s]?.bundle) : () => null;
+}
+// The source revision each layer was installed at: the most common sourceRev among its skills. The
+// report splits sessions before and after a land by this, not by date.
+export function lockRevs(cwd) {
+  const skills = lockSkills(cwd) || {}, count = {};
+  for (const s of Object.values(skills)) {
+    const layer = layerOfBundle(s?.bundle);
+    if (!layer || !REV.test(String(s.sourceRev || ''))) continue;
+    (count[layer] ||= {})[s.sourceRev] = (count[layer][s.sourceRev] || 0) + 1;
+  }
+  return Object.fromEntries(Object.entries(count).map(([l, m]) => [l, Object.entries(m).sort((a, b) => b[1] - a[1])[0][0]]));
 }
 
 export function capture({ transcript, session, cwd, harness }, env = process.env, now = Date.now()) {
   const lines = readFileSync(transcript, 'utf8').split('\n');
   const evs = events(lines);
   const h = harness || (/\.codex\//.test(transcript) ? 'codex' : 'claude-code');
-  const row = summarizeSession(evs, { session: session || basename(transcript).replace(/\.jsonl$/, ''), harness: h, project: basename(resolve(cwd || '.')), layerOf: layerMap(cwd) });
+  const row = summarizeSession(evs, { session: session || basename(transcript).replace(/\.jsonl$/, ''), harness: h, project: basename(resolve(cwd || '.')), layerOf: layerMap(cwd), revs: lockRevs(cwd) });
   return { ...store(row, env, now), session: row.session };
 }
 
@@ -210,8 +230,16 @@ export const SIGNALS = {
 const sumMatch = (m, s) => Object.entries(m || {}).filter(([k]) => k.includes(s) || s.includes(k)).reduce((a, [, n]) => a + n, 0);
 const SERIES = ['tool_failures', 'permission_denials', 'hook_blocks', 'corrections', 'stuck'];
 
+// better / flat / worse for a lesson's signal; null without both sides.
+export function verdict(before, after) {
+  if (before == null || after == null) return null;
+  return after < before ? 'better' : after > before ? 'worse' : 'flat';
+}
 // Weekly per-session rates for one layer, landed lessons as markers, and before/after per fixedWhen.
-export function trend(rows, landed, layer, { days = 90, now = Date.now() } = {}) {
+// A lesson whose land recorded its commit splits the 14 days either side by revision: a session ran
+// the lesson when its revs[layer] contains that commit (`contains(rev, commit)`, git ancestry).
+// Without a commit, or with no session carrying revs, it splits by the land's date.
+export function trend(rows, landed, layer, { days = 90, now = Date.now(), contains } = {}) {
   const from = now - days * DAY, mine = rows.filter((r) => Date.parse(r.at) >= from && (r.layers || []).includes(layer));
   const weeks = [];
   for (let s = from; s < now; s += 7 * DAY) {
@@ -221,8 +249,16 @@ export function trend(rows, landed, layer, { days = 90, now = Date.now() } = {})
   }
   const lessons = landed.filter((c) => c.scope === layer && Date.parse(c.done?.at) >= from).map((c) => {
     const t = Date.parse(c.done.at), f = c.fixedWhen;
-    const side = (a, b) => { const w = mine.filter((r) => { const x = Date.parse(r.at); return x >= a && x < b; }); return w.length && f && SIGNALS[f.metric] ? +(w.reduce((s, r) => s + SIGNALS[f.metric](r, f.match), 0) / w.length).toFixed(2) : null; };
-    return { at: c.done.at, summary: c.summary, metric: f?.metric || null, match: f?.match || null, before: side(t - 7 * DAY, t), after: side(t, t + 7 * DAY) };
+    const mean = (w) => (w.length && f && SIGNALS[f.metric] ? +(w.reduce((s, r) => s + SIGNALS[f.metric](r, f.match), 0) / w.length).toFixed(2) : null);
+    const within = (a, b) => mine.filter((r) => { const x = Date.parse(r.at); return x >= a && x < b; });
+    const near = within(t - 14 * DAY, t + 14 * DAY).filter((r) => r.revs?.[layer]);
+    let before, after, by = 'date';
+    if (c.done.commit && contains && near.length) {
+      const ran = near.filter((r) => contains(r.revs[layer], c.done.commit));
+      before = mean(near.filter((r) => !ran.includes(r))); after = mean(ran); by = 'revision';
+    } else { before = mean(within(t - 7 * DAY, t)); after = mean(within(t, t + 7 * DAY)); }
+    return { at: c.done.at, summary: c.summary, metric: f?.metric || null, match: f?.match || null, ...(c.done.commit ? { commit: c.done.commit } : {}),
+      before, after, by, verdict: verdict(before, after) };
   });
   return { layer, sessions: mine.length, weeks, lessons };
 }
@@ -238,7 +274,7 @@ export function renderHtml(t, date) {
   const t0 = t.weeks.length ? Date.parse(t.weeks[0].start) : 0, span = Math.max(1, t.weeks.length - 1) * 7 * DAY;
   const marks = t.lessons.map((l) => { const mx = P + ((Date.parse(l.at) - t0) / span) * (W - 2 * P); return `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${P}" y2="${H - P}" stroke="var(--muted)" stroke-dasharray="3 3"><title>${esc(l.summary)}</title></line>`; }).join('');
   const legend = SERIES.map((k, n) => `<span><i style="background:var(--c${n + 1})"></i>${k.replace(/_/g, ' ')}</span>`).join('');
-  const rows = t.lessons.map((l) => `<tr><td>${esc(l.at.slice(0, 10))}</td><td>${esc(l.summary)}</td><td>${esc(l.metric || '—')}${l.match ? ` <code>${esc(l.match)}</code>` : ''}</td><td>${l.before ?? '—'}</td><td>${l.after ?? '—'}</td></tr>`).join('');
+  const rows = t.lessons.map((l) => `<tr><td>${esc(l.at.slice(0, 10))}</td><td>${esc(l.summary)}</td><td>${esc(l.metric || '—')}${l.match ? ` <code>${esc(l.match)}</code>` : ''}</td><td>${l.before ?? '—'}</td><td>${l.after ?? '—'}</td><td>${esc(l.verdict || '—')}${l.by === 'revision' ? ' (by revision)' : ''}</td></tr>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Factory trend ${esc(t.layer)}</title>
 <style>:root{--bg:#fff;--fg:#1b1d22;--muted:#6b7280;--c1:#2563eb;--c2:#dc2626;--c3:#d97706;--c4:#7c3aed;--c5:#059669}
 @media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e5e7eb;--muted:#9ca3af;--c1:#60a5fa;--c2:#f87171;--c3:#fbbf24;--c4:#a78bfa;--c5:#34d399}}
@@ -247,8 +283,8 @@ svg{width:100%;height:auto}.legend span{margin-right:12px;white-space:nowrap}.le
 table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--muted);padding:4px 6px;text-align:left;vertical-align:top}</style></head><body>
 <h1>${esc(t.layer)} · ${esc(date)}</h1><p>${t.sessions} session(s) with a ${esc(t.layer)} skill active, per-session rates by week. Dashed lines: lessons landed. Corrections are a heuristic.</p>
 <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="weekly rates"><line x1="${P}" x2="${W - P}" y1="${H - P}" y2="${H - P}" stroke="var(--muted)"/>${marks}${lines}<text x="${P}" y="${P - 8}" fill="var(--muted)" font-size="11">max ${max.toFixed(2)} / session</text></svg>
-<p class="legend">${legend}</p><h2>Lessons and their signal</h2><p>Mean per session, 7 days before and after each land. A flat line means it didn't work: triage reopens that cluster.</p>
-<table><tr><th>Landed</th><th>Lesson</th><th>fixedWhen</th><th>Before</th><th>After</th></tr>${rows || '<tr><td colspan="5">No lessons landed in this window.</td></tr>'}</table></body></html>
+<p class="legend">${legend}</p><h2>Lessons and their signal</h2><p>Mean per session before and after each land: by the installed revision when the land recorded its commit, else 7 days either side. Flat means it didn't work, and triage reopens that cluster. Worse means it made things worse, and triage queues a fact to revert or rework it.</p>
+<table><tr><th>Landed</th><th>Lesson</th><th>fixedWhen</th><th>Before</th><th>After</th><th>Verdict</th></tr>${rows || '<tr><td colspan="6">No lessons landed in this window.</td></tr>'}</table></body></html>
 `;
 }
 
@@ -262,20 +298,33 @@ function landedCandidates(h) {
   return out;
 }
 
-// Writes one report per layer and keeps the newest 12 per layer.
+// Whether a session's installed revision contains a land's commit, by git ancestry in the layer's
+// source repo. Cached: a report asks about the same pairs many times.
+function ancestry(repo) {
+  const seen = new Map();
+  return (rev, commit) => {
+    const k = `${rev} ${commit}`;
+    if (!seen.has(k)) seen.set(k, !!repo && spawnSync('git', ['-C', repo, 'merge-base', '--is-ancestor', commit, rev]).status === 0);
+    return seen.get(k);
+  };
+}
+
+// Writes one report per layer and keeps the newest 12 per layer. `worse` lists the lessons whose
+// signal rose after they landed, for triage to queue a revert or rework.
 export function report({ days = 90, out } = {}, env = process.env, now = Date.now()) {
   const h = home(env), dir = out || join(h, 'reports'), date = new Date(now).toISOString().slice(0, 10);
   mkdirSync(dir, { recursive: true });
   const rows = readRows(env), landed = landedCandidates(h), written = [];
+  let sources = {}; try { sources = JSON.parse(readFileSync(join(h, 'installs.json'), 'utf8')).sources || {}; } catch {}
   for (const layer of ['core', 'org']) {
-    const t = trend(rows, landed, layer, { days, now });
+    const t = trend(rows, landed, layer, { days, now, contains: ancestry(sourceRepo(layer, sources)) });
     const f = join(dir, `${date}-${layer}.html`);
     writeFileSync(f, renderHtml(t, date));
     written.push({ layer, file: f, sessions: t.sessions, lessons: t.lessons });
     const mine = readdirSync(dir).filter((n) => n.endsWith(`-${layer}.html`)).sort();
     for (const n of mine.slice(0, Math.max(0, mine.length - REPORTS_KEPT))) rmSync(join(dir, n), { force: true });
   }
-  return { reports: written };
+  return { reports: written, worse: written.flatMap((w) => w.lessons.filter((l) => l.verdict === 'worse').map((l) => ({ layer: w.layer, ...l }))) };
 }
 
 // ---------- CLI ----------

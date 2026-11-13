@@ -85,14 +85,15 @@ export function queue(home, scope, at = Date.now(), repo) {
   return out.sort((a, b) => String(a.at).localeCompare(String(b.at)));
 }
 
-// Triage moves a candidate (and its draft) to done/ with what happened to it, and prunes done/.
-export function markDone(home, file, outcome, at = Date.now()) {
+// Triage moves a candidate (and its draft) to done/ with what happened to it, and prunes done/. A landed
+// one records the commit that carried it, so the report can split sessions by revision.
+export function markDone(home, file, outcome, at = Date.now(), commit) {
   if (!existsSync(file)) throw new LandingError('usage', `${file} is not a queued candidate`);
   const c = JSON.parse(readFileSync(file, 'utf8'));
   const done = join(dirname(file), 'done');
   mkdirSync(done, { recursive: true });
   const target = join(done, basename(file));
-  writeFileSync(target, JSON.stringify({ ...c, done: { outcome, at: new Date(at).toISOString() } }, null, 2) + '\n');
+  writeFileSync(target, JSON.stringify({ ...c, done: { outcome, at: new Date(at).toISOString(), ...(commit ? { commit } : {}) } }, null, 2) + '\n');
   rmSync(file);
   const patch = file.replace(/\.json$/, '.patch');
   if (existsSync(patch)) renameSync(patch, join(done, basename(patch)));
