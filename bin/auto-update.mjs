@@ -20,7 +20,7 @@
 // `git config factory.autoCommit false`; its diff is left and logged.
 // A running consumer session hears about the copy from `factory status --hook` (updates.jsonl).
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, lstatSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -87,9 +87,13 @@ export function runLocked(dir, work, { now = Date.now } = {}) {
 }
 
 // The paths an install owns in a repo: the lock, and each locked skill under .agents and .claude.
+// A .claude/skills that links to .agents/skills is one directory: git refuses a path through the link,
+// and the .agents path already covers it.
 export function ownedPaths(root, lock) {
   const out = ['.agents/factory-metadata/skills-lock.json'];
-  for (const name of Object.keys(lock.skills || {})) out.push(`.agents/skills/${name}`, `.claude/skills/${name}`);
+  let claudeLinked = false;
+  try { claudeLinked = lstatSync(join(root, '.claude', 'skills')).isSymbolicLink(); } catch {}
+  for (const name of Object.keys(lock.skills || {})) out.push(`.agents/skills/${name}`, ...(claudeLinked ? [] : [`.claude/skills/${name}`]));
   return out.filter((p) => existsSync(join(root, p)) || git(root, 'ls-files', '--', p));
 }
 

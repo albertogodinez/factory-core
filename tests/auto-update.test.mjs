@@ -1,7 +1,7 @@
 // bin/auto-update.mjs: the trunk-moved check, the copy-ready check, and the debounce lock.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync, utimesSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync, utimesSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { trunkMoved, readyToCopy, repoInfo, runLocked, cleanEnv, commitInstalls } from '../bin/auto-update.mjs';
@@ -114,6 +114,8 @@ test('commitInstalls: commits only the paths factory owns, on the default branch
     const env = { ...cleanEnv(), GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_NOSYSTEM: '1' };
     for (const [k, v] of Object.entries(env)) if (k.startsWith('GIT_')) process.env[k] = v;
     git(repo, 'config', 'core.hooksPath', '/dev/null'); git(repo, 'config', 'commit.gpgsign', 'false');
+    mkdirSync(join(repo, '.claude')); symlinkSync('../.agents/skills', join(repo, '.claude', 'skills'));
+    git(repo, 'add', '.claude/skills'); git(repo, 'commit', '-qm', 'claude discovery link');
     const update = () => writeFileSync(join(repo, '.agents/skills/factory-x/SKILL.md'), `v${Date.now()}\n`);
     const subject = () => git(repo, 'log', '-1', '--format=%s');
 
