@@ -116,7 +116,7 @@ the flow from the project's feature map if it has one.
    ```
    It syncs both halves on the click, which it finds as the first frame where `--sync-crop` changes (default: the
    work-pane header at 1440×900). Burns in each half's label alone, with no seconds-after-click timer (a timer reads as noise in a PR video). Holds the shorter take's last
-   frame. Exit 3 means a take has no change in that region: point `--sync-crop` at what the click changes, or pass
+   frame. A `--before-click`/`--after-click` you pass is checked against the frames: if nothing on screen changes within 0.5 s before to 1.5 s after it, exit 3 (check the caption logged just before the click). Exit 4 means the takes' first frames differ, so the before and after start on different screens; re-record, or pass `--allow-different-start` and say why in the PR. Exit 3 also means a take has no change in that region: point `--sync-crop` at what the click changes, or pass
    `--before-click`/`--after-click` in seconds. Injected highlight outlines defeat the default sync; find each
    click with `ffmpeg -i <take>.webm -vf "select='gt(scene,0.01)',showinfo" -f null - 2>&1 | grep pts_time` and pass it.
    **Each half runs from its click minus `--lead` (2 s)**, so a label drawn earlier is cut: keep

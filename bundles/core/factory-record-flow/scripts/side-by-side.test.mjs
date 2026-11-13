@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, test } from 'node:test';
-import { firstChange } from './side-by-side.mjs';
+import { changesNear, firstChange, startDifference } from './side-by-side.mjs';
 import { bandSize } from './caption.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./side-by-side.mjs', import.meta.url));
@@ -21,6 +21,8 @@ before(() => {
   dir = mkdtempSync(join(tmpdir(), 'side-by-side-test-'));
   // A take where nothing changes: the click missed, or the crop is over a region it never touches.
   ffmpeg('-f', 'lavfi', '-i', 'color=c=white:s=640x400:d=3:r=30', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', join(dir, 'still.mp4'));
+  // A take that starts dark: a different start state from the white ones.
+  ffmpeg('-f', 'lavfi', '-i', 'color=c=0x334155:s=640x400:d=3:r=30', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', join(dir, 'dark.mp4'));
   // A take whose pane turns dark 1 s in, as a skeleton opening on the click does.
   ffmpeg('-f', 'lavfi', '-i', 'color=c=white:s=640x400:d=1:r=30', '-f', 'lavfi', '-i', 'color=c=0x334155:s=640x400:d=2:r=30',
     '-filter_complex', '[0:v][1:v]concat=n=2:v=1[v]', '-map', '[v]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', join(dir, 'change.mp4'));
@@ -60,4 +62,30 @@ mediaTest('adds a caption band under both halves when given captions', () => {
   assert.equal(r.status, 0, r.stderr.toString());
   const [w, h] = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', out]).toString().trim().split(',').map(Number);
   assert.deepEqual([w, h], [1924, 600 + bandSize(1924).height]);
+});
+
+mediaTest('takes that start on different screens differ at the first frame', () => {
+  assert.ok(startDifference(join(dir, 'change.mp4'), join(dir, 'dark.mp4')) > 20);
+  assert.ok(startDifference(join(dir, 'change.mp4'), join(dir, 'still.mp4')) < 5);
+});
+
+mediaTest('refuses with exit 4 when the takes start in different states, unless allowed', () => {
+  const out = join(dir, 'start.mp4');
+  const args = ['--before', join(dir, 'dark.mp4'), '--after', join(dir, 'change.mp4'), '--out', out, '--sync-crop', CROP, '--before-click', '0.5', '--after-click', '1', '--lead', '0.5', '--tail', '0'];
+  const r = spawnSync('node', [SCRIPT, ...args]);
+  assert.equal(r.status, 4, r.stderr.toString());
+  assert.equal(existsSync(out), false);
+});
+
+mediaTest('a given click offset needs a frame change near it', () => {
+  assert.equal(changesNear(join(dir, 'change.mp4'), 1), true);
+  assert.equal(changesNear(join(dir, 'change.mp4'), 2.4), false);
+});
+
+mediaTest('refuses with exit 3 when a given click has no change near it', () => {
+  const out = join(dir, 'badclick.mp4');
+  const r = spawnSync('node', [SCRIPT, '--before', join(dir, 'change.mp4'), '--after', join(dir, 'change.mp4'), '--out', out, '--before-click', '2.5', '--after-click', '1', '--lead', '0.5', '--tail', '0']);
+  assert.equal(r.status, 3, r.stderr.toString());
+  assert.match(r.stderr.toString(), /click offset is wrong/);
+  assert.equal(existsSync(out), false);
 });

@@ -15,7 +15,11 @@
 // --captions burns a band under both halves saying what the viewer is looking at (caption.mjs); its times are seconds
 // into the after take, as `caption` in record-lib.sh writes them.
 // Needs ffmpeg, ffprobe and magick (labels are PNG overlays, since not every ffmpeg build has drawtext).
-// Exit 0: written. 1: usage. 2: a tool is missing. 3: no pane change found, so the takes can't be synced.
+// A click time you pass is checked: the frame must change within 0.5 s before to 1.5 s after it, or the offset is
+// refused (exit 3). Takes that start in different states (first frames differ) are refused (exit 4) unless
+// --allow-different-start: a before and an after that begin on different screens aren't the same flow.
+// Exit 0: written. 1: usage. 2: a tool is missing. 3: no pane change found, or a given click has no frame change near it.
+// 4: the takes' first frames differ.
 const trackOutput = !process.env.FACTORY_RUN_ID ? () => {}
   : await import('../../factory-teardown/scripts/producer.mjs').then(m => m.trackOutput).catch(e => {
     throw new Error('FACTORY_RUN_ID requires factory-teardown; install it or unset the run binding', { cause: e });
@@ -62,6 +66,22 @@ export function firstChange(file, crop, { start = 0, end = 30, threshold = 12 } 
   return null;
 }
 
+/** Mean absolute grey difference (0-255) between the first frames of two takes, both scaled to 64x40. */
+export function startDifference(a, b) {
+  const grab = (file) => execFileSync('ffmpeg', ['-loglevel', 'error', '-i', file, '-vf', 'scale=64:40,format=gray', '-frames:v', '1', '-f', 'rawvideo', '-'], { maxBuffer: 1 << 20 });
+  const [x, y] = [grab(a), grab(b)];
+  let sum = 0;
+  for (let i = 0; i < x.length; i += 1) sum += Math.abs(x[i] - y[i]);
+  return sum / x.length;
+}
+
+/** True when anything on screen changes within 0.5 s before to 1.5 s after `click`, so a click offset typed by hand is real. */
+export function changesNear(file, click) {
+  const [w, h] = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', file]).toString().trim().split(',').map(Number);
+  const start = Math.max(0, click - 0.5);
+  return firstChange(file, `${w}x${h}+0+0`, { start, end: click + 1.5, threshold: 1.5 }) !== null;
+}
+
 /** Writes 10 fps label frames showing the label alone; a burned-in timer reads as noise in a PR video. */
 async function labelFrames(label, dir, total) {
   mkdirSync(dir, { recursive: true });
@@ -87,7 +107,7 @@ async function main() {
       'before-click': { type: 'string' }, 'after-click': { type: 'string' },
       'before-label': { type: 'string', default: 'Before (main)' }, 'after-label': { type: 'string', default: 'After' },
       lead: { type: 'string', default: '2' }, tail: { type: 'string', default: '3' },
-      captions: { type: 'string' }
+      captions: { type: 'string' }, 'allow-different-start': { type: 'boolean', default: false }
     }
   });
   if (!o.before || !o.after || !o.out) fail(1, 'usage: side-by-side.mjs --before <take> --after <take> --out <mp4> [options]');
@@ -106,12 +126,19 @@ async function main() {
       fail(2, `${tool} is not installed`);
     }
   }
+  if (!o['allow-different-start']) {
+    const gap = startDifference(o.before, o.after);
+    if (gap > 20) fail(4, `the takes start on different screens (first frames differ by ${gap.toFixed(0)}/255): a before and an after must begin in the same state. Re-record, or pass --allow-different-start and say why in the PR`);
+  }
   const found = [
     { file: o.before, label: o['before-label'], given: o['before-click'] },
     { file: o.after, label: o['after-label'], given: o['after-click'] }
   ].map((take) => {
     const length = duration(take.file);
     const click = take.given !== undefined ? Number(take.given) : firstChange(take.file, o['sync-crop'], { end: Math.min(length, 60) });
+    if (take.given !== undefined && !changesNear(take.file, click)) {
+      fail(3, `nothing changes on screen within 0.5 s before to 1.5 s after ${click} s in ${take.file}: that click offset is wrong. Find the frame with ffmpeg's scene select, or check the caption logged just before the click`);
+    }
     if (click === null) {
       fail(3, `no change in ${o['sync-crop']} in ${take.file}: the click can't be found. Pass --sync-crop over a region the click changes, or --before-click/--after-click`);
     }
