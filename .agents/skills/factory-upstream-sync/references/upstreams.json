@@ -1,6 +1,7 @@
 {
   "verified": "2026-10-23",
   "snapshotMaxAgeDays": 14,
+  "own": ["harness"],
   "sources": {
     "mattpocock": {
       "type": "github",
