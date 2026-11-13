@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findings, recordingWarnings, recordedShas, verificationFindings, verifiedShas, canaryFindings, impliedVisual, checklistFindings, noiseWarnings } from './check-pr-body.mjs';
+import { findings, recordingWarnings, recordedShas, verificationFindings, verifiedShas, canaryFindings, impliedVisual, checklistFindings, noiseWarnings, scopeClaimWarnings, numberingWarnings, shapeWarnings, wordCount } from './check-pr-body.mjs';
 
 const VIDEO = 'Demo:\nhttps://github.com/user-attachments/assets/e78b568f-1fd9-436d-8807-bbfcbba2e2b3\n';
 const IMAGE = '**Header alignment**\n\n![after, Acme](https://github.com/user-attachments/assets/0d1c2b3a-0000-4000-8000-000000000000)\n';
@@ -224,4 +224,43 @@ test('an unlinked commit sha warns and a linked one does not', () => {
 
 test('noise inside a code fence is ignored', () => {
   assert.deepEqual(noiseWarnings('```\nlat 52.37304, zoom 12, `837dc843`\n```\n'), []);
+});
+
+test('a claim of what the change does not touch warns without a merge-base diff, and passes with one', () => {
+  const claim = 'This PR does not touch the checkout flow.\n';
+  assert.equal(scopeClaimWarnings(claim).length, 1);
+  assert.equal(scopeClaimWarnings('It only gates the banner.\n').length, 1);
+  assert.deepEqual(scopeClaimWarnings(claim + '```\ngit diff --stat $(git merge-base origin/main HEAD)..HEAD\n```\n'), []);
+});
+
+test('a scope claim inside quotes or a code fence is not a claim', () => {
+  assert.deepEqual(scopeClaimWarnings('The reviewer wrote "does not touch".\n```\nit does not touch x\n```\n'), []);
+});
+
+test('numbered items out of order warn, in order do not', () => {
+  assert.equal(numberingWarnings('1. a\n2. b\n4. c\n3. d\n5. e\n').length, 1);
+  assert.deepEqual(numberingWarnings('1. a\n2. b\n3. c\n'), []);
+});
+
+test('a numbered list restarts after a heading, and a nested list is its own', () => {
+  assert.deepEqual(numberingWarnings('1. a\n2. b\n\n## Next\n1. c\n2. d\n'), []);
+  assert.deepEqual(numberingWarnings('1. a\n   1. x\n   2. y\n2. b\n'), []);
+});
+
+test('takes and steps named in headings must increase', () => {
+  assert.equal(numberingWarnings('**Take 1**\n\n**Take 3**\n\n**Take 2**\n').length, 1);
+  assert.deepEqual(numberingWarnings('### Step 1\n### Step 2\n'), []);
+});
+
+test('a body past the word ceiling warns; tables, code and URLs do not count', () => {
+  const prose = 'word '.repeat(460);
+  assert.equal(shapeWarnings(prose).length, 1);
+  assert.deepEqual(shapeWarnings('| ' + 'word '.repeat(600) + '|\n```\n' + 'word '.repeat(600) + '\n```\nhttps://example.com/' + 'a'.repeat(900) + '\n'), []);
+  assert.equal(wordCount('one two\n```\nthree\n```\n'), 2);
+});
+
+test('sections out of the template order warn', () => {
+  const template = '## Summary\n## Testing\n## Checklist\n';
+  assert.equal(shapeWarnings('## Testing\nx\n## Summary\ny\n', template).length, 1);
+  assert.deepEqual(shapeWarnings('## Summary\nx\n## Extra\n## Testing\ny\n', template), []);
 });

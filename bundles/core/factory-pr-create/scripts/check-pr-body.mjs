@@ -30,6 +30,10 @@
 // Reviewer noise (warnings): decimal coordinates, "zoom N", trip or conversation URLs a reviewer can't open, and a
 // commit sha in backticks that isn't a link.
 //
+// Body shape (warnings): a claim that the PR "doesn't touch X" or "only gates Y" with no `git diff` over the merge base
+// in the body; numbered items, takes or steps that are not strictly increasing; a body past the word ceiling; and, with
+// a template, headings out of the template's order. Re-run the check after every `gh pr edit --body-file`.
+//
 // Exit 0: clean. 1: findings (one per line on stderr). 2: usage or gh error.
 import { readFileSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -236,6 +240,90 @@ export function noiseWarnings(body) {
   return out;
 }
 
+// Scope claims are the ones that were wrong in review; the body has to carry the diff that proves them.
+const SCOPE_CLAIM = /\b(?:does(?:n['’]t| not)|do(?:n['’]t| not)|did(?:n['’]t| not)|never|without)\s+(?:touch|change|modif(?:y|ies)|affect|alter)\b|\bonly\s+(?:gates?|affects?|changes?|touch(?:es)?|applies to|runs? (?:on|for))\b|\bno other (?:files?|code|callers?|behaviou?r)\b/i;
+const MERGE_BASE_DIFF = /git diff\b[^\n]*(?:merge-base|\.\.\.)/i;
+
+export function scopeClaimWarnings(body) {
+  if (MERGE_BASE_DIFF.test(body)) return [];
+  const out = [];
+  let fenced = false;
+  body.split('\n').forEach((line, index) => {
+    if (/^\s*```/.test(line)) fenced = !fenced;
+    if (fenced) return;
+    const unquoted = line.replace(/"[^"]*"|“[^”]*”|`[^`]*`/g, '');
+    if (SCOPE_CLAIM.test(unquoted)) out.push(`the body claims what the change leaves alone ("${SCOPE_CLAIM.exec(unquoted)[0]}") with no \`git diff $(git merge-base origin/<trunk> HEAD)..HEAD\` in it that proves it; run that diff, check the claim against it, and put the command and its file list in the body. line ${index + 1}: ${line.trim().slice(0, 100)}`);
+  });
+  return out;
+}
+
+const NUMBERED_ITEM = /^(\s*)(\d+)[.)]\s+\S/;
+const LABELLED_TITLE = /^\s*(?:#{1,6}\s+|\*\*)\s*(take|step|part|case|scenario)\s+(\d+)\b/i;
+
+// "1, 2, 4, 3, 5" reads as a mistake to a reviewer, whatever the cause. A list restarts at a heading or an unindented non-list line.
+export function numberingWarnings(body) {
+  const out = [];
+  const last = new Map();
+  let fenced = false;
+  body.split('\n').forEach((line, index) => {
+    if (/^\s*```/.test(line)) fenced = !fenced;
+    if (fenced || !line.trim()) return;
+    const where = `line ${index + 1}: ${line.trim().slice(0, 100)}`;
+    const titled = LABELLED_TITLE.exec(line);
+    if (titled) {
+      const key = `title:${titled[1].toLowerCase()}`;
+      const n = Number(titled[2]);
+      if (last.has(key) && n <= last.get(key)) out.push(`${titled[1].toLowerCase()} ${n} comes after ${titled[1].toLowerCase()} ${last.get(key)}; number them in the order they appear. ${where}`);
+      last.set(key, n);
+      return;
+    }
+    const item = NUMBERED_ITEM.exec(line);
+    if (item) {
+      const key = `list:${item[1].length}`;
+      const n = Number(item[2]);
+      if (last.has(key) && n <= last.get(key)) out.push(`numbered item ${n} comes after ${last.get(key)}; number a list in the order it reads. ${where}`);
+      last.set(key, n);
+      return;
+    }
+    if (/^#{1,6}\s/.test(line) || !/^\s/.test(line)) for (const key of [...last.keys()]) if (key.startsWith('list:')) last.delete(key);
+  });
+  return out;
+}
+
+const WORD_CEILING = 450;
+const HEADING_LINE = /^(#{2,4})\s+(.*\S)\s*$/;
+const headingKey = (text) => text.toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim();
+
+// Prose a reviewer reads: code fences, tables, images and URLs don't count.
+export function wordCount(body) {
+  let fenced = false;
+  let words = 0;
+  for (const line of body.split('\n')) {
+    if (/^\s*```/.test(line)) { fenced = !fenced; continue; }
+    if (fenced || line.trim().startsWith('|') || IMAGE.test(line)) continue;
+    words += line.replace(/<[^>]+>|\bhttps?:\/\/\S+/g, ' ').split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word)).length;
+  }
+  return words;
+}
+
+export function shapeWarnings(body, template) {
+  const out = [];
+  const words = wordCount(body);
+  if (words > WORD_CEILING) out.push(`the body is ${words} words of prose (ceiling ${WORD_CEILING}); a reviewer reads it in one pass. Cut what the diff, the table or the screenshots already say, and keep the template's sections`);
+  if (template) {
+    const order = template.split('\n').map((line) => HEADING_LINE.exec(line)?.[2]).filter(Boolean).map(headingKey);
+    let at = -1;
+    for (const line of body.split('\n')) {
+      const heading = HEADING_LINE.exec(line)?.[2];
+      const position = heading ? order.indexOf(headingKey(heading)) : -1;
+      if (position === -1) continue;
+      if (position < at) out.push(`section "${heading.trim()}" is out of the template's order; put the template's sections back in its order`);
+      else at = position;
+    }
+  }
+  return out;
+}
+
 // A host pinned to a prerelease can't merge; the PR has to say so in a way a reviewer can't miss.
 export function canaryFindings(body, { patches = '', isDraft } = {}) {
   const pin = CANARY_PIN.exec(patches);
@@ -317,7 +405,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   if (!template && head && slug) template = prTemplate(slug, head);
   const checklist = checklistFindings(body, template);
   problems.push(...checklist.problems);
-  for (const warning of [...recordingWarnings(body, { head, compare, isUi }), ...checklist.warnings, ...noiseWarnings(body)]) console.error(`! ${warning}`);
+  for (const warning of [...recordingWarnings(body, { head, compare, isUi }), ...checklist.warnings, ...noiseWarnings(body), ...scopeClaimWarnings(body), ...numberingWarnings(body), ...shapeWarnings(body, template)]) console.error(`! ${warning}`);
   for (const problem of problems) console.error(`✗ ${problem}`);
   if (problems.length) process.exit(1);
   console.log('✓ PR body: every ticked box is backed, and no check is skipped for size');
