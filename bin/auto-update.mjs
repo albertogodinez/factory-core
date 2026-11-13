@@ -8,7 +8,10 @@
 // runs the update from the main checkout's own bin/factory.mjs, because that checkout is the bundle
 // source `update` copies from. It skips when that checkout isn't on trunk or has uncommitted tracked
 // changes: copying then would ship a branch or a draft. The status hook's "changed upstream" line
-// still covers a skipped run. Opt out with FACTORY_AUTO_UPDATE=0 or `git config factory.autoUpdate false`.
+// still covers a skipped run. Then it runs `factory harness --apply`: a harness change was approved in
+// the same review as a skill change, and harness.mjs refuses a broad allow and backs up each file.
+// Opt out with FACTORY_AUTO_UPDATE=0 or `git config factory.autoUpdate false`; keep the harness step
+// manual with `git config factory.autoHarness false`.
 // A running consumer session hears about the copy from `factory status --hook` (updates.jsonl).
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
@@ -105,6 +108,10 @@ function run(args) {
     const r = spawnSync(process.execPath, [bin, 'update', '--all'], { cwd: info.mainRoot, encoding: 'utf8', env: cleanEnv() });
     const head = git(info.mainRoot, 'rev-parse', '--short', 'HEAD');
     log(`update --all from ${info.mainRoot}@${head}: exit ${r.status}${r.status ? `\n${(r.stdout + r.stderr).trim()}` : ''}`);
+    if (git(info.mainRoot, 'config', '--bool', 'factory.autoHarness') === 'false') return log('harness: skipped (factory.autoHarness false)');
+    const hr = spawnSync(process.execPath, [bin, 'harness', '--apply'], { cwd: info.mainRoot, encoding: 'utf8', env: cleanEnv() });
+    const changed = /^harness \S+:\n/m.test(hr.stdout || '') || /wrote /.test(hr.stdout || '');
+    log(`harness --apply: exit ${hr.status}${hr.status || changed ? `\n${((hr.stdout || '') + (hr.stderr || '')).trim()}` : ''}`);
   });
   if (result === 'queued') log(`queued behind a running update (${info.mainRoot})`);
 }

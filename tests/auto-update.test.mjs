@@ -97,6 +97,8 @@ test('the reference-transaction hook runs update --all for a trunk commit, not a
     assert.equal(calls(), '', 'a branch commit must not update');
 
     commit('on trunk');
+    assert.ok(await waitFor(() => calls().includes('harness --apply'), 8000), `no harness apply; calls: ${calls()}`);
+    assert.deepEqual(calls().trim().split('\n'), ['update --all', 'harness --apply'], 'skills first, then the harness');
     assert.ok(await waitFor(() => calls().includes('update --all'), 8000), `no update; log: ${(() => { try { return readFileSync(join(dir, 'home', 'auto-update.log'), 'utf8'); } catch { return '(none)'; } })()}`);
     // The worker logs after the update returns; let it finish before the directory goes.
     await waitFor(() => !existsSync(join(dir, 'home', 'auto-update.lock')), 5000);
