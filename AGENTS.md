@@ -21,3 +21,8 @@ factory-core holds the `core` skill bundle and the `factory` CLI that installs b
 - `npm test` runs every test. The pre-commit hook runs the same suite, plus the resolver guardrails when `bundles/core/factory-context/` changes.
 - Let the hook run on every commit. If it fails, fix the cause or the check; never pass `--no-verify`.
 - Run `npm run prepare` once per clone so `core.hooksPath` points at `.githooks`.
+
+## Commits
+
+- Commit straight to `main` in the main checkout, without asking and without a feature branch. Don't push unless asked.
+- A commit on `main` runs `bin/auto-update.mjs`, which copies the change into every installed repo. Keep `main` committable: no half-done work.
