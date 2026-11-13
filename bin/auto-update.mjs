@@ -12,6 +12,12 @@
 // the same review as a skill change, and harness.mjs refuses a broad allow and backs up each file.
 // Opt out with FACTORY_AUTO_UPDATE=0 or `git config factory.autoUpdate false`; keep the harness step
 // manual with `git config factory.autoHarness false`.
+//
+// A commit-mode install keeps its skills in git, so an update leaves a diff there. The worker commits
+// it (never pushes) when the repo is on its default branch, nothing else is staged, and no merge or
+// rebase is under way; it stages only the paths factory owns (the lock and each locked skill), so the
+// repo's own work stays out. A repo whose rules forbid unrequested commits opts out with
+// `git config factory.autoCommit false`; its diff is left and logged.
 // A running consumer session hears about the copy from `factory status --hook` (updates.jsonl).
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
@@ -80,6 +86,47 @@ export function runLocked(dir, work, { now = Date.now } = {}) {
   return `ran ${runs}`;
 }
 
+// The paths an install owns in a repo: the lock, and each locked skill under .agents and .claude.
+export function ownedPaths(root, lock) {
+  const out = ['.agents/factory-metadata/skills-lock.json'];
+  for (const name of Object.keys(lock.skills || {})) out.push(`.agents/skills/${name}`, `.claude/skills/${name}`);
+  return out.filter((p) => existsSync(join(root, p)) || git(root, 'ls-files', '--', p));
+}
+
+// Why a commit-mode repo's update diff can't be committed now, or '' when it can.
+export function commitBlocker(root) {
+  if (git(root, 'config', '--bool', 'factory.autoCommit') === 'false') return 'factory.autoCommit is false';
+  const branch = git(root, 'symbolic-ref', '--short', 'HEAD');
+  const trunk = (git(root, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD') || 'origin/main').replace(/^origin\//, '');
+  if (branch !== trunk) return `on ${branch || 'a detached HEAD'}, not ${trunk}`;
+  const gitDir = git(root, 'rev-parse', '--path-format=absolute', '--git-dir');
+  if (['MERGE_HEAD', 'rebase-merge', 'rebase-apply', 'CHERRY_PICK_HEAD'].some((f) => existsSync(join(gitDir, f)))) return 'a merge or rebase is under way';
+  if (git(root, 'diff', '--cached', '--name-only')) return 'other changes are staged';
+  return '';
+}
+
+// Commit each commit-mode install's update diff. Returns one log line per repo that had one.
+export function commitInstalls(repos, { rev } = {}) {
+  const lines = [];
+  for (const root of repos) {
+    let lock;
+    try { lock = JSON.parse(readFileSync(join(root, '.agents/factory-metadata/skills-lock.json'), 'utf8')); } catch { continue; }
+    if (lock.mode !== 'commit') continue;
+    const paths = ownedPaths(root, lock);
+    if (!paths.length || !git(root, 'status', '--porcelain', '--', ...paths)) continue;
+    const why = commitBlocker(root);
+    if (why) { lines.push(`commit ${root}: left uncommitted (${why})`); continue; }
+    if (git(root, 'add', '-A', '--', ...paths) === null) { lines.push(`commit ${root}: git add failed`); continue; }
+    const msg = `chore: update factory skills${rev ? ` (factory-core@${rev})` : ''}`;
+    const r = spawnSync('git', ['commit', '-q', '-m', msg], { cwd: root, encoding: 'utf8', env: cleanEnv() });
+    if (r.status !== 0) {
+      git(root, 'reset', '-q', '--', ...paths); // leave the index as it was
+      lines.push(`commit ${root}: the commit failed, diff left uncommitted\n${(r.stdout + r.stderr).trim()}`);
+    } else lines.push(`commit ${root}: ${git(root, 'rev-parse', '--short', 'HEAD')} ${msg}`);
+  }
+  return lines;
+}
+
 function log(line) {
   try { mkdirSync(home(), { recursive: true }); appendFileSync(join(home(), 'auto-update.log'), `${new Date().toISOString()} ${line}\n`); } catch {}
 }
@@ -108,6 +155,9 @@ function run(args) {
     const r = spawnSync(process.execPath, [bin, 'update', '--all'], { cwd: info.mainRoot, encoding: 'utf8', env: cleanEnv() });
     const head = git(info.mainRoot, 'rev-parse', '--short', 'HEAD');
     log(`update --all from ${info.mainRoot}@${head}: exit ${r.status}${r.status ? `\n${(r.stdout + r.stderr).trim()}` : ''}`);
+    let repos = [];
+    try { repos = Object.keys(JSON.parse(readFileSync(join(home(), 'installs.json'), 'utf8')).repos || {}); } catch {}
+    for (const l of commitInstalls(repos.filter((r) => existsSync(r)), { rev: head })) log(l);
     if (git(info.mainRoot, 'config', '--bool', 'factory.autoHarness') === 'false') return log('harness: skipped (factory.autoHarness false)');
     const hr = spawnSync(process.execPath, [bin, 'harness', '--apply'], { cwd: info.mainRoot, encoding: 'utf8', env: cleanEnv() });
     const changed = /^harness \S+:\n/m.test(hr.stdout || '') || /wrote /.test(hr.stdout || '');
