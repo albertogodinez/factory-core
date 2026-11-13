@@ -671,3 +671,16 @@ test('setup leaves a hook file it cannot parse alone, and --dry-run writes nothi
   assert.match(r.out, /codex: SessionStart: added, UserPromptSubmit: added, Stop: capture added \(dry run\)/);
   assert.equal(existsSync(join(codex, 'hooks.json')), false);
 });
+
+test('the status hook says when the shell\'s Node misses .nvmrc', async () => {
+  const { nodeLines } = await import('../bin/factory.mjs');
+  const dir = join(t.root, 'nvmrc'); mkdirSync(dir, { recursive: true });
+  assert.deepEqual(nodeLines(dir, 'v20.19.0'), [], 'no .nvmrc, no line');
+  write(join(dir, '.nvmrc'), '24\n');
+  assert.match(nodeLines(dir, 'v20.19.0')[0], /node v20\.19\.0 but \.nvmrc wants 24/);
+  assert.deepEqual(nodeLines(dir, 'v24.11.1'), [], 'same major is fine');
+  write(join(dir, '.nvmrc'), 'v24.11.1\n');
+  assert.deepEqual(nodeLines(dir, 'v24.0.0'), []);
+  write(join(dir, '.nvmrc'), 'lts/*\n');
+  assert.deepEqual(nodeLines(dir, 'v20.19.0'), [], 'an alias is not a version it can compare');
+});

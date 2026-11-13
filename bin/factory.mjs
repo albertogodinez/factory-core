@@ -953,6 +953,15 @@ function editedCopies(root, lock) {
   }
   return out;
 }
+// The Node a session's shells get (the one running this hook) against the repo's .nvmrc. A default older than .nvmrc
+// breaks the package manager and the commit hook in every shell, not only at dev-slot start. Reads one file, no spawns.
+export function nodeLines(dir, nodeVersion = process.version) {
+  let want;
+  try { want = readFileSync(join(dir, '.nvmrc'), 'utf8').trim(); } catch { return []; }
+  const major = /^v?(\d+)(?:\.|$)/.exec(want)?.[1];
+  if (!major || major === String(nodeVersion).replace(/^v/, '').split('.')[0]) return [];
+  return [`factory: this shell runs node ${nodeVersion} but .nvmrc wants ${want}: pnpm, npm and the commit hook can fail on the wrong Node. Run nvm use (and set it as the nvm default) before anything else.`];
+}
 function readHookInput() {
   if (process.stdin.isTTY) return {};
   try { return JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { return {}; }
@@ -986,6 +995,7 @@ function hookStatus(opts) {
     if (due.some((l) => / wait here /.test(l))) launchDueTriage();
     for (const l of repoLessonLines([g.mainRoot, g.toplevel])) out(l);
     for (const l of harnessLines()) out(l);
+    for (const l of nodeLines(g.toplevel)) out(l);
     if (file) {
       try { // forget sessions untouched for a week
         for (const f of readdirSync(SESSIONS())) if (now - statSync(join(SESSIONS(), f)).mtimeMs > 7 * 864e5) rmSync(join(SESSIONS(), f), { force: true });
