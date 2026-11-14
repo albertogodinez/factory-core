@@ -55,6 +55,8 @@ Replies post under the user's credentials, so GitHub records them as that person
 
 A teammate's question wants a person's answer, and an unsolicited bot-style reply to a colleague is worse than none. When unsure whether a human is the owner, don't reply: a missing reply is recoverable, an unsolicited one isn't.
 
+Read [references/tick-rules.md](references/tick-rules.md) before the first tick. It holds the open-findings query, the stop rule on green, the merge-state rules, bounded network calls, one-shot cron arithmetic, stale-body fixes and fetching images in a private repo.
+
 ## Steps
 
 ### 1. Stacked PRs (first tick only)
@@ -75,7 +77,7 @@ If the PR touches source or test files, build and test locally before scheduling
 
 ### 3. Schedule with backoff
 
-Each tick is a one-shot job that schedules the next, so the gap can change between ticks. A recurring job can't back off: its interval is fixed at creation. Use the harness's one-shot scheduler (in Claude Code: `CronCreate` with `recurring: false`, a cron pinned to now plus the delay, and `CronDelete` to cancel). If the harness has none, tell the user the next check time and stop, or wait in-session.
+Each tick is a one-shot job that schedules the next, so the gap can change between ticks. A recurring job can't back off: its interval is fixed at creation. Use the harness's one-shot scheduler (in Claude Code: `CronCreate` with `recurring: false`, a cron computed from the clock plus the delay (tick-rules, One-shot scheduling), and `CronDelete` to cancel). If the harness has none, tell the user the next check time and stop, or wait in-session.
 
 - The delay doubles on each idle tick and resets on any change: 5, 10, 20, 30, 30 minutes.
 - At the end of every tick, after reporting, schedule the next one unless the monitor is stopping (CI green with no open findings, or the 3rd idle tick). Store the new job id and delay in the state file.
@@ -88,7 +90,7 @@ A monitor that reports no change is noise. A tick is **idle** when all three are
 
 A tick with a check still queued is not idle: CI hasn't run. When checks stay pending for two intervals, read `gh run list --branch <branch> --limit 4 --json name,status,conclusion,createdAt,headSha`. If every run is `queued`, it's a runner backlog, not a failure: don't re-run (a re-run joins the same queue), don't count the tick, and keep backing off. If you stop anyway, report "stopped while CI was still queued, so the PR is not verified", never "parked".
 
-Persist state in `<stateRoot>/factory-pr-ci-monitor/pr-<NUMBER>.json`, since a scheduled prompt is static and can't hold it:
+Persist state (it decides idleness only; open findings are computed fresh each tick) in `<stateRoot>/factory-pr-ci-monitor/pr-<NUMBER>.json`, since a scheduled prompt is static and can't hold it:
 
 ```json
 { "head_sha": "<sha>", "checks": {"<name>": "<conclusion>"}, "comment_ids": [1,2], "review_ids": [3], "idle_ticks": 0, "delay_min": 5, "base_min": 5, "job_id": "<id>", "run_ids": [] }
@@ -108,8 +110,8 @@ Carry into the tick prompt so it doesn't rediscover settled ground: the new head
 
 Run `<GH_PREFIX>gh pr checks <N>` in the repo, then:
 
-1. `gh pr view <N> --json state,mergeable -q '.state+" "+.mergeable'`. If `MERGED`, run teardown ([references/teardown.md](references/teardown.md)), report, schedule nothing, stop. If `CONFLICTING`, GitHub starts no `pull_request` workflows on the head, so checks missing since the last tick are blocked, not queued: merge trunk (a merge commit on another author's branch), resolve, run the local suite, push, and report the PR as conflicting until the new head's checks start.
-2. All checks `pass` or `skipping`: CI is green. Run the comment triage before declaring done, since a green PR can still hold bot findings. Report "CI green, no open AI-reviewer findings" and stop scheduling only when both are clear.
+1. `gh pr view <N> --json state,mergeable -q '.state+" "+.mergeable'`. If `MERGED`, run teardown ([references/teardown.md](references/teardown.md)), report, schedule nothing, stop. If `BEHIND`, `DIRTY` or `CONFLICTING`, merge trunk (tick-rules, Merge state). If `CONFLICTING`, GitHub starts no `pull_request` workflows on the head, so checks missing since the last tick are blocked, not queued: merge trunk (a merge commit on another author's branch), resolve, run the local suite, push, and report the PR as conflicting until the new head's checks start.
+2. All checks `pass` or `skipping`: CI is green. Run the comment triage before declaring done, since a green PR can still hold bot findings. Report "CI green, no open AI-reviewer findings" and stop scheduling only when both are clear and a bot review exists on the content head (or one idle tick has passed since green): see tick-rules.
 3. Some `pending`: report how many, and run the triage anyway. Bot reviews land independently of CI.
 4. Any `fail`: diagnose and fix ([references/ci-failure.md](references/ci-failure.md)).
 5. Update the state file: compare head SHA, check conclusions and comment/review ids with the stored snapshot. Unchanged is idle: increment `idle_ticks`, set `delay_min` to min(2 x `delay_min`, 30). Changed resets `idle_ticks` to 0 and `delay_min` to `base_min`. A queued run leaves `idle_ticks` as it is.
@@ -120,13 +122,12 @@ Run `<GH_PREFIX>gh pr checks <N>` in the repo, then:
 CI going green is not the PR being reviewed. AI reviewers post inline findings that fail no check, so a green PR can carry a real bug in a comment nobody read. Also run this on "address the bot comments", where there is no CI failure to react to.
 
 ```bash
-<GH_PREFIX>gh api "repos/<owner>/<repo>/pulls/<N>/comments?per_page=100" \
-  --jq '.[] | {id, login: .user.login, type: .user.type, path, line: (.line // .original_line), reply_to: .in_reply_to_id, body}'
-<GH_PREFIX>gh api "repos/<owner>/<repo>/pulls/<N>/reviews" \
-  --jq '.[] | select(.body != "") | {id, login: .user.login, type: .user.type, submitted_at, body}'
+node .agents/skills/factory-pr-ci-monitor/scripts/open-findings.mjs --pr <N> --repo <owner/repo>
 ```
 
-An AI reviewer is one where `user.type == "Bot"`. Prefer that over a login list, so a new reviewer bot is handled without a code change. The second query catches body-only findings, which never become inline comments (4.4 covers replying to them).
+It reads every page of inline comments, reviews and top-level comments and prints the findings with no reply (`open`), other humans' comments (`others`) and bot review bodies with no thread (`bodyOnly`). To read a comment's full body, `gh api repos/<owner>/<repo>/pulls/comments/<id>`.
+
+An AI reviewer is one where `user.type == "Bot"`. Prefer that over a login list, so a new reviewer bot is handled without a code change. `bodyOnly` holds findings that never became inline comments (4.4 covers replying to them). The session account's own unreplied comments are in `open` too: each gets a reply or a stated reason for none.
 
 Then, per finding:
 
