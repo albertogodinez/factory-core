@@ -34,6 +34,8 @@
 // in the body; numbered items, takes or steps that are not strictly increasing; a body past the word ceiling; and, with
 // a template, headings out of the template's order. Re-run the check after every `gh pr edit --body-file`.
 //
+// Evidence (warnings): a video inside a collapsed <details>, and a Before/After section with no Prompt:/Route:/Steps: line.
+//
 // Exit 0: clean. 1: findings (one per line on stderr). 2: usage or gh error.
 import { readFileSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -324,6 +326,27 @@ export function shapeWarnings(body, template) {
   return out;
 }
 
+const BEFORE_AFTER_HEADING = /^\s*(?:#{2,4}\s+|\*\*)\s*(?:before|after)\b/i;
+const REPRO_LINE = /^\s*(?:[-*]\s*)?\**(?:prompt|route|url|steps?)\**\s*:\s*\S/im;
+
+// Evidence a reviewer can't use as shown: a video folded away in <details>, or a Before/After pair with no way to reproduce it.
+export function evidenceWarnings(body) {
+  const out = [];
+  let depth = 0;
+  let fenced = false;
+  body.split('\n').forEach((line, index) => {
+    if (/^\s*```/.test(line)) fenced = !fenced;
+    if (fenced) return;
+    depth += (line.match(/<details\b/gi) ?? []).length;
+    if (depth > 0 && VIDEO.test(line)) out.push(`a video sits inside a collapsed <details>; keep the video open and fold only the stills. line ${index + 1}: ${line.trim().slice(0, 100)}`);
+    depth = Math.max(0, depth - (line.match(/<\/details>/gi) ?? []).length);
+  });
+  if (body.split('\n').some((line) => BEFORE_AFTER_HEADING.test(line)) && (IMAGE.test(body) || VIDEO.test(body)) && !REPRO_LINE.test(body)) {
+    out.push('the body has Before/After evidence but no "Prompt:", "Route:" or "Steps:" line saying how to reproduce it; add one under each Before/After heading (or once above both)');
+  }
+  return out;
+}
+
 // A host pinned to a prerelease can't merge; the PR has to say so in a way a reviewer can't miss.
 export function canaryFindings(body, { patches = '', isDraft } = {}) {
   const pin = CANARY_PIN.exec(patches);
@@ -405,7 +428,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   if (!template && head && slug) template = prTemplate(slug, head);
   const checklist = checklistFindings(body, template);
   problems.push(...checklist.problems);
-  for (const warning of [...recordingWarnings(body, { head, compare, isUi }), ...checklist.warnings, ...noiseWarnings(body), ...scopeClaimWarnings(body), ...numberingWarnings(body), ...shapeWarnings(body, template)]) console.error(`! ${warning}`);
+  for (const warning of [...recordingWarnings(body, { head, compare, isUi }), ...checklist.warnings, ...noiseWarnings(body), ...scopeClaimWarnings(body), ...numberingWarnings(body), ...evidenceWarnings(body), ...shapeWarnings(body, template)]) console.error(`! ${warning}`);
   for (const problem of problems) console.error(`✗ ${problem}`);
   if (problems.length) process.exit(1);
   console.log('✓ PR body: every ticked box is backed, and no check is skipped for size');

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findings, recordingWarnings, recordedShas, verificationFindings, verifiedShas, canaryFindings, impliedVisual, checklistFindings, noiseWarnings, scopeClaimWarnings, numberingWarnings, shapeWarnings, wordCount } from './check-pr-body.mjs';
+import { findings, recordingWarnings, recordedShas, verificationFindings, verifiedShas, canaryFindings, impliedVisual, checklistFindings, noiseWarnings, scopeClaimWarnings, numberingWarnings, shapeWarnings, wordCount, evidenceWarnings } from './check-pr-body.mjs';
 
 const VIDEO = 'Demo:\nhttps://github.com/user-attachments/assets/e78b568f-1fd9-436d-8807-bbfcbba2e2b3\n';
 const IMAGE = '**Header alignment**\n\n![after, Acme](https://github.com/user-attachments/assets/0d1c2b3a-0000-4000-8000-000000000000)\n';
@@ -263,4 +263,24 @@ test('sections out of the template order warn', () => {
   const template = '## Summary\n## Testing\n## Checklist\n';
   assert.equal(shapeWarnings('## Testing\nx\n## Summary\ny\n', template).length, 1);
   assert.deepEqual(shapeWarnings('## Summary\nx\n## Extra\n## Testing\ny\n', template), []);
+});
+
+test('a video inside a collapsed details block warns', () => {
+  const body = '<details>\n<summary>Recording</summary>\n\nhttps://github.com/user-attachments/assets/e78b568f-1fd9-436d-8807-bbfcbba2e2b3\n\n</details>\n';
+  assert.equal(evidenceWarnings(body).filter((w) => /collapsed/.test(w)).length, 1);
+});
+
+test('a video outside details, and an image inside one, are clean', () => {
+  assert.deepEqual(evidenceWarnings(VIDEO), []);
+  assert.deepEqual(evidenceWarnings('<details>\n<summary>Stills</summary>\n\n' + IMAGE + '\n</details>\n'), []);
+});
+
+test('a Before/After section with evidence but no Prompt or Route line warns', () => {
+  const body = '## Before (main)\n\n' + IMAGE + '\n## After (this PR)\n\n' + IMAGE;
+  assert.equal(evidenceWarnings(body).filter((w) => /prompt|route/i.test(w)).length, 1);
+});
+
+test('a Prompt or Route line clears the Before/After warning', () => {
+  const body = 'Route: /trips/new\n\n## Before (main)\n\n' + IMAGE + '\n## After (this PR)\n\n' + IMAGE;
+  assert.deepEqual(evidenceWarnings(body), []);
 });
