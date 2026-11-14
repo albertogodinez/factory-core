@@ -114,3 +114,11 @@ test('the shipped commit guard refuses a git commit whose output goes to /dev/nu
   for (const ok of ['git commit -m x', 'git commit -m x 2>&1 | tail -5', 'git log >/dev/null', 'git commit -m x && ls >/dev/null', 'pnpm test > /dev/null']) assert.equal(run(ok).status, 0, ok);
   assert.equal(run('').status, 0);
 });
+
+test('the shipped PR-body guard is a Bash PreToolUse hook that runs the installed check', () => {
+  const frag = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'bundles', 'core', 'harness', 'claude-code.json'), 'utf8'));
+  assert.equal(checkFragment(frag), null);
+  const hook = frag.hooks.PreToolUse.flatMap((g) => g.matcher === 'Bash' ? g.hooks : []).find((h) => /guard-pr-edit\.mjs/.test(h.command));
+  assert.ok(hook, 'a Bash hook runs guard-pr-edit.mjs');
+  assert.match(hook.command, /\.agents\/skills\/factory-pr-create\/scripts\/guard-pr-edit\.mjs/);
+});
