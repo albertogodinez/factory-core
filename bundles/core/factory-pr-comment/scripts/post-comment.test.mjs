@@ -155,3 +155,15 @@ test('a body that already carries the marker is refused', () => {
   });
   assert.equal(r.status, 1); assert.match(r.stderr, /already contains test-marker/);
 });
+
+test('toplevel: posts to the issue comments endpoint, with the marker, and takes no path or thread', () => {
+  setMarker({ mode: 'text', text: 'test-marker' });
+  const r = post(['--pr', '7', '--kind', 'toplevel']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.writes.length, 1);
+  assert.deepEqual(r.writes[0].argv.slice(0, 4), ['api', '-X', 'POST', 'repos/acme/project/issues/7/comments']);
+  const b = r.writes[0].argv.find((x) => x.startsWith('body=@')).slice(6);
+  assert.match(b, /^<!-- test-marker \{"v":1,"kind":"toplevel"/);
+  assert.notEqual(post(['--pr', '7', '--kind', 'toplevel', '--path', 'src/a.ts']).status, 0);
+  assert.notEqual(post(['--pr', '7', '--kind', 'toplevel', '--in-reply-to', '55']).status, 0);
+});

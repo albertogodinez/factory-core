@@ -7,7 +7,7 @@
 // what the body says (§2) and the overlap check (§3.3).
 //
 // Usage:
-//   post-comment.mjs --pr N --kind reply|annotation|review --body-file PATH
+//   post-comment.mjs --pr N --kind reply|annotation|review|toplevel --body-file PATH
 //                    [--repo OWNER/NAME] [--host HOST] [--in-reply-to ID]
 //                    [--path FILE [--line L [--start-line S] [--side RIGHT|LEFT]]]
 //                    [--model ID] [--expect-head SHA] [--yes] [--dry-run]
@@ -15,6 +15,7 @@
 //   reply       in-thread reply to --in-reply-to (a thread's root comment id)
 //   annotation  new inline note on the head commit; falls back to the user's pending review on 422
 //   review      review finding; always lands in the user's pending review (created if none)
+//   toplevel    PR conversation comment: a body-only review finding, a re-review request or a summary
 //   --path without --line posts a file-level comment.
 //   --repo      default: this project's upstream, else its origin slug
 //   --yes       the user confirmed this post (needed when the project has writeAllowed: false)
@@ -110,9 +111,11 @@ if (kind === 'reply') {
   if (!a.path) die(`--kind ${kind} needs --path (and --line for an inline comment)`);
   if (a.startLine && !a.line) die('--start-line needs --line');
   if (a.startLine && Number(a.startLine) >= Number(a.line)) die('--start-line must be below --line');
-} else die('--kind must be reply, annotation or review');
+} else if (kind === 'toplevel') {
+  if (a.inReplyTo || a.path || a.line) die('--kind toplevel takes no --in-reply-to, --path or --line');
+} else die('--kind must be reply, annotation, review or toplevel');
 const banner = mode === 'banner'
-  ? (typeof marker.banner === 'string' ? marker.banner : marker.banner?.[kind]) || null
+  ? (typeof marker.banner === 'string' ? marker.banner : marker.banner?.[kind] ?? (kind === 'toplevel' ? marker.banner?.reply : undefined)) || null
   : null;
 if (mode === 'banner' && !banner) die(`commentMarker.mode is banner but has no banner for kind ${kind}`);
 
@@ -199,7 +202,9 @@ if (a.line) {
 
 // ---------- §1 marker + banner ----------
 const ts = process.env.POST_COMMENT_TS || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-const meta = kind === 'reply'
+const meta = kind === 'toplevel'
+  ? { v: 1, kind, model: a.model, pr: Number(a.pr), head, ts }
+  : kind === 'reply'
   ? { v: 1, model: a.model, pr: Number(a.pr), in_reply_to: Number(a.inReplyTo), head, ts }
   : { v: 1, kind, model: a.model, pr: Number(a.pr), path: a.path, ...(a.line ? { line: Number(a.line) } : {}), head, ts };
 let finalBody = body;
@@ -260,7 +265,8 @@ if (kind === 'review') {
   if (!a.dryRun) process.stderr.write('post-comment: added to your pending review; it stays invisible until you submit it\n');
 } else {
   let rest;
-  if (kind === 'reply') rest = ['-X', 'POST', `repos/${a.repo}/pulls/${a.pr}/comments/${a.inReplyTo}/replies`, '-F', `body=@${bodyPath}`];
+  if (kind === 'toplevel') rest = ['-X', 'POST', `repos/${a.repo}/issues/${a.pr}/comments`, '-F', `body=@${bodyPath}`];
+  else if (kind === 'reply') rest = ['-X', 'POST', `repos/${a.repo}/pulls/${a.pr}/comments/${a.inReplyTo}/replies`, '-F', `body=@${bodyPath}`];
   else if (a.line) {
     rest = ['-X', 'POST', `repos/${a.repo}/pulls/${a.pr}/comments`, '-f', `commit_id=${head}`, '-f', `path=${a.path}`, '-F', `line=${a.line}`, '-f', `side=${a.side}`, '-F', `body=@${bodyPath}`];
     if (a.startLine) rest.push('-F', `start_line=${a.startLine}`, '-f', `start_side=${a.side}`);

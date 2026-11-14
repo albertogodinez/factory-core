@@ -18,8 +18,9 @@ Skills that post through this one keep their own rules for *what* to say and *wh
 | `reply` | Answering an existing review thread | In-thread reply |
 | `annotation` | Context for reviewers on a line or file ("this looks wrong but is deliberate") | New inline comment on the head commit |
 | `review` | A review finding | A thread in the user's **pending** review, never a submitted one |
+| `toplevel` | A body-only review finding with no thread (name the review), a re-review request, or a final summary | A PR conversation comment, with the marker |
 
-Top-level `issues/<N>/comments` posts (`gh pr comment`) are outside this script's scope, and they're never the place for a finding.
+`toplevel` is never the place to answer a finding that has a thread: use `reply`. It takes no `--path`, `--line` or `--in-reply-to`.
 
 ## 2. Write the body
 
@@ -39,7 +40,7 @@ Write the body to a file under the project's `stateRoot` (`node .agents/skills/f
 
 ```bash
 node .agents/skills/factory-pr-comment/scripts/post-comment.mjs \
-  --pr <N> --kind reply|annotation|review --body-file <file> \
+  --pr <N> --kind reply|annotation|review|toplevel --body-file <file> \
   [--repo <owner/name>]                                  # default: this project's upstream, else origin
   [--in-reply-to <COMMENT_ID>]                           # reply: the thread's root comment id
   [--path <FILE> [--line <L> [--start-line <S>] [--side RIGHT|LEFT]]]   # no --line = file-level

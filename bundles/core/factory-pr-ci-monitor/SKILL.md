@@ -144,7 +144,7 @@ Then, per finding:
    Write the body to a file: replies hold backticks and quotes that break inline shell strings. State the commit SHA, what changed, how it was verified (real numbers, not "tested"), and, when true, that the finding was broader than reported or that this PR introduced the bug. Credit the catch. Never resolve threads; that is the human reviewer's call.
 5. **Re-fetch right before replying.** Findings land asynchronously. Re-run the fetch, diff against the ids you've handled, and pick up anything new.
 
-Never answer a finding with a top-level PR comment (`issues/<N>/comments`): it is detached from the code and doesn't mark the thread answered. Top-level is only for a body-only review finding with no thread (name the review it answers and say why it is top-level), a re-review request, or a final summary. Before falling back, confirm no thread exists by re-scanning for a bot comment on the same file and line.
+Never answer a finding with a top-level PR comment (`issues/<N>/comments`): it is detached from the code and doesn't mark the thread answered. Top-level is only for a body-only review finding with no thread (name the review it answers and say why it is top-level), a re-review request, or a final summary. Post it with `post-comment.mjs --kind toplevel --body-file <file>`, so it carries the marker and is not left unposted. Before falling back, confirm no thread exists by re-scanning for a bot comment on the same file and line.
 
 Validation habits, judgment calls, and how to write an invalid-finding reply: [references/triage.md](references/triage.md). Read it before the first fix in a session.
 
