@@ -150,6 +150,8 @@ Before sending, diff the fetched copy against your edit. Every removed line shou
 
 ## 4. Link the stack (stacked PRs only)
 
+When `--base` is not the trunk, load `factory-stacked-pr` first: it covers rebasing, re-merging a moved parent and checking every PR in the stack.
+
 Setting `--base` to the parent branch is **not** a stack. GitHub shows *"This pull request can be stacked with other pull requests"* until the PRs are linked into a stack object. Link them, bottom to top, **always passing the trunk explicitly**:
 
 ```bash

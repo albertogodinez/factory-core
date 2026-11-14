@@ -1,6 +1,6 @@
 ---
 name: factory-stacked-pr
-description: 'Create, maintain, and land a stack of dependent pull requests. Use GitHub''s `gh stack` extension where the host supports it; otherwise chain base branches by hand. Covers the two failure modes that make a hand-rolled stack look fine while it is broken: CI that never runs because of a base-branch trigger filter, and a squash-merged parent that strands the child''s commits off trunk. Triggers on "stack this PR", "stacked PR", "stack on top of", "split this into dependent PRs", "PR 2 of 3", "my parent PR merged, now what", "restack", "retarget the PR".'
+description: 'Create, maintain, and land a stack of dependent pull requests, with GitHub''s `gh stack` where the host has it, else chained base branches. Covers CI that never runs because of a base-branch filter, a squash-merged parent that strands the child, and a child whose diff bloats after its parent is rebased. Triggers on "stack this PR", "stacked PR", "stack on top of", "split into dependent PRs", "PR 2 of 3", "my parent PR merged", "restack", "retarget the PR", "re-merge the parent".'
 user_invocable: true
 ---
 
@@ -159,6 +159,23 @@ cd "$TMPDIR/rebase-test" && git cherry-pick <c1> <c2> <c3>   # all exit 0?
 <the repo's test command>
 git worktree remove --force "$TMPDIR/rebase-test"
 ```
+
+## After the parent moves
+
+Re-check every child when its parent is rebased, merged or force-pushed, and again after `gh stack merge`:
+
+```bash
+gh pr view <child> --json baseRefName,changedFiles,mergeStateStatus,mergeable
+git diff --stat origin/<trunk>...<child-branch>
+```
+
+- **A child diff far past its own files** (a 41-file diff on a 3-file change) means the parent's new commits are not in the child's history. Merge the new parent, or `origin/<trunk>` once the parent has landed, into the child: a merge commit, not a rebase. Run the suite and push.
+- **Where force-push is off the table**, build that merge with `git commit-tree <merged tree> -p <child head> -p <new parent head>` and fast-forward the branch to it.
+- **Every PR in the stack gets its own `mergeable` and `mergeStateStatus` read** after a split or a merge (`CONFLICTING` or `DIRTY` on a lower PR hides behind a green top one), and `factory-pr-ci-monitor` watches all of them, not just the top.
+
+## Shared checkout: stage what you mean
+
+Before every commit in a checkout another session also uses, run `git diff --cached --name-only` and compare it to the files you meant to commit. A file another session staged rides along into your commit. Unstage it (`git restore --staged <file>`), or commit with explicit paths.
 
 ## Make the stack legible in the PR body
 
