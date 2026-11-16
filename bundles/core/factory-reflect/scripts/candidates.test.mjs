@@ -98,6 +98,10 @@ test('launch: {tag} marks the session, liveTags lists the open ones, afterLaunch
     const base = { launcher: 'launch-t', skillsDirs: [skills], repo: '/r', prompt: 'p' };
     assert.deepEqual(launchFor({ ...base, tag: 'triage:/r' }).argv, ['tool', '--label', 'k=triage:/r', 'p']);
     assert.deepEqual(launchFor(base).argv, ['tool', 'p'], 'no tag: the element drops out');
+    assert.equal(launchFor(base).after, undefined, 'no title: no naming command');
+    const named = launchFor({ ...base, title: 'lesson · x' }).after;
+    assert.deepEqual(named.argv, [process.execPath, join(dir, 'after.mjs'), '--title', 'lesson · x']);
+    assert.match(named.command, /after\.mjs --title 'lesson · x'$/);
     assert.deepEqual(liveTags(base), ['a', 'b']);
     assert.equal(afterLaunch({ ...base, output: '{"address":"t1"}', title: 'triage · r' }), null);
     assert.equal(readFileSync(join(s.dir, 'after.out'), 'utf8'), '--title|triage · r|{"address":"t1"}');

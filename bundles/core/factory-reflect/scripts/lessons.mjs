@@ -38,7 +38,7 @@
 // keyed by its repo root, so the status hook can name the ones still proposed without the resolver. Nothing counts to a threshold: factory-triage clusters the
 // queued candidates, and a cluster's size is the count that matters. Prints JSON. node: imports only.
 import { readFileSync, appendFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, renameSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { start, open, land, classify, LandingError } from './landing.mjs';
@@ -229,7 +229,7 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     if (w.lane === 'now') {
       const launcher = pickLauncher(ctx.adapters, machine);
       const bundle = sources.core && join(dirname(sources.core), 'launchers');
-      return { ...out, launch: launchFor({ launcher, skillsDirs: [o['skills-dir'] || SKILLS_DIR, bundle], repo, prompt, agent }) };
+      return { ...out, launch: launchFor({ launcher, skillsDirs: [o['skills-dir'] || SKILLS_DIR, bundle], repo, prompt, agent, title: `lesson · ${o.skill || basename(repo)}` }) };
     }
     return { ...out, next: `queued: the next factory-triage session in ${repo} takes it` };
   }

@@ -203,7 +203,7 @@ function readLauncher(launcher, skillsDirs) {
   return { files };
 }
 
-export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo, prompt, agent = AGENT_CLIS.claude, place = placeFor, tag }) {
+export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo, prompt, agent = AGENT_CLIS.claude, place = placeFor, tag, title }) {
   const manual = { via: 'print', command: `cd ${sh(repo)} && ${agent.configured ? agent.bin : '<your agent CLI>'}`, prompt };
   if (!launcher) return manual;
   const { spec, f, files } = readLauncher(launcher, skillsDirs);
@@ -213,7 +213,10 @@ export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo,
   const placed = wantsPlace ? place(dirname(f), spec.place, repo) : [];
   const tagged = tag && Array.isArray(spec.tag) ? spec.tag.map((a) => String(a).replaceAll('{tag}', tag)) : [];
   const argv = spec.argv.flatMap((a) => (a === '{place}' ? placed : a === '{tag}' ? tagged : [String(a).replaceAll('{repo}', repo).replaceAll('{agent}', agent.bin).replaceAll('{prompt}', prompt)]));
-  return { via: launcher, argv, command: argv.map(sh).join(' '), prompt, ...(wantsPlace ? { placed: placed.length > 0 } : {}) };
+  // A caller that runs the argv itself (a handoff) gets the command that names the tab, to run on the argv's stdout.
+  const after = title && spec.after ? [process.execPath, join(dirname(f), spec.after), '--title', title] : null;
+  return { via: launcher, argv, command: argv.map(sh).join(' '), prompt, ...(wantsPlace ? { placed: placed.length > 0 } : {}),
+    ...(after ? { after: { argv: after, command: after.map(sh).join(' ') } } : {}) };
 }
 
 // The tags of sessions the launcher started that are still open: the JSON array its `"live"` script
