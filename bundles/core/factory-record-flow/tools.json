@@ -11,15 +11,15 @@
       },
       "usage": "\\bagent-browser\\b",
       "min": "0.38.0",
-      "verified": "0.41.0",
+      "verified": "0.43.0",
       "latest": {
         "type": "npm",
         "package": "agent-browser"
       },
       "install": "npm install -g agent-browser@<version>",
       "notes": "0.38 added `record start --cursor` and `mouse move --human` (factory-record-flow).",
-      "reviewed": "2026-10-29",
-      "decision": "adopted: record-flow cursor recording unchanged on 0.41.0"
+      "reviewed": "2026-11-16",
+      "decision": "adopted: batch --bail find/fill/click (prod-signin.mjs), plain eval JSON encoding, --json eval .data.result, cookies --json .data.cookies and record start --cursor + mouse move --human unchanged on 0.43.0; --json data gains a lifecycle key; 0.42 rejects misplaced global options in batch (none used)"
     },
     {
       "id": "ffmpeg",

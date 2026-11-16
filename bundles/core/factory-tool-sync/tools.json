@@ -3,7 +3,13 @@
   "tools": [
     {
       "id": "node",
-      "version": { "argv": ["node", "--version"], "pattern": "v(\\d+\\.\\d+\\.\\d+)" },
+      "version": {
+        "argv": [
+          "node",
+          "--version"
+        ],
+        "pattern": "v(\\d+\\.\\d+\\.\\d+)"
+      },
       "usage": "\\bnode\\b",
       "min": "20.16.0",
       "install": "nvm install 20, or the installer from nodejs.org",
@@ -11,7 +17,13 @@
     },
     {
       "id": "git",
-      "version": { "argv": ["git", "--version"], "pattern": "git version (\\d+\\.\\d+(?:\\.\\d+)?)" },
+      "version": {
+        "argv": [
+          "git",
+          "--version"
+        ],
+        "pattern": "git version (\\d+\\.\\d+(?:\\.\\d+)?)"
+      },
       "usage": "\\bgit (worktree|diff|rev-parse|ls-files|log|status|remote|branch|merge-base|show)\\b",
       "min": "2.30.0",
       "install": "brew install git, or the installer from git-scm.com",
@@ -19,13 +31,24 @@
     },
     {
       "id": "gh",
-      "version": { "argv": ["gh", "--version"], "pattern": "gh version (\\d+\\.\\d+\\.\\d+)" },
+      "version": {
+        "argv": [
+          "gh",
+          "--version"
+        ],
+        "pattern": "gh version (\\d+\\.\\d+\\.\\d+)"
+      },
       "usage": "\\bgh (api|pr|auth|release|repo|stack|issue|run|search)\\b",
       "min": "2.100.0",
-      "verified": "2.103.3",
-      "latest": { "type": "github", "repo": "cli/cli" },
+      "verified": "2.104.0",
+      "latest": {
+        "type": "github",
+        "repo": "cli/cli"
+      },
       "install": "brew upgrade gh, or https://cli.github.com",
-      "notes": "2.100.0 for `gh pr create --attach` (factory-pr-create). 2.97.0 misreports a DNS failure as an invalid token."
+      "notes": "2.100.0 for `gh pr create --attach` (factory-pr-create). 2.97.0 misreports a DNS failure as an invalid token.",
+      "reviewed": "2026-11-16",
+      "decision": "adopted: auth status (both accounts), pr list --json through the ~/bin/gh wrapper unchanged on 2.104.0; auth status now surfaces the underlying network error instead of the 2.97 invalid-token misreport"
     }
   ]
 }
