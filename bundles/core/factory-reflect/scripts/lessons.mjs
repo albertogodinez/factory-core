@@ -81,8 +81,8 @@ export function summarize(entries, decisions, now = Date.now()) {
   for (const e of entries) {
     const t = Date.parse(e.ts);
     if (!Number.isFinite(t)) continue;
-    const s = by.get(e.fingerprint) || { fingerprint: e.fingerprint, scope: e.scope, occurrences: [], projects: new Set(), summary: e.summary };
-    s.occurrences.push(t); s.projects.add(e.project); s.summary = e.summary || s.summary; s.scope = e.scope || s.scope;
+    const s = by.get(e.fingerprint) || { fingerprint: e.fingerprint, scope: e.scope, occurrences: [], projects: new Set(), sessions: new Set(), summary: e.summary };
+    s.occurrences.push(t); s.projects.add(e.project); if (e.session) s.sessions.add(e.session); s.summary = e.summary || s.summary; s.scope = e.scope || s.scope;
     by.set(e.fingerprint, s);
   }
   const out = [];
@@ -94,7 +94,7 @@ export function summarize(entries, decisions, now = Date.now()) {
     if (now - last > EXPIRY_DAYS * DAY) reason = 'expired';
     if (d?.decision === 'never') reason = 'never';
     out.push({ fingerprint: s.fingerprint, scope: s.scope, summary: s.summary, occurrences: live.length,
-      projects: [...s.projects].filter(Boolean).sort(), lastSeen: new Date(last).toISOString(), reason });
+      projects: [...s.projects].filter(Boolean).sort(), sessions: s.sessions.size, lastSeen: new Date(last).toISOString(), reason });
   }
   // A never decided in triage for a family no single fingerprint named.
   for (const [fp, d] of Object.entries(decisions.fingerprints || {})) {
@@ -144,7 +144,8 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     if (ctx.error) fail(ctx.error);
     const entry = { ts: new Date(now).toISOString(), fingerprint: fp, scope: o.scope, summary: o.summary,
       project: ctx.project?.name, root: ctx.project?.root, destination: o.destination || null,
-      status: o.status || 'proposed', source: o.source || 'session' };
+      status: o.status || 'proposed', source: o.source || 'session',
+      session: o.session || env.CLAUDE_CODE_SESSION_ID || env.CODEX_THREAD_ID || null }; // the session that saw it, the id metrics.mjs files its row under
     const local = join(ctx.stateRoot, 'lessons.jsonl');
     mkdirSync(dirname(local), { recursive: true });
     appendFileSync(local, JSON.stringify(entry) + '\n');
@@ -179,7 +180,7 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
   if (cmd === 'known') {
     return summarize(readJsonl(indexFile(env)), decisions, now)
       .filter((s) => (!o.scope || s.scope === o.scope) && (!o.never || s.reason === 'never'))
-      .map(({ fingerprint, scope, summary, occurrences, projects, reason }) => ({ fingerprint, scope, summary, occurrences, projects, reason }));
+      .map(({ fingerprint, scope, summary, occurrences, projects, sessions, reason }) => ({ fingerprint, scope, summary, occurrences, projects, sessions, reason }));
   }
   if (cmd === 'target') {
     if (!o.skill) fail('--skill is required');

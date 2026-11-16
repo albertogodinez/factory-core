@@ -63,6 +63,18 @@ test('never is remembered, for a recorded fingerprint and for a family triage na
   } finally { s.done(); }
 });
 
+test('record stamps the session id from the environment, and known counts distinct sessions', () => {
+  const s = sandbox();
+  try {
+    const rec = (session, at) => run('record', { scope: 'core', fingerprint: 'sess-fp', summary: 's', project: 'p', root: '/p', 'state-root': join(s.dir, 'state'), ...(session ? { session } : {}) }, { ...s.env, CLAUDE_CODE_SESSION_ID: 'from-env' }, at);
+    rec(null, T0); rec('a', T0 + 1); rec('a', T0 + 2); rec('b', T0 + 3);
+    const k = run('known', {}, s.env, T0 + 4).find((x) => x.fingerprint === 'sess-fp');
+    assert.equal(k.occurrences, 4); assert.equal(k.sessions, 3, 'the env id, a and b: three sessions, four sightings');
+    const old = summarize([{ ts: new Date(T0).toISOString(), fingerprint: 'q', project: 'p' }], {}, T0 + DAY)[0];
+    assert.equal(old.sessions, 0, 'an entry from before the stamp carries no session');
+  } finally { s.done(); }
+});
+
 test('occurrences older than 90 days expire', () => {
   const s = sandbox();
   try {
