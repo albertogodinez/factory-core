@@ -240,23 +240,41 @@ export const SIGNALS = {
 };
 const sumMatch = (m, s) => Object.entries(m || {}).filter(([k]) => k.includes(s) || s.includes(k)).reduce((a, [, n]) => a + n, 0);
 const SERIES = ['tool_failures', 'permission_denials', 'hook_blocks', 'corrections', 'stuck'];
+const PLOT = [...SERIES, 'repeats']; // the chart also draws how often a known lesson came back
+const LABEL = { repeats: 'lessons seen again' };
 
 // better / flat / worse for a lesson's signal; null without both sides.
 export function verdict(before, after) {
   if (before == null || after == null) return null;
   return after < before ? 'better' : after > before ? 'worse' : 'flat';
 }
+// Each lesson-index entry of a layer with its time and whether it was a repeat: the fingerprint had been
+// recorded before, by another session (or by an entry that names none, which can't be told apart). One
+// session recording the same fingerprint twice is one sighting. Entries from before the index stamped a
+// session id count as sightings but, with no id, as repeats of anything earlier.
+export function sightings(index, layer) {
+  const seen = new Map(), out = [];
+  for (const e of [...index].filter((x) => x.scope === layer && Number.isFinite(Date.parse(x.ts))).sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts))) {
+    const before = seen.get(e.fingerprint) || [];
+    if (e.session && before.includes(e.session)) continue; // the same session saw it again
+    out.push({ at: Date.parse(e.ts), repeat: before.some((x) => !e.session || x !== e.session) });
+    seen.set(e.fingerprint, [...before, e.session || null]);
+  }
+  return out;
+}
 // Weekly per-session rates for one layer, landed lessons as markers, and before/after per fixedWhen.
 // A lesson whose land recorded its commit splits the 14 days either side by revision: a session ran
 // the lesson when its revs[layer] contains that commit (`contains(rev, commit)`, git ancestry).
 // Without a commit, or with no session carrying revs, it splits by the land's date.
-export function trend(rows, landed, layer, { days = 90, now = Date.now(), contains } = {}) {
+export function trend(rows, landed, layer, { days = 90, now = Date.now(), contains, index = [] } = {}) {
   const from = now - days * DAY, mine = rows.filter((r) => Date.parse(r.at) >= from && (r.layers || []).includes(layer));
-  const weeks = [];
+  const weeks = [], seen = sightings(index, layer);
   for (let s = from; s < now; s += 7 * DAY) {
     const w = mine.filter((r) => { const t = Date.parse(r.at); return t >= s && t < s + 7 * DAY; });
     const rate = Object.fromEntries(SERIES.map((k) => [k, w.length ? w.reduce((a, r) => a + SIGNALS[k](r), 0) / w.length : null]));
-    weeks.push({ start: new Date(s).toISOString().slice(0, 10), sessions: w.length, ...rate });
+    const sw = seen.filter((x) => x.at >= s && x.at < s + 7 * DAY);
+    weeks.push({ start: new Date(s).toISOString().slice(0, 10), sessions: w.length, ...rate,
+      sightings: sw.length, repeats: w.length ? sw.filter((x) => x.repeat).length / w.length : null }); // lesson sightings that were repeats, per session
   }
   const lessons = landed.filter((c) => c.scope === layer && Date.parse(c.done?.at) >= from).map((c) => {
     const t = Date.parse(c.done.at), f = c.fixedWhen;
@@ -279,27 +297,31 @@ export function trend(rows, landed, layer, { days = 90, now = Date.now(), contai
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 export function renderHtml(t, date) {
-  const W = 720, H = 220, P = 32, max = Math.max(1, ...t.weeks.flatMap((w) => SERIES.map((k) => w[k] || 0)));
+  const W = 720, H = 220, P = 32, max = Math.max(1, ...t.weeks.flatMap((w) => PLOT.map((k) => w[k] || 0)));
   const x = (i) => P + (i * (W - 2 * P)) / Math.max(1, t.weeks.length - 1), y = (v) => H - P - (v / max) * (H - 2 * P);
-  const lines = SERIES.map((k, n) => {
+  const lines = PLOT.map((k, n) => {
     const pts = t.weeks.map((w, i) => (w[k] == null ? null : `${x(i).toFixed(1)},${y(w[k]).toFixed(1)}`)).filter(Boolean).join(' ');
-    return pts ? `<polyline fill="none" stroke="var(--c${n + 1})" stroke-width="2" points="${pts}"><title>${k}</title></polyline>` : '';
+    return pts ? `<polyline fill="none" stroke="var(--c${n + 1})" stroke-width="2" points="${pts}"><title>${LABEL[k] || k}</title></polyline>` : '';
   }).join('');
   const t0 = t.weeks.length ? Date.parse(t.weeks[0].start) : 0, span = Math.max(1, t.weeks.length - 1) * 7 * DAY;
   const marks = t.lessons.map((l) => { const mx = P + ((Date.parse(l.at) - t0) / span) * (W - 2 * P); return `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${P}" y2="${H - P}" stroke="var(--muted)" stroke-dasharray="3 3"><title>${esc(l.summary)}</title></line>`; }).join('');
-  const legend = SERIES.map((k, n) => `<span><i style="background:var(--c${n + 1})"></i>${k.replace(/_/g, ' ')}</span>`).join('');
+  const legend = PLOT.map((k, n) => `<span><i style="background:var(--c${n + 1})"></i>${LABEL[k] || k.replace(/_/g, ' ')}</span>`).join('');
   const rows = t.lessons.map((l) => `<tr><td>${esc(l.at.slice(0, 10))}</td><td>${esc(l.summary)}</td><td>${esc(l.metric || '—')}${l.match ? ` <code>${esc(l.match)}</code>` : ''}</td><td>${l.before ?? '—'}</td><td>${l.after ?? '—'}</td><td>${esc(l.verdict || '—')}${l.by === 'revision' ? ' (by revision)' : ''}</td></tr>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Factory trend ${esc(t.layer)}</title>
-<style>:root{--bg:#fff;--fg:#1b1d22;--muted:#6b7280;--c1:#2563eb;--c2:#dc2626;--c3:#d97706;--c4:#7c3aed;--c5:#059669}
-@media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e5e7eb;--muted:#9ca3af;--c1:#60a5fa;--c2:#f87171;--c3:#fbbf24;--c4:#a78bfa;--c5:#34d399}}
+<style>:root{--bg:#fff;--fg:#1b1d22;--muted:#6b7280;--c1:#2563eb;--c2:#dc2626;--c3:#d97706;--c4:#7c3aed;--c5:#059669;--c6:#db2777}
+@media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e5e7eb;--muted:#9ca3af;--c1:#60a5fa;--c2:#f87171;--c3:#fbbf24;--c4:#a78bfa;--c5:#34d399;--c6:#f472b6}}
 body{background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif;margin:0;padding:24px 16px;max-width:760px}
 svg{width:100%;height:auto}.legend span{margin-right:12px;white-space:nowrap}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
 table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--muted);padding:4px 6px;text-align:left;vertical-align:top}</style></head><body>
-<h1>${esc(t.layer)} · ${esc(date)}</h1><p>${t.sessions} session(s) with a ${esc(t.layer)} skill active, per-session rates by week. Dashed lines: lessons landed. Corrections are a heuristic.</p>
+<h1>${esc(t.layer)} · ${esc(date)}</h1><p>${t.sessions} session(s) with a ${esc(t.layer)} skill active, per-session rates by week. Dashed lines: lessons landed. "Lessons seen again" counts, per session, the lessons the harness had already recorded in another session; a landed lesson that works should push it down. Corrections are a heuristic.</p>
 <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="weekly rates"><line x1="${P}" x2="${W - P}" y1="${H - P}" y2="${H - P}" stroke="var(--muted)"/>${marks}${lines}<text x="${P}" y="${P - 8}" fill="var(--muted)" font-size="11">max ${max.toFixed(2)} / session</text></svg>
 <p class="legend">${legend}</p><h2>Lessons and their signal</h2><p>Mean per session before and after each land: by the installed revision when the land recorded its commit, else 7 days either side. Flat means it didn't work, and triage reopens that cluster. Worse means it made things worse, and triage queues a fact to revert or rework it.</p>
 <table><tr><th>Landed</th><th>Lesson</th><th>fixedWhen</th><th>Before</th><th>After</th><th>Verdict</th></tr>${rows || '<tr><td colspan="6">No lessons landed in this window.</td></tr>'}</table></body></html>
 `;
+}
+
+function readIndex(h) {
+  try { return readFileSync(join(h, 'lessons-index.jsonl'), 'utf8').split('\n').map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { return []; }
 }
 
 function landedCandidates(h) {
@@ -328,10 +350,10 @@ function ancestry(repo) {
 export function report({ days = 90, out } = {}, env = process.env, now = Date.now()) {
   const h = home(env), dir = out || join(h, 'reports'), date = new Date(now).toISOString().slice(0, 10);
   mkdirSync(dir, { recursive: true });
-  const rows = readRows(env), landed = landedCandidates(h), written = [];
+  const rows = readRows(env), landed = landedCandidates(h), written = [], index = readIndex(h);
   let sources = {}; try { sources = JSON.parse(readFileSync(join(h, 'installs.json'), 'utf8')).sources || {}; } catch {}
   for (const layer of ['core', 'org']) {
-    const t = trend(rows, landed, layer, { days, now, contains: ancestry(sourceRepo(layer, sources)) });
+    const t = trend(rows, landed, layer, { days, now, index, contains: ancestry(sourceRepo(layer, sources)) });
     const f = join(dir, `${date}-${layer}.html`);
     writeFileSync(f, renderHtml(t, date));
     written.push({ layer, file: f, sessions: t.sessions, lessons: t.lessons });

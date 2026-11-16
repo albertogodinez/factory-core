@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, realpathSync, writeFileSync, mkdirSync, readFileSy
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { head, events, summarizeSession, checkRow, store, readRows, capture, trend, report, lockRevs, verdict, harnessRevs } from './metrics.mjs';
+import { head, events, summarizeSession, checkRow, store, readRows, capture, trend, report, sightings, renderHtml, lockRevs, verdict, harnessRevs } from './metrics.mjs';
 
 const METRICS = join(dirname(fileURLToPath(import.meta.url)), 'metrics.mjs');
 const T0 = Date.parse('2026-11-01T10:00:00Z'), MIN = 60000, DAY = 86400000;
@@ -103,6 +103,18 @@ test('store replaces a session\'s row, drops rows past 180 days, and keeps the n
     store(row('c', T0 + 1), s.env, T0 + 1, Math.ceil(size * 1.1));
     assert.deepEqual(readRows(s.env).map((r) => r.session), ['b', 'c'], 'the oldest row goes first');
   } finally { s.done(); }
+});
+
+test('sightings: a lesson another session already recorded is a repeat; the same session twice is one sighting', () => {
+  const at = (d) => new Date(T0 + d * DAY).toISOString();
+  const e = (d, fingerprint, session, scope = 'core') => ({ ts: at(d), fingerprint, scope, session });
+  const sx = sightings([e(0, 'a', 's1'), e(1, 'a', 's1'), e(2, 'a', 's2'), e(3, 'b', 's2'), e(4, 'a', null), e(5, 'z', 's9', 'org')], 'core');
+  assert.deepEqual(sx.map((x) => x.repeat), [false, true, false, true], 'a s1 again is dropped; s2 repeats; b is new; an unstamped one can only be a repeat');
+  const rows = []; // two sessions in week 0, one lesson first seen then repeated
+  for (const [i, id] of ['s1', 's2'].entries()) rows.push({ ...summarizeSession([], { session: id, harness: 'h', project: 'p' }), at: at(i), layers: ['core'] });
+  const t = trend(rows, [], 'core', { days: 14, now: T0 + 14 * DAY, index: [e(0, 'a', 's1'), e(1, 'a', 's2')] });
+  assert.equal(t.weeks[0].sightings, 2); assert.equal(t.weeks[0].repeats, 0.5, 'one repeat over two sessions');
+  assert.match(renderHtml(t, '2026-06-15'), /lessons seen again/);
 });
 
 test('the report: weekly rates per layer, a before/after per landed lesson, the newest 12 kept', () => {
