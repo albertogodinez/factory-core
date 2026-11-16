@@ -179,7 +179,7 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
   if (cmd === 'known') {
     return summarize(readJsonl(indexFile(env)), decisions, now)
       .filter((s) => (!o.scope || s.scope === o.scope) && (!o.never || s.reason === 'never'))
-      .map(({ fingerprint, scope, summary, occurrences, reason }) => ({ fingerprint, scope, summary, occurrences, reason }));
+      .map(({ fingerprint, scope, summary, occurrences, projects, reason }) => ({ fingerprint, scope, summary, occurrences, projects, reason }));
   }
   if (cmd === 'target') {
     if (!o.skill) fail('--skill is required');
