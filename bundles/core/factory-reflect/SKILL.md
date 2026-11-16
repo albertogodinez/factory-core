@@ -59,7 +59,7 @@ Pick the highest row that works. Mechanical beats judgement. Judgement goes to r
 | Mechanical: a fixed pattern a script can detect (wrong path, banned API, missing field, bad import, file in the wrong place) | Automated check | The repo's own lint or test (`project.commands`), or a skill's own guard in its `scripts/` |
 | A feature gotcha, code anchor, driving step, or a state the app must be checked in | Feature map entry | `factory-feature-map`. A map installed from a bundle is scope `org`: its entry is a `fact` candidate |
 | The same mistake class seen twice or more | The `correct` skill, if installed | architecture, then types, then lint, then test, then docs |
-| A judgement call a reviewer of the diff would catch | factory-review rule | Repo-specific: `.agents/skills/factory-review-local/rules/<persona>/<slug>.md` (a persona pack the repo owns). Generic: a core rule (scope `core`) |
+| A judgement call a reviewer of the diff would catch | Mining evidence, never a rule | Reflect writes no review rule: one sighting is below mining's bar. Record the miss for `factory-pr-mining` (below), which promotes it to a rule only once it clears its bar |
 | Review comments keep raising the same point across PRs | Mine it first | `factory-pr-mining`, if installed |
 | A skill the session used had a missing step, a stale command or a wrong fact | Edit that skill | Its `SKILL.md` or `references/`; see the installed-copy rule below |
 | A skill existed but didn't trigger | Tune its description | That skill's frontmatter `description` |
@@ -70,6 +70,16 @@ Pick the highest row that works. Mechanical beats judgement. Judgement goes to r
 | A decision with lasting rationale | Rationale, not structure | The PR body, the commit message, or the repo's wiki |
 
 **Installed copies are never edited in place.** A skill listed in `.agents/factory-metadata/skills-lock.json` came from a bundle. An edit to that copy blocks `factory update`, and it never reaches other repos. Such a lesson has scope `core` or `org`: record it (§6) and change the skill at its source. A skill missing from the lock is the repo's own, so edit it here. In a linked worktree (`factory link`), `.agents/skills/<name>` is a link to the main checkout's installed copy, so an edit there is an in-place edit too.
+
+**A review miss** (a bot or human finding that `factory-review` didn't raise on a PR) is evidence, not a lesson to encode. Record one line per miss and queue no candidate:
+
+```bash
+node .agents/skills/factory-reflect/scripts/lessons.mjs record --scope repo --fingerprint review-miss-<slug> \
+  --summary "<one-line pattern the review should have caught>" --destination factory-pr-mining \
+  --status queued --source <owner/repo#N>
+```
+
+`factory-pr-mining` reads these entries from `<stateRoot>/lessons.jsonl` (`destination` is `factory-pr-mining`) beside the PR threads, one unit per distinct PR, and promotes a pattern only at its evidence bar.
 
 Repo-local knowledge stays in its repo. In a local-only install, where the repo belongs to a team, an edit to a tracked file is a product change: it goes through the repo's normal branch and PR. The lesson log itself lives in `stateRoot`, which is never committed.
 
