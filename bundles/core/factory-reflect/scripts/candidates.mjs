@@ -187,7 +187,15 @@ export function pickLauncher(repoAdapters = {}, machine = {}) {
 // How to start the source repo's session: the launcher's argv, read from the first of `skillsDirs`
 // holding <launcher>/launcher.json (the repo's installed skills, then the launchers bundle itself, so
 // no repo has to install it), else a command for the user to run (with ! in their own session).
-export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo, prompt, agent = AGENT_CLIS.claude }) {
+// An argv element "{place}" expands to the arguments the launcher's `place` script prints for the
+// repo (a JSON array, such as the label that shows the session in a terminal app), or to nothing.
+function placeFor(dir, script, repo) {
+  if (!script) return [];
+  const r = spawnSync(process.execPath, [join(dir, script), '--repo', repo], { encoding: 'utf8', timeout: 10000 });
+  try { const a = JSON.parse(r.stdout); return Array.isArray(a) ? a.map(String) : []; } catch { return []; }
+}
+
+export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo, prompt, agent = AGENT_CLIS.claude, place = placeFor }) {
   const manual = { via: 'print', command: `cd ${sh(repo)} && ${agent.configured ? agent.bin : '<your agent CLI>'}`, prompt };
   if (!launcher) return manual;
   const files = skillsDirs.filter(Boolean).map((d) => join(d, launcher, 'launcher.json'));
@@ -195,6 +203,8 @@ export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo,
   for (const c of files) { try { spec = JSON.parse(readFileSync(c, 'utf8')); f = c; break; } catch {} }
   if (!spec) return { ...manual, note: `sessionLauncher is ${launcher}, but no valid launcher.json in ${files.join(', ')}` };
   if (!Array.isArray(spec.argv) || !spec.argv.length) return { ...manual, note: `${f} needs an "argv" array` };
-  const argv = spec.argv.map((a) => String(a).replaceAll('{repo}', repo).replaceAll('{agent}', agent.bin).replaceAll('{prompt}', prompt));
-  return { via: launcher, argv, command: argv.map(sh).join(' '), prompt };
+  const wantsPlace = spec.argv.includes('{place}');
+  const placed = wantsPlace ? place(dirname(f), spec.place, repo) : [];
+  const argv = spec.argv.flatMap((a) => (a === '{place}' ? placed : [String(a).replaceAll('{repo}', repo).replaceAll('{agent}', agent.bin).replaceAll('{prompt}', prompt)]));
+  return { via: launcher, argv, command: argv.map(sh).join(' '), prompt, ...(wantsPlace ? { placed: placed.length > 0 } : {}) };
 }

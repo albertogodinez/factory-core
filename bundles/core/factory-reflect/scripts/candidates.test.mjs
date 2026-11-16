@@ -88,6 +88,24 @@ test('launch: the adapter argv when sessionLauncher names an installed launcher.
   } finally { s.done(); }
 });
 
+test('launch: {place} expands to what the launcher\'s place script prints, or to nothing', () => {
+  const s = sandbox();
+  try {
+    const skills = join(s.dir, 'skills'), dir = join(skills, 'launch-p'); mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'launcher.json'), JSON.stringify({ argv: ['tool', '{place}', '--cwd', '{repo}', '{prompt}'], place: 'place.mjs' }));
+    writeFileSync(join(dir, 'place.mjs'), "const i = process.argv.indexOf('--repo'); console.log(JSON.stringify(['--label', `at=${process.argv[i + 1]}`]));");
+    const a = launchFor({ launcher: 'launch-p', skillsDir: skills, repo: '/r', prompt: 'p' });
+    assert.deepEqual(a.argv, ['tool', '--label', 'at=/r', '--cwd', '/r', 'p']);
+    assert.equal(a.placed, true);
+    writeFileSync(join(dir, 'place.mjs'), 'console.log("[]")');
+    const none = launchFor({ launcher: 'launch-p', skillsDir: skills, repo: '/r', prompt: 'p' });
+    assert.deepEqual(none.argv, ['tool', '--cwd', '/r', 'p'], 'nowhere to place it: the element drops out');
+    assert.equal(none.placed, false);
+    writeFileSync(join(dir, 'place.mjs'), 'process.exit(1)');
+    assert.deepEqual(launchFor({ launcher: 'launch-p', skillsDir: skills, repo: '/r', prompt: 'p' }).argv, ['tool', '--cwd', '/r', 'p'], 'a failing script still launches');
+  } finally { s.done(); }
+});
+
 test('the agent: machine config picks claude or codex, {agent} fills the argv, and each gets its own skill prompt', () => {
   const s = sandbox();
   try {

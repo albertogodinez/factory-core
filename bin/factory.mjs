@@ -1227,7 +1227,8 @@ export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dry
       if (r.error) { scopes.push({ ...row, action: 'failed', reason: r.error, command: launch.command }); continue; }
       state[key] = { ...(state[key] || {}), lastLaunch: new Date(now).toISOString() };
     }
-    scopes.push({ ...row, action: dryRun ? 'would launch' : 'launched', agent: agent.name, command: launch.command });
+    scopes.push({ ...row, action: dryRun ? 'would launch' : 'launched', agent: agent.name, command: launch.command,
+      ...(launch.placed === false ? { note: 'not shown in a terminal app: the launcher found nowhere to place it' } : {}) });
   }
   if (!dryRun) writeJson(stateFile, state);
   return { at: new Date(now).toISOString(), scopes };

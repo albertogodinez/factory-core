@@ -21,7 +21,7 @@ Triage only the queues this session's repo owns (`project.root`'s main checkout)
 
 - **One fact** (you were given a candidate file): take that candidate, plus the queued candidates for the same skill (`queue --skill <its skill>`), because a fix to that file should account for them. Leave the rest for the scheduled run.
 - **Whole queue** (no file): every queued candidate this repo owns.
-- **Scheduled** (`--scheduled`): the triage schedule, or a session start that found the queue due, opened this session. Take the whole queue. Run straight through to the review gate.
+- **Scheduled** (`--scheduled`): the triage schedule, or a session start that found the queue due, opened this session. Take the whole queue. Run straight through to the review gate. **Ask nothing in this chat**: the user may never look at this terminal, so a chat question waits forever. Every decision is made in the review (§3, "Scheduled runs"), and the run ends the session when it's done (§5).
 
 Drop what's already decided. `lessons.mjs known --never` lists the families the user refused. A candidate in one of them goes straight to `done --outcome dropped`.
 
@@ -50,6 +50,18 @@ Follow factory-reflect's [Landing a lesson branch](../factory-reflect/SKILL.md#l
 
 Then do the landing steps in order: the internal-data screen, the review gate (with the head noted), land, and push. A cluster dropped in review is reverted on the branch before landing: `git rebase --onto` past its commit.
 
+### Scheduled runs: the explainer and the gate
+
+When the source repo's `adapters.reviewUI` is `plannotator-review`, write an explainer before opening the gate, so the user sees what each commit changes and why it's worth it, beside the code. Use the `plannotator-visual-explainer` skill (its PR path), one HTML file for the branch, written to `~/.agents/factory/reports/triage-<slug>.html`. One section per cluster, largest first:
+
+- **How many times it happened.** Lead with it, as stat cards: the cluster's member count; the live `occurrences` and `projects` for its fingerprint from `node <lessons.mjs> known` (members' fingerprints, summed); and, when a landed lesson on the same family came back `flat` or `worse` in the last report, that this is a repeat, with its commit.
+- **What it changes.** The current text or code next to the commit's diff, for each file the commit touches.
+- **Why.** The evidence lines from the commit body, and the `fixedWhen` signal that will show whether it worked.
+
+Open the explainer without a gate, in the background (`plannotator annotate <file>`), then open the review gate. Annotations on either one are feedback.
+
+Plannotator's feedback message tells an agent to return verdicts and wait before changing code. **In a scheduled run, don't wait.** On `annotated`, give each annotation its verdict in a commit, not in chat. Fix what's confirmed as new commits, and put a short answer to a question or a "not a bug" in the next guide's notes for that file. Then rewrite the explainer and re-open the gate, which is where the user answers. Repeat until the gate is approved or dismissed.
+
 ## 4. Close the candidates
 
 After the land, mark each member:
@@ -70,3 +82,5 @@ Record the run, with the size of the largest cluster: `node <lessons.mjs> cadenc
 Write the trend report: `node <lessons.mjs> report`. It writes one HTML file per layer under `~/.agents/factory/reports/`, from the counted metrics every session's end captures. It shows weekly per-session rates, a marker for each landed lesson, and each lesson's `fixedWhen` signal for the 7 days before and after. Each lesson carries a `verdict`, split by the revision each session had installed when its land recorded `--commit`, else by date. **flat**: it didn't work, so queue a `pattern` candidate that says so, and the next triage reopens that cluster. **worse** (listed in the report's `worse`): it made things worse, so queue a `fact` candidate to revert or rework it, with the commit as evidence (`{"commit":"<sha>"}`).
 
 End with a short summary here: the repo, the clusters with their member counts, what landed and what was dropped, the candidates still queued, and the report's path.
+
+In a scheduled run, also write that summary to `~/.agents/factory/reports/triage-<slug>.md`, then end the session, so idle triage sessions don't pile up. When `HC_TERMINAL_ID` is set (the hc launcher started this session), run `hc kill "$HC_TERMINAL_ID"` as the last command. A dismissed gate ends the same way: the status hook names the branch at the next session start.
