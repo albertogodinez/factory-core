@@ -122,3 +122,26 @@ test('the shipped core pins are valid: node, git and gh, plus what core skills s
   // Each core skill ships pins for the CLIs it needs (record-flow: agent-browser, ffmpeg, jq; statechart: mise).
   assert.deepEqual(p.tools.map((x) => x.id).sort(), ['agent-browser', 'ffmpeg', 'gh', 'git', 'jq', 'mise', 'node']);
 });
+
+test('--online also runs factory-second-opinion\'s check-models and goes red on a stale model pin', () => {
+  const t2 = tempRoot('tool-sync-models-');
+  try {
+    const sk = join(t2.root, 'skills'), st = join(t2.root, 'state');
+    write(join(sk, 'alpha/tools.json'), { tools: [pin('toolcurrent', { min: '1.0.0', verified: '2.0.0' })] });
+    write(join(sk, 'alpha/SKILL.md'), 'Runs toolcurrent.\n');
+    const model = (code, lines) => write(join(sk, 'factory-second-opinion/scripts/check-models.mjs'),
+      `if (!process.argv.includes('--online')) process.exit(3);\nconsole.log(${JSON.stringify(lines)});\nprocess.exit(${code});\n`);
+    const go = (...a) => spawnSync(process.execPath, [SCRIPT, '--skills', sk, '--state', st, ...a], {
+      encoding: 'utf8', env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}` },
+    });
+    assert.equal(go('--online').status, 0, 'no factory-second-opinion installed: nothing to run');
+    model(1, 'STALE   codex: gpt-6.1-sol is newer than the pinned gpt-6-sol\nDRIFT   ~/.codex/config.toml: default model is gpt-5.6-sol');
+    const red = go('--online');
+    assert.equal(red.status, 1);
+    assert.match(red.stdout, /check-tools: STALE\s+codex: gpt-6\.1-sol is newer than the pinned gpt-6-sol/);
+    assert.match(red.stdout, /check-tools: DRIFT/);
+    assert.equal(go().status, 0, 'offline never runs it');
+    model(0, 'ok');
+    assert.equal(go('--online').status, 0);
+  } finally { t2.cleanup(); }
+});

@@ -55,6 +55,15 @@ For each `CHANGED` tool:
    node .agents/skills/factory-tool-sync/scripts/check-tools.mjs --bump <id> --decision "skipped: <why>"
    ```
 
+## Review a stale model pin
+
+`check-tools.mjs --online` also runs `factory-second-opinion`'s `check-models.mjs --online` when that skill is installed, prints its `STALE` and `DRIFT` lines, and exits 1 on a stale pin. The pins stay in `factory-second-opinion/references/models.json`; this skill only surfaces them.
+
+1. Read the line: `STALE` means a newer model of that family exists, `DRIFT` means `~/.codex/config.toml` disagrees with the pin.
+2. Probe the candidate model with an exec call (`codex exec -m <model> ... 'Reply with OK.'`). A catalog can list a model the account can't run, so only a model that answers counts.
+3. When it answers, update the pin and `verified` in `models.json`.
+4. Run `node .agents/skills/factory-second-opinion/scripts/check-models.mjs --sync` to write the new default into `~/.codex/config.toml`, then re-run `check-tools.mjs --online`.
+
 ## Track a new CLI
 
 When a skill starts shelling out to a CLI nobody pins, add an entry to that skill's own `tools.json`: `id`, `version`, `usage`, `install`, and `min` if a skill needs a particular feature. Add `latest` and `verified` together when there is a release source worth following. A CLI pinned per product repo (such as `pnpm` through `packageManager`) gets no `latest`.

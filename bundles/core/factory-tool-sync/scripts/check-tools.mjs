@@ -10,7 +10,8 @@
 //                                        record the review: move `verified` to the snapshot's latest
 // Other flags: --cwd <dir>, --skills <dir> (default <root>/.agents/skills), --state <dir> (snapshot
 // and version cache; default the resolver's stateRoot).
-// Exit: 0 ok or warnings; 1 with --online when a release is unreviewed or a CLI is below min;
+// Exit: 0 ok or warnings; 1 with --online when a release is unreviewed, a CLI is below min or a
+// reviewer model pin is stale (factory-second-opinion's check-models.mjs, when installed);
 // 2 bad usage or an invalid tools.json.
 import { execFile, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
@@ -236,6 +237,20 @@ function bump({ tools, id, decision, min, snapshotPath, maxAge }) {
   console.log(`check-tools: recorded ${id}${t.latest ? ` at ${latest}` : ''}: ${decision} (${file})`);
 }
 
+// --- model pins ---------------------------------------------------------------------
+// factory-second-opinion pins reviewer models, not CLIs, so they have no tools.json entry. With
+// --online, run its own check by path when it is installed: print its STALE/DRIFT lines and
+// return 1 when a pin is stale, so one run covers both kinds of pin.
+function modelPins(skillsDir) {
+  const script = path.join(skillsDir, 'factory-second-opinion/scripts/check-models.mjs');
+  if (!existsSync(script)) return 0;
+  const r = spawnSync(process.execPath, [script, '--online'], { encoding: 'utf8', timeout: 600000 });
+  const out = `${r.stdout ?? ''}`.split('\n').filter((l) => /^(STALE|DRIFT)\b/.test(l));
+  for (const l of out) console.log(`check-tools: ${l}`);
+  if (out.length) console.log('check-tools: review with /factory-tool-sync (Review a stale model pin)');
+  return r.status === 1 ? 1 : 0;
+}
+
 // --- main ---------------------------------------------------------------------------
 
 async function main() {
@@ -263,7 +278,8 @@ async function main() {
   if (!lines.some((l) => !/ skip /.test(l))) say('ok', `${tools.length} tools from ${sources.length} skill(s) installed and current${snap ? ', no unreviewed releases' : ''}`);
   console.log(lines.sort().join('\n'));
   if (pending) console.log('check-tools: review with /factory-tool-sync');
-  process.exit(online && (pending || below) ? 1 : 0);
+  const stale = online ? modelPins(ctx.skillsDir) : 0;
+  process.exit(online && (pending || below || stale) ? 1 : 0);
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) await main();
