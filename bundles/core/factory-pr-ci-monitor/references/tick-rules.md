@@ -24,8 +24,7 @@ Green checks are not a reviewed PR. Stop only when a bot review exists **on the 
 
 ## Merge state
 
-- `BEHIND`, `DIRTY` or `CONFLICTING`: merge trunk into the branch (a merge commit; never rebase or force-push another author's branch), resolve, run the local suite, push, and report the PR as behind or conflicting until the new head's checks start. "Rebased or updated" in a report means this was done.
-- `BLOCKED` with checks still pending is waiting, not a block. Treat it as pending.
+The fields and values are defined in the tick's step 1 (`mergeable` and `mergeStateStatus`). "Rebased or updated" in a report means trunk was merged in, the suite ran and the branch was pushed.
 
 ## Network calls
 
