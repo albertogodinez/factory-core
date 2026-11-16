@@ -12,6 +12,7 @@
 //   lessons.mjs classify --text <s> | --file <f>   core or org for new content, by the installed
 //                                            skills' internal-data.json patterns
 //   lessons.mjs start --repo <dir> --slug <s> a lesson branch and worktree in that source repo
+//   lessons.mjs start --repo <dir> --rolling  the repo's one lesson/triage branch: reused, brought up to trunk, sized
 //   lessons.mjs open [--repo <dir>,<dir>]     open lesson branches (default: every bundle source repo)
 //   lessons.mjs candidate --kind fact|pattern|harness --scope core|org|repo --summary <text>
 //                      [--skill <name>] [--evidence <json array>] [--draft <patch>] [--fixed-when <json>]
@@ -124,7 +125,7 @@ function parse(argv) {
   const o = { _: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--now' || a === '--queue' || a === '--never' || a === '--ran') o[a.slice(2)] = true;
+    if (a === '--now' || a === '--queue' || a === '--never' || a === '--ran' || a === '--rolling') o[a.slice(2)] = true;
     else if (a.startsWith('--')) { const v = argv[i + 1]; if (v == null || v.startsWith('--')) fail(`${a} needs a value`); o[a.slice(2)] = v; i++; }
     else o._.push(a);
   }
@@ -200,7 +201,7 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     return { skill: o.skill, installed: true, bundle: s.bundle, sourceDir, repo: top || null,
       next: 'a session started in that repo edits the skill on a lesson branch, reviews and lands it; consumers pull the change at their next session start' };
   }
-  if (cmd === 'start') return start({ repo: o.repo || process.cwd(), slug: o.slug, date: o.date, trunk: o.trunk, home: home(env) });
+  if (cmd === 'start') return start({ repo: o.repo || process.cwd(), slug: o.slug, date: o.date, rolling: !!o.rolling, trunk: o.trunk, home: home(env) });
   if (cmd === 'open') {
     const repos = o.repo ? o.repo.split(',') : Object.values(readJson(join(home(env), 'installs.json'), {}).sources || {});
     return { branches: open({ repos }) };

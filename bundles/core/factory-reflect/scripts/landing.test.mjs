@@ -32,6 +32,53 @@ function repo() {
 }
 const commit = (cwd, file, text, msg) => { writeFileSync(join(cwd, file), text); git(cwd, 'add', '-A'); git(cwd, 'commit', '-qm', msg); return git(cwd, 'rev-parse', 'HEAD'); };
 
+test('start --rolling keeps one lesson/triage branch: reused, brought up to trunk, sized against a cap', () => {
+  const r = repo();
+  try {
+    const a = start({ repo: r.root, rolling: true, trunk: 'main' });
+    assert.equal(a.branch, 'lesson/triage'); assert.equal(a.created, true); assert.equal(a.sync, 'new'); assert.equal(a.full, false);
+    commit(a.worktree, 'lesson1.md', 'one\n', 'lesson 1');
+    commit(r.root, 'trunk.md', 'moved\n', 'trunk moves');
+    const b = start({ repo: r.root, rolling: true, trunk: 'main', date: '2030-01-01' });
+    assert.equal(b.branch, 'lesson/triage', 'the date plays no part'); assert.equal(b.reused, true); assert.equal(b.sync, 'rebased', 'never pushed: rebased onto trunk');
+    assert.equal(b.commits, 1); assert.ok(git(b.worktree, 'log', '--format=%s', 'main..HEAD').includes('lesson 1'));
+    assert.equal(start({ repo: r.root, rolling: true, trunk: 'main' }).sync, 'current');
+    // a dated branch from an older run is named, not touched
+    start({ repo: r.root, slug: 'old', date: '2026-11-10', trunk: 'main' });
+    assert.deepEqual(start({ repo: r.root, rolling: true, trunk: 'main' }).older, ['lesson/2026-11-10-old']);
+    // the cap: five commits is full
+    for (let i = 2; i <= 5; i++) commit(a.worktree, `lesson${i}.md`, `${i}\n`, `lesson ${i}`);
+    const full = start({ repo: r.root, rolling: true, trunk: 'main' });
+    assert.equal(full.commits, 5); assert.equal(full.full, true);
+    // uncommitted edits in the worktree are left alone
+    commit(r.root, 'trunk2.md', 'again\n', 'trunk moves again');
+    writeFileSync(join(a.worktree, 'lesson1.md'), 'edited\n');
+    assert.equal(start({ repo: r.root, rolling: true, trunk: 'main' }).sync, 'dirty');
+  } finally { r.done(); }
+});
+
+test('start --rolling merges trunk into a pushed branch instead of rewriting it, and backs out of a conflict', () => {
+  const r = repo();
+  try {
+    const remote = join(r.dir, 'remote.git'); git(r.dir, 'init', '-q', '--bare', remote);
+    git(r.root, 'remote', 'add', 'origin', remote);
+    const a = start({ repo: r.root, rolling: true, trunk: 'main' });
+    commit(a.worktree, 'lesson1.md', 'one\n', 'lesson 1');
+    git(a.worktree, 'push', '-q', '-u', 'origin', 'lesson/triage');
+    const before = git(a.worktree, 'rev-parse', 'HEAD');
+    commit(r.root, 'trunk.md', 'moved\n', 'trunk moves');
+    const m = start({ repo: r.root, rolling: true, trunk: 'main' });
+    assert.equal(m.sync, 'merged'); assert.equal(git(a.worktree, 'merge-base', '--is-ancestor', before, 'HEAD') === '', true, 'the pushed commit is still an ancestor: nothing rewritten');
+    // a conflicting edit on both sides
+    commit(a.worktree, 'skill.md', 'branch side\n', 'branch edit');
+    commit(r.root, 'skill.md', 'trunk side\n', 'trunk edit');
+    const head = git(a.worktree, 'rev-parse', 'HEAD');
+    const c = start({ repo: r.root, rolling: true, trunk: 'main' });
+    assert.equal(c.sync, 'conflict'); assert.equal(git(a.worktree, 'rev-parse', 'HEAD'), head, 'left as it was');
+    assert.equal(git(a.worktree, 'status', '--porcelain'), '', 'no half-finished merge');
+  } finally { r.done(); }
+});
+
 test('start cuts a lesson worktree from trunk and leaves the main checkout on its branch', () => {
   const r = repo();
   try {

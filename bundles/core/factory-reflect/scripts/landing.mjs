@@ -63,20 +63,50 @@ function register(home, entry) {
   try { mkdirSync(home, { recursive: true }); appendFileSync(join(home, 'lesson-branches.jsonl'), JSON.stringify(entry) + '\n'); } catch {}
 }
 
-export function start({ repo, slug, date, trunk: trunkArg, home }) {
-  const s = slugify(slug);
+// A rolling branch is `lesson/triage`: one per repo that every triage run adds to, instead of a dated
+// branch per run. A candidate stays queued while its branch is undecided, so dated runs rebuilt the same
+// commits on a new branch each time. Each start brings it up to trunk (see syncTrunk) and reports its size
+// against ROLLING_MAX_COMMITS and ROLLING_MAX_DAYS: past either the run adds nothing and asks for a decision.
+export const ROLLING_BRANCH = 'lesson/triage', ROLLING_MAX_COMMITS = 5, ROLLING_MAX_DAYS = 14;
+
+// Bring a reused branch up to trunk. A pushed branch gets trunk merged in, since rewriting what a PR
+// already shows would need a force push; one that was never pushed is rebased, which keeps one commit per
+// lesson on top. A conflict aborts and leaves the branch as it was: 'conflict'. A worktree with
+// uncommitted edits is left alone: 'dirty'.
+function syncTrunk(wt, trunk) {
+  if (git(wt, 'status', '--porcelain').out) return 'dirty';
+  if (git(wt, 'merge-base', '--is-ancestor', trunk, 'HEAD').ok) return 'current';
+  const pushed = git(wt, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}').ok;
+  const r = pushed ? git(wt, 'merge', '--no-edit', trunk) : git(wt, 'rebase', trunk);
+  if (r.ok) return pushed ? 'merged' : 'rebased';
+  git(wt, ...(pushed ? ['merge', '--abort'] : ['rebase', '--abort']));
+  return 'conflict';
+}
+function rollingSize(root, trunk, branch) {
+  const stamps = git(root, 'log', '--format=%ct', `${trunk}..${branch}`).out.split('\n').filter(Boolean).map(Number);
+  const commits = stamps.length, oldestDays = commits ? Math.floor((Date.now() / 1000 - Math.min(...stamps)) / 86400) : 0;
+  return { commits, oldestDays, full: commits >= ROLLING_MAX_COMMITS || oldestDays >= ROLLING_MAX_DAYS };
+}
+
+export function start({ repo, slug, date, rolling = false, trunk: trunkArg, home }) {
+  const s = rolling ? 'triage' : slugify(slug);
   if (!s) throw new LandingError('usage', '--slug is required');
   const day = date || new Date().toISOString().slice(0, 10);
   const { mainRoot, trunk } = repoInfo(repo, trunkArg);
-  const name = `${day}-${s}`, branch = `lesson/${name}`;
+  const name = rolling ? 'triage' : `${day}-${s}`, branch = `lesson/${name}`;
   const wt = join(mainRoot, '.worktrees', 'lesson', name);
   const existing = worktrees(mainRoot).get(branch);
+  const extra = (path, created) => {
+    if (!rolling) return {};
+    const others = git(mainRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/lesson/').out.split('\n').filter((b) => b && b !== branch);
+    return { reused: !created, sync: created ? 'new' : syncTrunk(path, trunk), ...rollingSize(mainRoot, trunk, branch), ...(others.length ? { older: others } : {}) };
+  };
   let created = false;
-  if (existing) return { repo: mainRoot, trunk, branch, worktree: existing, base: must(mainRoot, 'merge-base', trunk, branch), created, ignored: ignored(mainRoot, wt) };
+  if (existing) return { repo: mainRoot, trunk, branch, worktree: existing, base: must(mainRoot, 'merge-base', trunk, branch), created, ignored: ignored(mainRoot, wt), ...extra(existing, false) };
   if (git(mainRoot, 'rev-parse', '--verify', '-q', `refs/heads/${branch}`).ok) must(mainRoot, 'worktree', 'add', '-q', wt, branch);
   else { must(mainRoot, 'worktree', 'add', '-q', '--no-track', '-b', branch, wt, trunk); created = true; }
   register(home, { at: new Date().toISOString(), root: mainRoot, branch, worktree: wt });
-  return { repo: mainRoot, trunk, branch, worktree: wt, base: must(mainRoot, 'rev-parse', trunk), created, ignored: ignored(mainRoot, wt) };
+  return { repo: mainRoot, trunk, branch, worktree: wt, base: must(mainRoot, 'rev-parse', trunk), created, ignored: ignored(mainRoot, wt), ...extra(wt, created) };
 }
 const ignored = (root, p) => git(root, 'check-ignore', '-q', p).ok;
 

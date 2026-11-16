@@ -42,16 +42,13 @@ Rank the clusters by size (largest first), then by cost: a fact with a draft pat
 
 ## 3. One lesson branch, one commit per cluster
 
-**Look for an undecided branch first**: `node <lessons.mjs> open --repo <repo>`. A candidate stays queued while its branch is undecided, so a fresh run re-clusters the same ones, and a second dated branch would carry the same commits again (one repo ended up with three that way). When the repo has a lesson branch, work on it and don't start another:
+Follow factory-reflect's [Landing a lesson branch](../factory-reflect/SKILL.md#landing-a-lesson-branch), from step 2, but start the branch with `lessons.mjs start --repo <repo> --rolling` instead of `--slug`. Every triage run, whole queue or one fact, adds to the repo's one `lesson/triage` branch. A candidate stays queued while its branch is undecided, so dated branches rebuilt the same commits again (one repo ended up with three). `start` prints what you need:
 
-- Use its worktree, or add one (`git worktree add .worktrees/lesson/<name> <branch>`) when it has none.
-- Read its `Candidates:` trailers (`git log <trunk>..<branch> --format=%B`). A cluster whose members are all listed is already built: leave its commit alone.
-- Commit only the clusters with candidates the branch doesn't hold. When a new candidate belongs to a cluster already on the branch, amend that commit's edit and its trailers.
-- Then go to the review gate on that branch. Its head moved, so note it again.
+- `reused` / `created`, and `sync`: `new`, `current`, `rebased` or `merged` (trunk was brought in), `dirty` (the worktree has uncommitted edits: don't add to it, finish or ask), or `conflict` (it stopped: say so in the explainer, don't add anything, and go to the review).
+- `commits`, `oldestDays` and `full`. **When `full` is true, add nothing**: go straight to the review gate on what's there, and say at the top of the explainer that the branch is full and needs a decision before more lessons join it.
+- `older`: dated lesson branches from earlier runs. Don't add to them. The explainer lists them, so the user can drop the ones whose commits `lesson/triage` holds.
 
-Several undecided branches in one repo: continue on the newest, and say in the explainer that the older ones repeat commits it holds, so the user can drop them.
-
-Follow factory-reflect's [Landing a lesson branch](../factory-reflect/SKILL.md#landing-a-lesson-branch), from step 2, with `--slug triage-<YYYY-MM-DD>` (or `triage-<candidate slug>` for one fact). A repo-scope branch in a team repo lands through a PR (that section's `lessonLanding` rule). For each cluster:
+On a reused branch, read its `Candidates:` trailers (`git log <trunk>..<branch> --format=%B`). A cluster whose members are all listed is already built: leave it. Commit only clusters with candidates the branch doesn't hold; when a new candidate belongs to a cluster already on the branch, amend that commit's edit and its trailers, which raises its counts. Put "new since the last review" at the top of the explainer: the commits and amendments this run made. The branch's head moved, so note it again before the gate. A reused branch that was pushed gets the trunk merge as a new commit, so the push is a plain push. A repo-scope branch in a team repo lands through a PR (that section's `lessonLanding` rule). For each cluster:
 
 - Make the edit in the worktree. Apply a member's draft patch when it still fits; otherwise write the edit (read `writing-for-agents` first). Prove a check: it must go **red** on the past mistake before it goes green.
 - A `harness` cluster edits the bundle's `harness/<claude-code|codex>.json` (hooks and permission rules only; a broad allow such as `Bash(*)` is refused). `factory harness` shows what it would change in the user's settings; prove a guard hook by running it on the past command. After the land, factory-core's trunk hook runs `factory harness --apply`, which merges it and keeps a backup; where that hook isn't installed, the status hook says to run it.
