@@ -299,9 +299,11 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 export function renderHtml(t, date) {
   const W = 720, H = 220, P = 32, max = Math.max(1, ...t.weeks.flatMap((w) => PLOT.map((k) => w[k] || 0)));
   const x = (i) => P + (i * (W - 2 * P)) / Math.max(1, t.weeks.length - 1), y = (v) => H - P - (v / max) * (H - 2 * P);
+  // A polyline needs two points, so a series with one week of data would draw nothing: every point gets a dot.
   const lines = PLOT.map((k, n) => {
-    const pts = t.weeks.map((w, i) => (w[k] == null ? null : `${x(i).toFixed(1)},${y(w[k]).toFixed(1)}`)).filter(Boolean).join(' ');
-    return pts ? `<polyline fill="none" stroke="var(--c${n + 1})" stroke-width="2" points="${pts}"><title>${LABEL[k] || k}</title></polyline>` : '';
+    const at = t.weeks.map((w, i) => (w[k] == null ? null : [x(i), y(w[k]), w[k]])).filter(Boolean);
+    const dots = at.map(([cx, cy, v]) => `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.5" fill="var(--c${n + 1})"><title>${LABEL[k] || k}: ${(+v).toFixed(2)}</title></circle>`).join('');
+    return (at.length > 1 ? `<polyline fill="none" stroke="var(--c${n + 1})" stroke-width="2" points="${at.map(([cx, cy]) => `${cx.toFixed(1)},${cy.toFixed(1)}`).join(' ')}"><title>${LABEL[k] || k}</title></polyline>` : '') + dots;
   }).join('');
   const t0 = t.weeks.length ? Date.parse(t.weeks[0].start) : 0, span = Math.max(1, t.weeks.length - 1) * 7 * DAY;
   const marks = t.lessons.map((l) => { const mx = P + ((Date.parse(l.at) - t0) / span) * (W - 2 * P); return `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${P}" y2="${H - P}" stroke="var(--muted)" stroke-dasharray="3 3"><title>${esc(l.summary)}</title></line>`; }).join('');

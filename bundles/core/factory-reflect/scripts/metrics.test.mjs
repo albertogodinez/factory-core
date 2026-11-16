@@ -115,6 +115,8 @@ test('sightings: a lesson another session already recorded is a repeat; the same
   const t = trend(rows, [], 'core', { days: 14, now: T0 + 14 * DAY, index: [e(0, 'a', 's1'), e(1, 'a', 's2')] });
   assert.equal(t.weeks[0].sightings, 2); assert.equal(t.weeks[0].repeats, 0.5, 'one repeat over two sessions');
   assert.match(renderHtml(t, '2026-06-15'), /lessons seen again/);
+  const one = renderHtml({ ...t, weeks: [{ start: '2026-06-01', sessions: 2, tool_failures: 3, repeats: 1 }], lessons: [] }, 'd');
+  assert.match(one, /<circle[^>]*><title>tool_failures: 3\.00/, 'a lone week still draws a dot, since a one-point polyline is invisible');
 });
 
 test('the report: weekly rates per layer, a before/after per landed lesson, the newest 12 kept', () => {
