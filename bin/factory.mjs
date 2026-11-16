@@ -1091,11 +1091,14 @@ export function machineAgent(home, opts = {}, env = process.env) {
 // A new machine. Committed installs arrive with a clone, but the user hooks and installs.json don't,
 // so sessions never hear about updates and `update --all` skips those repos. A hook file is backed up
 // before it's written; a run that changes nothing writes nothing.
-const hookCommand = () => `node '${join(FACTORY, 'bin', 'factory.mjs')}' status --hook 2>/dev/null || true`;
+// A session started where no shell loaded nvm has no node on PATH, and a bare `node` then fails every
+// time. The hooks use PATH's node, else the newest under ~/.nvm, else do nothing.
+export const NODE_LOOKUP = `N=$(command -v node || ls -d "$HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1); [ -n "$N" ] || exit 0; "$N"`;
+const hookCommand = () => `${NODE_LOOKUP} '${join(FACTORY, 'bin', 'factory.mjs')}' status --hook 2>/dev/null || true`;
 const IS_STATUS_HOOK = /factory\.mjs'? status --hook/;
 // Metrics capture at a session's end (Codex has no SessionEnd: its Stop hook fires after each turn,
 // and the capture replaces the session's row, so the last turn's count stands).
-const captureCommand = () => `node '${join(FACTORY, 'bundles', 'core', 'factory-reflect', 'scripts', 'metrics.mjs')}' capture --hook 2>/dev/null || true`;
+const captureCommand = () => `${NODE_LOOKUP} '${join(FACTORY, 'bundles', 'core', 'factory-reflect', 'scripts', 'metrics.mjs')}' capture --hook 2>/dev/null || true`;
 const IS_CAPTURE_HOOK = /metrics\.mjs'? capture --hook/;
 export function addCaptureHook(cfg, harness, command = captureCommand()) {
   cfg.hooks ||= {};

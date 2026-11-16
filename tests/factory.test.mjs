@@ -618,7 +618,7 @@ test('triage --due: one session per repo, tagged and titled; an open session hol
   assert.equal(launched.length, 2, 'it ended and the gap passed: due again without waiting out 20 hours');
 });
 
-test('setup on a new machine: adds or repoints the status hooks, keeps other hooks, records committed installs, then is a no-op', () => {
+test('setup on a new machine: adds or repoints the status hooks, keeps other hooks, records committed installs, then is a no-op', async () => {
   const machine = join(t.root, 'machine'), repos = join(machine, 'repos'), h = join(machine, 'toolkit');
   const claude = join(machine, 'claude'), codex = join(machine, 'codex');
   mkdirSync(h, { recursive: true }); write(join(h, 'sources.json'), { core: CORE });
@@ -642,18 +642,22 @@ test('setup on a new machine: adds or repoints the status hooks, keeps other hoo
   assert.match(r.out, /recorded: mine \(commit\)/);
   assert.match(r.out, /no install: team/);
   assert.match(r.out, /triage schedule: not installed\. [^\n]*factory setup --triage-schedule/, 'setup names the optional triage schedule');
+  const { NODE_LOOKUP } = await import('../bin/factory.mjs');
   const cfg = json(join(claude, 'settings.json'));
-  const cmd = `node '${FACTORY}' status --hook 2>/dev/null || true`;
+  const cmd = `${NODE_LOOKUP} '${FACTORY}' status --hook 2>/dev/null || true`;
   assert.equal(cfg.model, 'x');
   assert.deepEqual(cfg.hooks.SessionStart[0].hooks, [other], 'other hooks are kept');
   assert.equal(cfg.hooks.SessionStart[1].hooks[0].command, cmd);
   assert.equal(cfg.hooks.UserPromptSubmit.length, 1);
   assert.equal(cfg.hooks.UserPromptSubmit[0].hooks[0].command, cmd);
   assert.equal(json(join(codex, 'hooks.json')).hooks.UserPromptSubmit[0].hooks[0].command, cmd);
-  const capture = `node '${join(CORE, 'factory-reflect', 'scripts', 'metrics.mjs')}' capture --hook 2>/dev/null || true`;
+  const capture = `${NODE_LOOKUP} '${join(CORE, 'factory-reflect', 'scripts', 'metrics.mjs')}' capture --hook 2>/dev/null || true`;
   assert.equal(cfg.hooks.SessionEnd[0].hooks[0].command, capture, 'claude-code: metrics capture at SessionEnd');
   assert.equal(json(join(codex, 'hooks.json')).hooks.Stop[0].hooks[0].command, capture, 'codex: capture on Stop (no SessionEnd)');
   assert.ok(readdirSync(claude).some((f) => /^settings\.json\.bak-\d{14}$/.test(f)), 'the old file is backed up');
+  const bare = spawnSync('/bin/sh', ['-c', cmd], { env: { HOME: t.root, PATH: '/usr/bin:/bin' }, encoding: 'utf8' });
+  assert.equal(bare.status, 0, 'no node on PATH and none under ~/.nvm: the hook does nothing, quietly');
+  assert.equal(bare.stderr, '');
   assert.ok(json(join(h, 'installs.json')).repos[mine], 'update --all now reaches it');
 
   const again = factory(['setup', '--root', repos], machine, env);

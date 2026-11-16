@@ -42,6 +42,15 @@ Rank the clusters by size (largest first), then by cost: a fact with a draft pat
 
 ## 3. One lesson branch, one commit per cluster
 
+**Look for an undecided branch first**: `node <lessons.mjs> open --repo <repo>`. A candidate stays queued while its branch is undecided, so a fresh run re-clusters the same ones, and a second dated branch would carry the same commits again (one repo ended up with three that way). When the repo has a lesson branch, work on it and don't start another:
+
+- Use its worktree, or add one (`git worktree add .worktrees/lesson/<name> <branch>`) when it has none.
+- Read its `Candidates:` trailers (`git log <trunk>..<branch> --format=%B`). A cluster whose members are all listed is already built: leave its commit alone.
+- Commit only the clusters with candidates the branch doesn't hold. When a new candidate belongs to a cluster already on the branch, amend that commit's edit and its trailers.
+- Then go to the review gate on that branch. Its head moved, so note it again.
+
+Several undecided branches in one repo: continue on the newest, and say in the explainer that the older ones repeat commits it holds, so the user can drop them.
+
 Follow factory-reflect's [Landing a lesson branch](../factory-reflect/SKILL.md#landing-a-lesson-branch), from step 2, with `--slug triage-<YYYY-MM-DD>` (or `triage-<candidate slug>` for one fact). A repo-scope branch in a team repo lands through a PR (that section's `lessonLanding` rule). For each cluster:
 
 - Make the edit in the worktree. Apply a member's draft patch when it still fits; otherwise write the edit (read `writing-for-agents` first). Prove a check: it must go **red** on the past mistake before it goes green.
