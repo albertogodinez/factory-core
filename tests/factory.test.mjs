@@ -585,6 +585,39 @@ test('triage --due: launches a session per due scope, waits on a recent launch, 
   assert.equal(failing.scopes[0].action, 'failed');
 });
 
+test('triage --due: one session per repo, tagged and titled; an open session holds the repo, a finished one frees it', async () => {
+  const { triageDueRun } = await import('../bin/factory.mjs');
+  const h = join(t.root, 'home-triage-live'); mkdirSync(h);
+  const src = makeRepo(join(t.root, 'tl-src'), {}); mkdirSync(join(src, 'bundles', 'core'), { recursive: true });
+  const lc = join(src, 'bundles', 'launchers', 'launch-l'); mkdirSync(lc, { recursive: true });
+  write(join(h, 'sources.json'), { core: join(src, 'bundles', 'core'), launchers: join(src, 'bundles', 'launchers'), expedia: join(t.root, 'absent'), trips: join(t.root, 'absent') });
+  const open = join(h, 'open.json'), titled = join(h, 'titled.txt');
+  write(open, ['triage:' + src]);
+  writeFileSync(join(lc, 'live.mjs'), `import { readFileSync } from 'node:fs'; process.stdout.write(readFileSync(${JSON.stringify(open)}, 'utf8'));`);
+  writeFileSync(join(lc, 'after.mjs'), `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(titled)}, process.argv.slice(2).join('|') + '\\n');`);
+  write(join(lc, 'launcher.json'), { argv: ['tool', '{tag}', '--cwd', '{repo}', '{prompt}'], tag: ['--label', 'factory.tag={tag}'], live: 'live.mjs', after: 'after.mjs' });
+  write(join(h, 'config.json'), { adapters: { sessionLauncher: 'launch-l' } });
+  const noon = new Date(); noon.setHours(12, 0, 0, 0);
+  const now = noon.getTime(), at = new Date(now - 4 * 864e5).toISOString();
+  write(join(h, 'candidates', 'core', '1-a.json'), { kind: 'pattern', scope: 'core', summary: 'a', from: { root: '/x' }, at });
+  write(join(h, 'candidates', 'repo', '2-b.json'), { kind: 'pattern', scope: 'repo', repo: src, summary: 'b', from: { root: src }, at }); // a repo lesson owned by the same repo
+  const launched = [], spawn = (argv) => { launched.push(argv); return { output: '{"address":"t9"}' }; };
+
+  let r = await triageDueRun({ home: h, now, spawn });
+  assert.equal(launched.length, 0, 'its session is still open');
+  assert.match(r.scopes[0].reason, /still open/);
+  write(open, []); // the session ended
+  r = await triageDueRun({ home: h, now, spawn });
+  assert.equal(launched.length, 1, 'two scopes, one repo, one session');
+  assert.deepEqual(launched[0].slice(0, 3), ['tool', '--label', 'factory.tag=triage:' + src]);
+  assert.match(r.scopes.find((x) => x.scope === 'repo').reason, /covered by the core session/);
+  assert.match(readFileSync(titled, 'utf8'), /--title\|triage · tl-src/);
+  r = await triageDueRun({ home: h, now: now + 1 * 36e5, spawn });
+  assert.match(r.scopes[0].reason, /too soon/); assert.equal(launched.length, 1);
+  r = await triageDueRun({ home: h, now: now + 5 * 36e5, spawn });
+  assert.equal(launched.length, 2, 'it ended and the gap passed: due again without waiting out 20 hours');
+});
+
 test('setup on a new machine: adds or repoints the status hooks, keeps other hooks, records committed installs, then is a no-op', () => {
   const machine = join(t.root, 'machine'), repos = join(machine, 'repos'), h = join(machine, 'toolkit');
   const claude = join(machine, 'claude'), codex = join(machine, 'codex');

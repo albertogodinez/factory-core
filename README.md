@@ -169,7 +169,7 @@ land and push from that session → trunk moved: every installed repo is updated
 
 - A session writes only its home repo plus `~/.agents/factory/`. `lessons.mjs land` refuses anywhere else.
 - Nothing counts to three, and nothing asks before the review. Triage reads the whole queue and clusters it; a cluster's size is the count that matters.
-- A repo lesson queues in its own repo and lands there, through a PR in a team repo. A session start in a repo whose queue is due launches triage (`factory triage --due`, which keeps its quiet hours and one launch per 20 hours), so a schedule missed while the machine was off is caught at the next session.
+- A repo lesson queues in its own repo and lands there, through a PR in a team repo. A session start in a repo whose queue is due launches triage (`factory triage --due`, which keeps its quiet hours and opens one session per repo, not another while that repo's session is still open), so a schedule missed while the machine was off is caught at the next session.
 - "Never" is remembered per family (`lessons.mjs decide --decision never`), and triage drops its candidates.
 - `adapters.sessionLauncher` starts the source repo's session. It's machine config (`~/.agents/factory/config.json`), set by `factory setup` when `hc` is on PATH; a repo's `project.json` can override it or set `null`. Unset, reflect prints the command. `adapters.agentCLI` (also machine config) names the agent CLI the launcher starts, `claude` or `codex`; `factory setup` sets it to the first one on PATH.
 - `/factory-ask` answers "what's waiting" from `lessons.mjs queue`.
@@ -295,7 +295,7 @@ Every 4 hours, the job runs `factory triage --due`. For each queue (core, org, a
 its cadence, it starts one interactive triage session in the source repo through the machine's
 `sessionLauncher`. The session opens the repo's `adapters.agentCLI`, else the machine's. It clusters
 the queue, builds the lesson branch and opens the review gate, the only place it waits for you. The
-job launches a scope at most once every 20 hours and never between 22:00 and 07:00. With no launcher,
+job opens one session per repo, covering every queue the repo owns; it waits while that session is open (a launcher that can't say falls back to once every 20 hours), never launches twice inside 3 hours, and never between 22:00 and 07:00. The session's tab is titled `triage · <repo>`. With no launcher,
 it only records the due scope in `~/.agents/factory/triage-last.json`, and the status hook in the
 source repo names the queue at its next session start. Like the cleanup job, normal `factory setup`
 doesn't install it.

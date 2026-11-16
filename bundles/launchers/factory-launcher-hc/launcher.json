@@ -1,4 +1,7 @@
 {
-  "argv": ["hc", "run", "--bg", "--no-parent", "--outlive-parent", "{place}", "--cwd", "{repo}", "{agent}", "{prompt}"],
-  "place": "place.mjs"
+  "argv": ["hc", "run", "--bg", "--no-parent", "--outlive-parent", "{place}", "{tag}", "--cwd", "{repo}", "{agent}", "{prompt}"],
+  "place": "place.mjs",
+  "tag": ["--label", "factory.tag={tag}"],
+  "live": "live.mjs",
+  "after": "after.mjs"
 }

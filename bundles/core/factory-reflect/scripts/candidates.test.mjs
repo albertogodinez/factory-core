@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, realpathSync, writeFileSync, mkdirSync, existsSync
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, sourceRepo, repoOwners, triagePrompt, pickLauncher, pickAgent } from './candidates.mjs';
+import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, liveTags, afterLaunch, sourceRepo, repoOwners, triagePrompt, pickLauncher, pickAgent } from './candidates.mjs';
 
 const LESSONS = join(dirname(fileURLToPath(import.meta.url)), 'lessons.mjs');
 const T0 = Date.parse('2026-11-11T12:00:00Z');
@@ -85,6 +85,28 @@ test('launch: the adapter argv when sessionLauncher names an installed launcher.
     assert.match(launchFor({ launcher: 'missing', skillsDir: skills, repo: '/r', prompt: 'p' }).note, /no valid launcher\.json/);
     // The launchers bundle itself is the fallback, so no repo has to install the launcher.
     assert.deepEqual(launchFor({ launcher: 'launch-x', skillsDirs: [join(s.dir, 'none'), skills], repo: '/r', prompt: 'p' }).argv, ['tool', 'run', '--cwd', '/r', 'agent', 'p']);
+  } finally { s.done(); }
+});
+
+test('launch: {tag} marks the session, liveTags lists the open ones, afterLaunch titles the tab', () => {
+  const s = sandbox();
+  try {
+    const skills = join(s.dir, 'skills'), dir = join(skills, 'launch-t'); mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'launcher.json'), JSON.stringify({ argv: ['tool', '{tag}', '{prompt}'], tag: ['--label', 'k={tag}'], live: 'live.mjs', after: 'after.mjs' }));
+    writeFileSync(join(dir, 'live.mjs'), "console.log(JSON.stringify(['a', 'b']));");
+    writeFileSync(join(dir, 'after.mjs'), `import { writeFileSync, readFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(join(s.dir, 'after.out'))}, process.argv.slice(2).join('|') + '|' + readFileSync(0, 'utf8'));`);
+    const base = { launcher: 'launch-t', skillsDirs: [skills], repo: '/r', prompt: 'p' };
+    assert.deepEqual(launchFor({ ...base, tag: 'triage:/r' }).argv, ['tool', '--label', 'k=triage:/r', 'p']);
+    assert.deepEqual(launchFor(base).argv, ['tool', 'p'], 'no tag: the element drops out');
+    assert.deepEqual(liveTags(base), ['a', 'b']);
+    assert.equal(afterLaunch({ ...base, output: '{"address":"t1"}', title: 'triage · r' }), null);
+    assert.equal(readFileSync(join(s.dir, 'after.out'), 'utf8'), '--title|triage · r|{"address":"t1"}');
+    assert.equal(afterLaunch({ ...base, output: '', title: null }), null, 'no title: nothing to do');
+    writeFileSync(join(dir, 'live.mjs'), 'process.exit(1)'); writeFileSync(join(dir, 'after.mjs'), "console.error('no herdr'); process.exit(1)");
+    assert.equal(liveTags(base), null, 'a script that fails says nothing, so the caller uses the clock');
+    assert.match(afterLaunch({ ...base, output: '{}', title: 't' }), /titling the session failed: no herdr/);
+    writeFileSync(join(dir, 'launcher.json'), JSON.stringify({ argv: ['tool', 'p'] }));
+    assert.equal(liveTags(base), null);
   } finally { s.done(); }
 });
 

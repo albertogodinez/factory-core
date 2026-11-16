@@ -195,16 +195,42 @@ function placeFor(dir, script, repo) {
   try { const a = JSON.parse(r.stdout); return Array.isArray(a) ? a.map(String) : []; } catch { return []; }
 }
 
-export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo, prompt, agent = AGENT_CLIS.claude, place = placeFor }) {
+// An element that is exactly `{tag}` expands to the file's `"tag"` array with `{tag}` replaced by the tag
+// the caller gives, or to nothing: that marks the session so `liveTags` can tell it is still open.
+function readLauncher(launcher, skillsDirs) {
+  const files = skillsDirs.filter(Boolean).map((d) => join(d, launcher, 'launcher.json'));
+  for (const f of files) { try { return { spec: JSON.parse(readFileSync(f, 'utf8')), f, files }; } catch {} }
+  return { files };
+}
+
+export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo, prompt, agent = AGENT_CLIS.claude, place = placeFor, tag }) {
   const manual = { via: 'print', command: `cd ${sh(repo)} && ${agent.configured ? agent.bin : '<your agent CLI>'}`, prompt };
   if (!launcher) return manual;
-  const files = skillsDirs.filter(Boolean).map((d) => join(d, launcher, 'launcher.json'));
-  let spec, f;
-  for (const c of files) { try { spec = JSON.parse(readFileSync(c, 'utf8')); f = c; break; } catch {} }
+  const { spec, f, files } = readLauncher(launcher, skillsDirs);
   if (!spec) return { ...manual, note: `sessionLauncher is ${launcher}, but no valid launcher.json in ${files.join(', ')}` };
   if (!Array.isArray(spec.argv) || !spec.argv.length) return { ...manual, note: `${f} needs an "argv" array` };
   const wantsPlace = spec.argv.includes('{place}');
   const placed = wantsPlace ? place(dirname(f), spec.place, repo) : [];
-  const argv = spec.argv.flatMap((a) => (a === '{place}' ? placed : [String(a).replaceAll('{repo}', repo).replaceAll('{agent}', agent.bin).replaceAll('{prompt}', prompt)]));
+  const tagged = tag && Array.isArray(spec.tag) ? spec.tag.map((a) => String(a).replaceAll('{tag}', tag)) : [];
+  const argv = spec.argv.flatMap((a) => (a === '{place}' ? placed : a === '{tag}' ? tagged : [String(a).replaceAll('{repo}', repo).replaceAll('{agent}', agent.bin).replaceAll('{prompt}', prompt)]));
   return { via: launcher, argv, command: argv.map(sh).join(' '), prompt, ...(wantsPlace ? { placed: placed.length > 0 } : {}) };
+}
+
+// The tags of sessions the launcher started that are still open: the JSON array its `"live"` script
+// prints. null when the launcher can't say (no script, or it failed), so the caller falls back to time.
+export function liveTags({ launcher, skillsDirs }) {
+  const { spec, f } = launcher ? readLauncher(launcher, skillsDirs) : {};
+  if (!spec?.live) return null;
+  const r = spawnSync(process.execPath, [join(dirname(f), spec.live)], { encoding: 'utf8', timeout: 15000 });
+  try { const a = JSON.parse(r.stdout); return Array.isArray(a) ? a.map(String) : null; } catch { return null; }
+}
+
+// After a launch, the file's `"after"` script gets the launch's stdout (hc prints the new terminal's
+// address) and a title for it: `node <script> --title <title>` with the output on stdin. That is how a
+// terminal app's tab gets a name instead of a number. Best effort: a note, never a failed launch.
+export function afterLaunch({ launcher, skillsDirs, output, title }) {
+  const { spec, f } = launcher ? readLauncher(launcher, skillsDirs) : {};
+  if (!spec?.after || !title) return null;
+  const r = spawnSync(process.execPath, [join(dirname(f), spec.after), '--title', title], { input: output || '', encoding: 'utf8', timeout: 40000 });
+  return r.status === 0 ? null : `titling the session failed: ${(r.stderr || r.error?.message || `exit ${r.status}`).trim().split('\n')[0]}`;
 }

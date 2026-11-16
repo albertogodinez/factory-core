@@ -879,7 +879,7 @@ function repoQueue(home) {
   return names.map((n) => readJson(join(dir, n), null)).filter((c) => c?.repo);
 }
 // A session start launches triage for a due queue without waiting for the schedule, which misses
-// runs while the machine is off. triage --due keeps the quiet hours and the one-launch-per-20-hours
+// runs while the machine is off. triage --due keeps the quiet hours and the one-session-per-repo
 // rule, so starting several sessions launches one triage session, not several.
 function launchDueTriage() {
   if (process.env.FACTORY_NO_TRIAGE_LAUNCH === '1') return;
@@ -1187,20 +1187,23 @@ async function setup(opts) {
 }
 
 // ---------- triage --due: the scheduled triage job ----------
-// Run by the triage schedule (setup --triage-schedule). For each scope whose queue is due by
-// triageDue, start one interactive triage session in its source repo through the machine's
-// launcher, and the same for each repo with its own repo-lesson queue. That session clusters the
-// queue, builds the lesson branch and opens the review gate, the one place it waits. A scope launched in the last 20 hours waits on that session; nothing launches at night.
+// Run by the triage schedule (setup --triage-schedule). For each repo with a due queue (the core and org
+// lesson queues for their source repos, plus a repo's own repo-lesson queue), start ONE interactive
+// triage session through the machine's launcher, even when two scopes share the repo: it clusters
+// everything queued for that repo, builds the lesson branch and opens the review gate, the one place it
+// waits. The session is tagged and its tab titled. A repo whose session is still open waits on it; a
+// launcher that can't say what's open falls back to the clock (RELAUNCH_HOURS), and either way a launch
+// is never repeated inside MIN_GAP_HOURS. Nothing launches at night.
 // With no launcher, the run only records that triage is due: the status hook in the source repo
 // already says so at its next session start.
-export const RELAUNCH_HOURS = 20, QUIET_HOURS = [22, 7];
+export const RELAUNCH_HOURS = 20, MIN_GAP_HOURS = 3, QUIET_HOURS = [22, 7];
 export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dryRun = false, spawn = spawnLaunch } = {}) {
   const hour = new Date(now).getHours();
   if (hour >= QUIET_HOURS[0] || hour < QUIET_HOURS[1]) return { at: new Date(now).toISOString(), skipped: 'quiet hours', scopes: [] };
   const c = await import('../bundles/core/factory-reflect/scripts/candidates.mjs'); // only here: the hook never loads it
   const sources = bundleSources(home), machine = readJson(join(home, 'config.json'), {});
   const stateFile = join(home, 'triage-state.json'), state = readJson(stateFile, {});
-  const scopes = [];
+  const scopes = [], launchedRepos = new Map(), liveByLauncher = new Map();
   const queues = ['core', 'org'].map((scope) => {
     const dir = join(home, 'candidates', scope);
     let names = []; try { names = readdirSync(dir).filter((n) => n.endsWith('.json')); } catch {}
@@ -1215,20 +1218,34 @@ export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dry
     if (!repo) { scopes.push({ ...row, action: 'none', reason: 'source repo not on this machine' }); continue; }
     const { due } = triageDue(items, state[key], now);
     if (!due) { scopes.push({ ...row, action: 'none', reason: 'not due' }); continue; }
-    const last = Date.parse(state[key]?.lastLaunch || '');
-    if (now - last < RELAUNCH_HOURS * 36e5) { scopes.push({ ...row, action: 'none', reason: `launched ${state[key].lastLaunch}; waiting on that session` }); continue; }
+    if (launchedRepos.has(repo)) { // one session per repo: it triages every queue the repo owns
+      if (!dryRun) state[key] = { ...(state[key] || {}), lastLaunch: new Date(now).toISOString() };
+      scopes.push({ ...row, action: 'none', reason: `covered by the ${launchedRepos.get(repo)} session for the same repo` }); continue;
+    }
     const repoAdapters = readJson(join(repo, '.agents', 'factory-metadata', 'project.json'), {}).adapters || {};
+    const launcher = c.pickLauncher(repoAdapters, machine), skillsDirs = [join(repo, '.agents', 'skills'), sources.launchers];
+    const tag = `triage:${repo}`;
+    if (!liveByLauncher.has(launcher)) liveByLauncher.set(launcher, c.liveTags({ launcher, skillsDirs }));
+    const live = liveByLauncher.get(launcher);
+    const launches = queues.filter((q) => q.repo === repo).map((q) => Date.parse(state[q.key]?.lastLaunch || '')).filter(Number.isFinite);
+    const last = launches.length ? Math.max(...launches) : NaN;
+    const age = now - last; // NaN when never launched: every comparison below is false
+    if (live?.includes(tag)) { scopes.push({ ...row, action: 'none', reason: 'a triage session for this repo is still open' }); continue; }
+    if (age < (live ? MIN_GAP_HOURS : RELAUNCH_HOURS) * 36e5) { scopes.push({ ...row, action: 'none', reason: `launched ${new Date(last).toISOString()}; ${live ? 'too soon to open another' : 'waiting on that session'}` }); continue; }
     const agent = c.pickAgent(machine, { repoAdapters, env: {} }); // no session: the repo's, else the machine's
     const prompt = c.triagePrompt(repo, '--scheduled', sources, agent);
-    const launch = c.launchFor({ launcher: c.pickLauncher(repoAdapters, machine), skillsDirs: [join(repo, '.agents', 'skills'), sources.launchers], repo, prompt, agent });
+    const launch = c.launchFor({ launcher, skillsDirs, repo, prompt, agent, tag });
     if (!launch.argv) { scopes.push({ ...row, action: 'due', reason: launch.note || 'no sessionLauncher: the status hook in the source repo names it', command: launch.command, prompt }); continue; }
+    let note = launch.placed === false ? 'not shown in a terminal app: the launcher found nowhere to place it' : null;
     if (!dryRun) {
       const r = spawn(launch.argv);
       if (r.error) { scopes.push({ ...row, action: 'failed', reason: r.error, command: launch.command }); continue; }
-      state[key] = { ...(state[key] || {}), lastLaunch: new Date(now).toISOString() };
+      for (const q of queues.filter((q) => q.repo === repo)) state[q.key] = { ...(state[q.key] || {}), lastLaunch: new Date(now).toISOString() };
+      const titled = c.afterLaunch({ launcher, skillsDirs, output: r.output, title: `triage · ${basename(repo)}` });
+      if (titled) note = [note, titled].filter(Boolean).join('; ');
     }
-    scopes.push({ ...row, action: dryRun ? 'would launch' : 'launched', agent: agent.name, command: launch.command,
-      ...(launch.placed === false ? { note: 'not shown in a terminal app: the launcher found nowhere to place it' } : {}) });
+    launchedRepos.set(repo, scope);
+    scopes.push({ ...row, action: dryRun ? 'would launch' : 'launched', agent: agent.name, command: launch.command, ...(note ? { note } : {}) });
   }
   if (!dryRun) writeJson(stateFile, state);
   return { at: new Date(now).toISOString(), scopes };
@@ -1236,7 +1253,7 @@ export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dry
 // A launcher starts a session that outlives this job (hc run --bg returns at once); 30 s is a ceiling.
 function spawnLaunch(argv) {
   const r = spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] });
-  return r.status === 0 ? {} : { error: (r.error?.message || r.stderr || `exit ${r.status}`).trim() };
+  return r.status === 0 ? { output: r.stdout } : { error: (r.error?.message || r.stderr || `exit ${r.status}`).trim() };
 }
 
 // ---------- CLI ----------
