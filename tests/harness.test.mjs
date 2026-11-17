@@ -159,3 +159,19 @@ test('the PR-body guard finds the installed copy from the project root or a subd
     }
   } finally { rmSync(repo, { recursive: true, force: true }); }
 });
+
+test('the shipped stash guard refuses a git stash that does not name its own paths', () => {
+  const hook = shippedHooks().find((h) => /bare git stash/.test(h.command));
+  assert.ok(hook, 'a Bash hook guards git stash');
+  const dir = mkdtempSync(join(tmpdir(), 'harness-stash-'));
+  try {
+    for (const bad of ['git stash', 'git stash -u', 'git stash push', 'git stash push -m wip', 'git stash save wip', 'git -C repo stash', 'cd repo && git stash && npm test', 'GIT_DIR=x git stash -k', 'git stash push -- ']) {
+      const r = runHook(hook.command, { cwd: dir, tool: bad });
+      assert.equal(r.status, 2, bad);
+      assert.match(r.stderr, /git stash push -- <path>/);
+    }
+    for (const ok of ['git stash list', 'git stash pop', 'git stash show -p stash@{0}', 'git stash apply', 'git stash drop', 'git stash push -- a.txt', 'git stash push -m wip -- src/a.js b.js', 'git stash -u -- notes.md', 'echo "git stash"', 'git status', 'ls']) {
+      assert.equal(runHook(hook.command, { cwd: dir, tool: ok }).status, 0, ok);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

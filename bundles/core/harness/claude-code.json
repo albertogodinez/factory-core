@@ -15,6 +15,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "N=$(command -v node || ls -d \"$HOME\"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1); [ -n \"$N\" ] || exit 0; \"$N\" -e \"let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{let c='';try{c=JSON.parse(s).tool_input.command||''}catch{}for(const seg of c.split(/&&|\\|\\||[;|\\n]/)){const m=/^\\s*(?:\\w+=\\S*\\s+)*git(?:\\s+-[Cc]\\s+\\S+)*\\s+stash\\b(.*)/.exec(seg);if(!m)continue;const a=m[1].trim().split(/\\s+/).filter(Boolean);if(['list','show','pop','apply','drop','branch','clear','create','store'].includes(a[0]))continue;const i=a.indexOf('--');if((a[0]===undefined||a[0]==='push'||a[0].startsWith('-'))&&i>=0&&i<a.length-1)continue;console.error('Refused: a bare git stash sets aside every uncommitted change in this checkout, including changes from another session working in it. Name your own paths: git stash push -- <path>... (or check on a clean copy: git worktree add).');process.exit(2)}})\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "N=$(command -v node || ls -d \"$HOME\"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1); [ -n \"$N\" ] || exit 0; D=\"${CLAUDE_PROJECT_DIR:-.}\"; for G in \"$D/.agents/skills/factory-pr-create/scripts/guard-pr-edit.mjs\" \"$D/bundles/core/factory-pr-create/scripts/guard-pr-edit.mjs\"; do [ -f \"$G\" ] && exec \"$N\" \"$G\"; done; exit 0"
           }
         ]
