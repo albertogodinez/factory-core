@@ -25,7 +25,7 @@ node $R --field writeAllowed
 
 For a PR in a neighbor repo, add `--repo <name>`; that repo's own trunk, template and commands apply.
 
-If `gh` can't resolve the repo from the git remote (an SSH host alias gives *"none of the git remotes … point to a known GitHub host"*), spell it out: `export GH_REPO=<remote.slug>`, and `GH_HOST=<remote.host>` when the host isn't github.com. `gh pr` commands take no `--hostname` flag.
+If `gh` can't resolve the repo from the git remote (an SSH host alias gives *"none of the git remotes … point to a known GitHub host"*), spell it out: `export GH_REPO=<remote.slug>`, and `GH_HOST=<remote.host>` when the host isn't github.com. `gh pr` commands take no `--hostname` flag. The same two variables are required when `gh` runs outside any git repository (an evidence directory for `gh pr edit --attach`: *"not a git repository"*).
 
 `writeAllowed: false` (always in zero-config mode) means ask the user before each step that posts to the tracker (§5).
 
