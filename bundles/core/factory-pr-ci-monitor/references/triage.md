@@ -31,6 +31,10 @@ When the finding is invalid, say so plainly and show the evidence: quote the sou
 
 A screenshot can't go through the in-thread `replies` endpoint, which takes only a body. Upload it once (for example in the PR description or a top-level comment), then link the resulting attachment URL from the in-thread reply.
 
+## A by-design dismissal cites its decision
+
+When the reply to a bot finding says "this is by design", link or quote where the design was decided: the DM or thread, the feature-map entry, the plan line. A bare "by design" asks the reader to take it on trust. When no record exists, write one in the PR (the body's deviations section, or a note on the line) and link that.
+
 ## De-duplication and body-only findings
 
 - Reviewers sometimes post the same finding twice on one line. Answer the first fully, and reply to the duplicate with a one-liner pointing at the answered thread.
