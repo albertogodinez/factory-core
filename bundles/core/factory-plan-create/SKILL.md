@@ -69,6 +69,8 @@ Body:
 - If the plan reads a spacing or position off a prototype or design screenshot, write down the raw pixel numbers (each edge, both sides) and state a target only from them. Don't explain a difference away ("side-bearing", "rounding") without a second measurement that shows it.
 - Each open question records the spec line it comes from and the lookup already tried. A question the source answers (the spec, a capture, the code) is not listed: answer it in the plan and cite where.
 - A pasted source claim ("X is a global attribute", "that answers G2") is an input, not a fact. Check it against evidence already held (captures, code) before it changes scope or the plan; when it contradicts that evidence, say so and keep the evidence's answer until the source is checked.
+- A plan that proposes tickets gives each a `shape`: `code` (a change that ships in a PR) or `coordination` (an ask, a decision, a handoff with no diff). A coordination ticket gets no acceptance tests and no PR section.
+- A scope reduction from the user ("I shouldn't need that many") applies to every artifact that counted the old scope: the overview, the task list, the ticket proposals, the acceptance lines and the risks. Re-read each one; don't trim only the paragraph the user pointed at.
 - Anything a teammate reads (a ticket comment, a published copy) must not cite this repo's plan or skill paths: they can't open them.
 
 ## Step 4: Write the file
