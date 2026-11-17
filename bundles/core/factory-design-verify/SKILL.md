@@ -54,6 +54,10 @@ and record the answer next to the measurement. The schema is
 `schemas/geometry.schema.json`. Tests create synthetic geometry in an OS temp directory and remove
 it after the run. Run them with `node --test scripts/compare-geometry.test.mjs`.
 
+## Token chain
+
+Before calling a compared value a difference or a match, trace it to its source on both sides: the authority's token chain (a page-CSS override sits over the theme, so read the override first) and the app's resolved design-system token (computed style, then the token it comes from). A value that matches only because both sides read the same wrong layer is a false match. When the traced hover or pressed state is nearly invisible against the new fill, ask the designer "is the <state> meant to be this close to the <fill>?" and record the answer beside the measurement.
+
 Headless agent-browser reports a `.5px` border as `1px` in computed style, even at
 deviceScaleFactor 2. Take hairline and border widths from a headed session
 (`auth.sh login --headed`) before calling a difference.
