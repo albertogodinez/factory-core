@@ -240,3 +240,20 @@ test('Windows setup creates a missing task but refuses an uninspectable task', {
     assert.ok(!existsSync(join(home, 'cleanup-schedule.json')));
   });
 });
+
+test('the coordinator reports finished worktrees with their size and never retires one, even when applying', async () => {
+  const f = fixture(); try {
+    const engineDir = join(f.repo, '.agents/skills/factory-teardown/scripts');
+    for (const name of ['lifecycle.mjs', 'worktrees.mjs']) cpSync(join(import.meta.dirname, '..', 'bundles/core/factory-teardown/scripts', name), join(engineDir, name));
+    write(join(f.wt, 'feature.txt'), 'work'); git(f.wt, 'add', '-A'); git(f.wt, 'commit', '-qm', 'feature');
+    write(join(f.state, 'teardown', 'pr-states.json'), { version: 1, checkedAt: 1, prs: [{ headRefName: 'feature', state: 'MERGED', number: 7 }] });
+    write(join(f.home, 'cleanup-schedule.json'), { version: 1, apply: true });
+    const r = await cleanup({ all: true, scheduled: true }, { home: f.home });
+    assert.equal(r.summary.worktreeCandidates, 1, JSON.stringify(r.targets));
+    assert.ok(r.summary.worktreeBytes > 0);
+    const main = r.targets.find(t => t.worktrees);
+    assert.deepEqual(main.worktrees.map(w => [w.branch, w.status, w.reason]), [['feature', 'candidate', 'PR #7 merged']]);
+    assert.equal(main.prStatesCheckedAt, 1);
+    assert.ok(existsSync(f.wt), 'reporting only: the worktree is still there');
+  } finally { f.cleanup(); }
+});

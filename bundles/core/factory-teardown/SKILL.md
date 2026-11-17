@@ -1,6 +1,6 @@
 ---
 name: factory-teardown
-description: Register run-owned artifacts and resources, perform targeted teardown, or inspect stale runs. Other skills and scheduled cleanup call the same repo-local scripts. Use for cleanup or before removing a worktree.
+description: Register run-owned artifacts and resources, perform targeted teardown, inspect stale runs, or retire finished worktrees. Other skills and scheduled cleanup call the same repo-local scripts. Use for cleanup, low disk space, or before removing a worktree.
 ---
 
 # Teardown and artifact lifecycle
@@ -39,12 +39,27 @@ Existing unregistered files are not deletion candidates. Preserve legacy `stateR
 1. Finish every consumer (encoding, upload, review/import) before releasing its inputs. Keep an inspection session active if requested.
 2. On success or failure, `finish`, then preview and apply targeted teardown. Stop registered runtime resources before releasing scratch files. Failures are reported individually and leave unreleased resources for retry. No force kill or broad browser close.
 3. Slots must be stopped with their scoped `down --purge` before removing a worktree. If a stop fails, do not remove that worktree. On Windows, process start identity is unavailable: process registration refuses rather than killing by PID alone.
-4. Remove only the intended clean worktree and merged local branch through git; the script does not remove branches or worktrees. Preserve durable/evidence files before removal if state is physically inside that worktree. Leave remote branches alone unless asked.
+4. Remove the worktree with `retire` (below), or only the intended clean worktree through git. The scripts never delete a branch. Preserve durable/evidence files before removal if state is physically inside that worktree. Leave remote branches alone unless asked.
 5. After a verified merge and successful closeout, delete that PR's monitor JSON explicitly. Report both removals and retained records.
+
+## Retiring finished worktrees
+
+Worktrees pile up: each one is a full checkout plus its own `node_modules` or build output. `worktrees` lists the linked ones; `retire` removes one. Both are local git only.
+
+```bash
+gh pr list --state all --limit 300 --json headRefName,state,number > "$TMP/prs.json"   # the forge step is yours; scripts never fetch
+node "$L" worktrees --pr-states "$TMP/prs.json" --sizes   # saves the states, then lists candidate/kept with a reason
+node "$L" retire --worktree <path>                        # re-checks; preview
+node "$L" retire --worktree <path> --apply                # after the user agrees
+```
+
+A worktree is **finished** when its branch's PR is merged or closed, its remote branch is gone, or it has no commits beyond the base branch and has been idle `--idle-days` (default 7). Squash merges look unmerged to git, so refresh PR states first; without them only the last two signals apply. A finished worktree is still **kept** when it has tracked changes or untracked files (other than the skill symlinks factory links in), is locked, is the current one, or has a teardown run that is active or holds resources there. A detached HEAD with commits on no branch is kept: removing it would lose them.
+
+`retire --apply` removes those symlinks, then runs `git worktree remove` without `--force`, so git's own clean check still applies; ignored files go with it and the branch stays. Show the user the candidates and sizes and ask before retiring; never retire a kept one by cleaning it first unless they ask. For uncommitted work they want gone, save `git diff` as a patch outside the worktree first.
 
 ## Scheduled backstop
 
-`factory cleanup --all` coordinates installed copies across registered repos/worktrees. Preview is the default. The opt-in machine schedule runs this same command in reporting mode; it does not install a job in each downstream repo.
+`factory cleanup --all` coordinates installed copies across registered repos/worktrees. Preview is the default. The opt-in machine schedule runs this same command in reporting mode; it does not install a job in each downstream repo. Its report lists each repo's finished worktrees and their size from the last saved PR states; it never retires one, even when applying. The session status line names them; retire them with the user as above.
 
 Automatic GC requires both explicit apply and a repo policy:
 

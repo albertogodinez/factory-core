@@ -324,10 +324,24 @@ export async function gc(o) {
   return o.apply ? locked(o.stateRoot, perform) : perform();
 }
 
+// Small JSON records beside the runs (policy, PR states), and every run's manifest for read-only checks.
+export function saveState(stateRoot, name, value) {
+  const base = baseOf(stateRoot), p = join(base, name); mkdirSync(base, { recursive: true }); noLinks(base, p); save(p, value);
+}
+export function readState(stateRoot, name) {
+  const base = baseOf(stateRoot), p = join(base, name); noLinks(base, p);
+  try { return read(p); } catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+}
+export function listRuns(stateRoot) {
+  const base = baseOf(stateRoot), roots = join(base, 'runs'); noLinks(base, roots);
+  if (!existsSync(roots)) return [];
+  return readdirSync(roots).map(id => { try { return load(stateRoot, id); } catch (e) { return { id, error: e.message }; } });
+}
+
 function args(argv) {
   const [command, ...rest] = argv, o = {};
-  const booleans = ['apply', 'dry-run', 'verified', 'pending'];
-  const strings = ['state-root', 'owner-pid', 'log', 'cwd', 'run', 'kind', 'path', 'class', 'status', 'pid', 'type', 'session', 'app', 'worktree', 'url', 'intermediate-hours'];
+  const booleans = ['apply', 'dry-run', 'verified', 'pending', 'sizes'];
+  const strings = ['state-root', 'owner-pid', 'log', 'cwd', 'run', 'kind', 'path', 'class', 'status', 'pid', 'type', 'session', 'app', 'worktree', 'url', 'intermediate-hours', 'pr-states', 'idle-days'];
   for (let i = 0; i < rest.length; i++) { if (rest[i] === '--') { o.command = rest.slice(i + 1); break; } const key = rest[i].replace(/^--/, ''); if (booleans.includes(key)) o[key] = true; else if (strings.includes(key) && rest[i + 1] && !rest[i + 1].startsWith('--')) o[key] = rest[++i]; else throw new Error(`unknown or incomplete option: ${rest[i]}`); }
   if (o.apply && o['dry-run']) throw new Error('apply and dry-run are exclusive');
   return { command, o };
@@ -345,14 +359,22 @@ export async function main(argv) {
     ctx = JSON.parse(resolver.stdout);
   }
   const opts = { ...o, stateRoot: boundRoot || ctx.stateRoot, root: ctx?.project.root || cwd, intermediateHours: Number(o['intermediate-hours']), ...(o['owner-pid'] ? { ownerPid: Number(o['owner-pid']) } : {}) };
+  if (command === 'worktrees' || command === 'retire') {
+    const w = await import('./worktrees.mjs');
+    const wo = { ...opts, root: cwd, current: process.cwd(), store: { saveState, readState, listRuns }, ...(o['idle-days'] ? { idleDays: Number(o['idle-days']) } : {}) };
+    if (!(wo.idleDays === undefined || (Number.isFinite(wo.idleDays) && wo.idleDays >= 1))) throw new Error('idle-days must be at least 1');
+    if (o['pr-states']) w.savePrStates({ stateRoot: opts.stateRoot, store: wo.store, file: resolve(o['pr-states']) });
+    return command === 'retire' ? w.retire(wo) : w.inventory(wo);
+  }
   const commands = { launch: launchProcess, release: releaseInputs, stop: stopResources, show: inspectRun, begin: beginRun, add: addArtifact, scratch: createScratch, resource: registerResource, finish: finishRun, heartbeat, pin: x => pinRun({ ...x, pinned: true }), unpin: x => pinRun({ ...x, pinned: false }), publish: publishArtifact, configure, teardown, gc };
-  if (!commands[command]) throw new Error('usage: lifecycle.mjs begin|add|scratch|resource|finish|heartbeat|pin|unpin|publish|configure|teardown|gc');
+  if (!commands[command]) throw new Error('usage: lifecycle.mjs begin|add|scratch|resource|finish|heartbeat|pin|unpin|publish|configure|teardown|gc|worktrees|retire');
   return commands[command](opts);
 }
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
     const result = await main(process.argv.slice(2)); console.log(JSON.stringify(result));
     if (['stop', 'teardown'].includes(process.argv[2]) && (result.actions?.some(a => a.status === 'failed') || result.reason)) process.exitCode = 1;
+    if (process.argv[2] === 'retire' && result.status !== 'removed' && process.argv.includes('--apply')) process.exitCode = 1;
   }
   catch (e) { console.error(e.message); process.exitCode = 1; }
 }

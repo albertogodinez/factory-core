@@ -264,6 +264,12 @@ than installing anything. `--apply` is still subject to each repo's policy; the 
 A schedule or skill install never creates a retention policy. Unknown files, corrupt manifests,
 all active runs and runtime resources needing targeted teardown are preserved or reported.
 
+The report also lists each repo's finished worktrees (PR merged or closed, remote branch gone, or no
+commits beyond the base and idle a week) with their size, and keeps any with uncommitted work, a lock or
+a live run. The coordinator never removes one: the engine's `retire --worktree <path> --apply` does,
+through a plain `git worktree remove`, after the user agrees. PR states come from the agent's
+`gh pr list`, saved with `worktrees --pr-states`, since scripts don't fetch.
+
 A daily backstop is optional:
 
 ```bash

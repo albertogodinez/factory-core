@@ -40,9 +40,10 @@ function engineResult(raw) {
   return result;
 }
 function summarize(targets, errors) {
-  const summary = { candidates: 0, removed: 0, failed: errors.length, kept: 0, absent: 0, skipped: 0, attention: 0, runs: 0 };
+  const summary = { candidates: 0, removed: 0, failed: errors.length, kept: 0, absent: 0, skipped: 0, attention: 0, runs: 0, worktreeCandidates: 0, worktreeBytes: 0 };
   const keys = { candidate: 'candidates', removed: 'removed', failed: 'failed', kept: 'kept', absent: 'absent' };
   for (const target of targets) {
+    for (const w of target.worktrees || []) if (w.status === 'candidate') { summary.worktreeCandidates++; summary.worktreeBytes += w.bytes || 0; }
     if (target.status === 'skipped') { summary.skipped++; continue; }
     if (target.status === 'failed') { summary.failed++; continue; }
     summary.failed += target.result.errors.length;
@@ -107,9 +108,17 @@ async function performCleanup(opts, runtime) {
       if (!existsSync(engine) || !existsSync(resolver)) {
         targets.push({ repo: main, status: 'skipped', reason: 'upgrade required: factory-teardown or factory-context is not installed' }); continue;
       }
+      // Finished worktrees, reported only: retiring one is the agent's step, after the user agrees.
+      // An engine that predates the inventory answers with something else, which is ignored.
+      let finished = null;
+      try {
+        const ctx = JSON.parse(child(process.execPath, [resolver, '--no-cache'], main, home));
+        const inv = JSON.parse(child(process.execPath, [engine, 'worktrees', '--sizes', '--cwd', main, ...(isAbsolute(ctx?.stateRoot || '') ? ['--state-root', ctx.stateRoot] : [])], main, home));
+        if (Array.isArray(inv?.worktrees)) finished = { worktrees: inv.worktrees.map(({ path, branch, status, reason, bytes }) => ({ path, branch, status, reason, ...(bytes ? { bytes } : {}) })), prStatesCheckedAt: inv.prStatesCheckedAt ?? null };
+      } catch (e) { finished = { worktrees: [], worktreeError: e.message }; }
       for (const entry of worktrees) {
         const worktree = entry.path;
-        const target = { repo: main, worktree };
+        const target = { repo: main, worktree, ...(finished && canonical(worktree || '.') === main ? finished : {}) };
         if (!worktree || entry.prunable || !existsSync(worktree)) {
           targets.push({ ...target, status: 'skipped', reason: entry.prunable ? 'prunable worktree; no live path to clean' : 'worktree path is missing' });
           continue;

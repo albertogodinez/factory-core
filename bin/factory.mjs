@@ -984,6 +984,7 @@ function hookStatus(opts) {
   if (cleanupAt && cleanupAt !== state?.cleanupAt) {
     const summary = cleanupReport.summary;
     if (summary?.failed || summary?.candidates || summary?.attention) lines.push(`factory: scheduled cleanup found ${summary.candidates || 0} candidates and ${summary.failed || 0} failures, with ${summary.attention || 0} inactive runs needing inspection. Read ${join(toolkitHome(), 'cleanup-last.json')}; inspect before applying cleanup.`);
+    if (summary?.worktreeCandidates) lines.push(`factory: ${summary.worktreeCandidates} finished worktree${summary.worktreeCandidates === 1 ? '' : 's'}${summary.worktreeBytes ? ` (${(summary.worktreeBytes / 1e9).toFixed(1)} GB)` : ''} can be retired. Read ${join(toolkitHome(), 'cleanup-last.json')} and follow factory-teardown's "Retiring finished worktrees"; ask before removing any.`);
     if (cleanupReport.errors?.length) lines.push(`factory: scheduled cleanup could not run: ${cleanupReport.errors[0]}`);
     if (cleanupReport.targets?.some(t => t.reason?.startsWith('upgrade required'))) lines.push('factory: scheduled cleanup skipped repos without factory-teardown; run factory update --all to install the engine.');
   }
