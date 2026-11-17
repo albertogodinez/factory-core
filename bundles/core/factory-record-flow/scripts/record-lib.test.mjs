@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, test } from 'node:test';
+import { spawn } from 'node:child_process';
 
 const LIB = fileURLToPath(new URL('./record-lib.sh', import.meta.url));
 const shellTest = process.platform === 'win32' ? test.skip : test;
@@ -16,7 +17,7 @@ before(() => {
   stub = join(dir, 'agent-browser');
   log = join(dir, 'calls.log');
   // Answers --version like a 0.38+ build and logs every other call's arguments.
-  writeFileSync(stub, `#!/usr/bin/env bash\nif [ "$1" = --version ]; then echo "agent-browser 0.40.0"; exit 0; fi\necho "$*" >> "${log}"\nif [ "$3" = record ] && [ "$4" = start ]; then printf take > "$5"; fi\nif [ "\${FAIL_RECORD_COMMAND:-}" = "$3 $4" ]; then exit 9; fi\n`);
+  writeFileSync(stub, `#!/usr/bin/env bash\nif [ "$1" = --version ]; then echo "agent-browser 0.40.0"; exit 0; fi\necho "$*" >> "${log}"\nif [ "$3 $4" = "get url" ]; then echo "\${STUB_URL:-}"; exit 0; fi\nif [ "$3" = record ] && [ "$4" = start ]; then printf take > "$5"; fi\nif [ "\${FAIL_RECORD_COMMAND:-}" = "$3 $4" ]; then exit 9; fi\n`);
   chmodSync(stub, 0o755);
 });
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -122,10 +123,31 @@ shellTest('highlight returns 1 when the page finds nothing to outline', () => {
   assert.match(r.stderr.toString(), /highlight 'label'/);
 });
 
+// spawnSync blocks this process's event loop, so the server for the page runs in a child.
+const serve = (status) => new Promise((ok) => {
+  const child = spawn(process.execPath, ['-e', `require('http').createServer((_, r) => { r.statusCode = ${status}; r.end(); }).listen(0, '127.0.0.1', function () { console.log('http://127.0.0.1:' + this.address().port + '/'); })`]);
+  child.stdout.once('data', (d) => ok({ url: d.toString().trim(), close: () => child.kill() }));
+});
+
+test('record_begin refuses an app page that does not answer 200, before capture starts', async () => {
+  const app = fileURLToPath(new URL('.', import.meta.url));
+  const down = await serve(503);
+  try {
+    const r = begin('take.webm', { RECORD_APP_DIR: app, STUB_URL: down.url });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /answers HTTP 503, not 200/);
+    assert.ok(!r.calls.some((c) => c.includes('record start')), r.calls.join('\n'));
+  } finally { down.close(); }
+});
+
+let appUp;
+before(async () => { appUp = await serve(200); });
+after(() => appUp?.close());
+
 shellTest('record_begin writes the served app commit beside the take', () => {
   const repo = fileURLToPath(new URL('.', import.meta.url));
   const sha = spawnSync('git', ['-C', repo, 'rev-parse', 'HEAD']).stdout.toString().trim();
-  const r = begin('take.webm', { RECORD_APP_DIR: repo });
+  const r = begin('take.webm', { RECORD_APP_DIR: repo, STUB_URL: appUp.url });
   assert.equal(r.status, 0, r.stderr);
   const take = JSON.parse(readFileSync(join(dir, 'take.take.json'), 'utf8'));
   assert.equal(take.appSha, sha);

@@ -135,6 +135,14 @@ record_begin() {
   else
     w=${VIEWPORT_W:-1440}; h=${VIEWPORT_H:-900}
   fi
+  # A take of a server that is down or erroring shows an error page as the "after" build. With
+  # RECORD_APP_DIR set the page is meant to be that app, so it must answer 200 before capture starts.
+  if [ -n "${RECORD_APP_DIR:-}" ]; then
+    local page code
+    page=$(ab get url 2>/dev/null)
+    code=$(curl -ks -o /dev/null -m 10 -w '%{http_code}' "$page" 2>/dev/null)
+    [ "$code" = 200 ] || { echo "✗ record_begin: ${page:-the current page} answers HTTP ${code:-none}, not 200; fix the server serving $RECORD_APP_DIR before recording" >&2; return 2; }
+  fi
   RECORD_MARKS="$out.marks"
   RECORD_CAPTIONS="${out%.*}.captions.jsonl"
   RECORD_TAKE="${out%.*}.take.json"
