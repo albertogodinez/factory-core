@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { makeRepo, tempRoot } from '../../../../tests/fixtures/make.mjs';
 import { findUnresolvedGuards } from './checks/main-guard.mjs';
 import { findTimeouts } from './checks/no-timeout.mjs';
+import { findSelfPaths } from './checks/script-self-path.mjs';
 import { checkSkillText } from './checks/skill-frontmatter.mjs';
 import { checkPlanText } from './checks/plan-frontmatter.mjs';
 import { parseFrontmatter } from './lib.mjs';
@@ -51,7 +52,7 @@ after(() => t.cleanup());
 test('a clean repo passes every check', () => {
   const r = run(clean);
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  for (const c of ['skill-frontmatter', 'main-guard', 'no-timeout', 'orphans', 'plan-frontmatter']) assert.match(r.stdout, new RegExp(`${c}: ok`));
+  for (const c of ['skill-frontmatter', 'main-guard', 'no-timeout', 'orphans', 'plan-frontmatter', 'script-self-path']) assert.match(r.stdout, new RegExp(`${c}: ok`));
 });
 
 test('a broken repo fails each check and the exit code is the sum of their bits', () => {
@@ -107,6 +108,16 @@ test('no-timeout: command position only', () => {
   assert.equal(hits('echo "timeout 5"'), 0);
   assert.equal(hits('# timeout 5'), 0);
   assert.equal(hits("cat <<'EOF'\ntimeout 5\nEOF\n"), 0);
+});
+
+test('script-self-path: $0 after a cd, or in a sourced file', () => {
+  const hits = (s, o) => findSelfPaths(s, o).length;
+  assert.equal(hits('X=$(dirname "$0")'), 0);
+  assert.equal(hits('cd /tmp\nX=$(dirname "$0")'), 1);
+  assert.equal(hits('X=$(dirname "$0")', { sourced: true }), 1);
+  assert.equal(hits('X=${0%/*}', { sourced: true }), 1);
+  assert.equal(hits('cd /tmp\nX=$(dirname "${BASH_SOURCE[0]}")'), 0);
+  assert.equal(hits('# dirname "$0"', { sourced: true }), 0);
 });
 
 test('frontmatter parser reads quoted, folded and list values', () => {

@@ -24,6 +24,7 @@ Other flags: `--cwd <dir>` (default the current directory), `--skills <dir>` and
 | 4 | `no-timeout` | a skill `.sh` file runs `timeout` as a command. macOS has none, so the guarded step never runs |
 | 8 | `orphans` | a file under a skill's `scripts/` or `references/` is named by no other file in the skills directory. Tests (`*.test.*`, `*.guard.*`) are exempt. Reference the file from the skill that uses it, or delete it |
 | 16 | `plan-frontmatter` | a plan (`<planHome>/*.md`, `README.md` excluded) lacks `title`, `status`, `repos` or `created`, has a `status` outside `draft`, `active`, `completed`, `abandoned`, a bad `YYYY-MM-DD` date, or is completed or abandoned without a `completed` date |
+| 32 | `script-self-path` | a skill `.sh` file builds a path from `dirname "$0"` (or `${0%/*}`) after a `cd`, or in a file another skill script `source`s: there `$0` is the caller or a stale relative path. Use `${BASH_SOURCE[0]}`, captured before any `cd` |
 
 ## Exit codes
 
