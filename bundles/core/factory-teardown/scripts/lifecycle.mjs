@@ -341,7 +341,7 @@ export function listRuns(stateRoot) {
 function args(argv) {
   const [command, ...rest] = argv, o = {};
   const booleans = ['apply', 'dry-run', 'verified', 'pending', 'sizes'];
-  const strings = ['state-root', 'owner-pid', 'log', 'cwd', 'run', 'kind', 'path', 'class', 'status', 'pid', 'type', 'session', 'app', 'worktree', 'url', 'intermediate-hours', 'pr-states', 'idle-days'];
+  const strings = ['state-root', 'owner-pid', 'log', 'cwd', 'run', 'kind', 'path', 'class', 'status', 'pid', 'type', 'session', 'app', 'worktree', 'url', 'intermediate-hours', 'pr-states', 'idle-days', 'min-gb'];
   for (let i = 0; i < rest.length; i++) { if (rest[i] === '--') { o.command = rest.slice(i + 1); break; } const key = rest[i].replace(/^--/, ''); if (booleans.includes(key)) o[key] = true; else if (strings.includes(key) && rest[i + 1] && !rest[i + 1].startsWith('--')) o[key] = rest[++i]; else throw new Error(`unknown or incomplete option: ${rest[i]}`); }
   if (o.apply && o['dry-run']) throw new Error('apply and dry-run are exclusive');
   return { command, o };
@@ -367,15 +367,22 @@ export async function main(argv) {
     if (command === 'refresh-prs') { const v = w.refreshPrStates(wo); return { checkedAt: v.checkedAt, prs: v.prs.length }; }
     return command === 'retire' ? w.retire(wo) : w.inventory(wo);
   }
+  if (command === 'outputs' || command === 'clean-output') {
+    const b = await import('./outputs.mjs');
+    const bo = { root: cwd, ...(o['idle-days'] ? { idleDays: Number(o['idle-days']) } : {}), ...(o['min-gb'] ? { minBytes: Number(o['min-gb']) * 1e9 } : {}) };
+    if (!(bo.idleDays === undefined || (Number.isFinite(bo.idleDays) && bo.idleDays >= 1))) throw new Error('idle-days must be at least 1');
+    if (!(bo.minBytes === undefined || (Number.isFinite(bo.minBytes) && bo.minBytes >= 0))) throw new Error('min-gb must be a number');
+    return command === 'clean-output' ? b.cleanOutput({ ...bo, path: o.path, apply: o.apply }) : b.outputs(bo);
+  }
   const commands = { launch: launchProcess, release: releaseInputs, stop: stopResources, show: inspectRun, begin: beginRun, add: addArtifact, scratch: createScratch, resource: registerResource, finish: finishRun, heartbeat, pin: x => pinRun({ ...x, pinned: true }), unpin: x => pinRun({ ...x, pinned: false }), publish: publishArtifact, configure, teardown, gc };
-  if (!commands[command]) throw new Error('usage: lifecycle.mjs begin|add|scratch|resource|finish|heartbeat|pin|unpin|publish|configure|teardown|gc|worktrees|retire|refresh-prs');
+  if (!commands[command]) throw new Error('usage: lifecycle.mjs begin|add|scratch|resource|finish|heartbeat|pin|unpin|publish|configure|teardown|gc|worktrees|retire|refresh-prs|outputs|clean-output');
   return commands[command](opts);
 }
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
     const result = await main(process.argv.slice(2)); console.log(JSON.stringify(result));
     if (['stop', 'teardown'].includes(process.argv[2]) && (result.actions?.some(a => a.status === 'failed') || result.reason)) process.exitCode = 1;
-    if (process.argv[2] === 'retire' && result.status !== 'removed' && process.argv.includes('--apply')) process.exitCode = 1;
+    if (['retire', 'clean-output'].includes(process.argv[2]) && result.status !== 'removed' && process.argv.includes('--apply')) process.exitCode = 1;
   }
   catch (e) { console.error(e.message); process.exitCode = 1; }
 }

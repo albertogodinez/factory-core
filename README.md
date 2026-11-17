@@ -270,7 +270,11 @@ a live run. The coordinator never removes one: the engine's `retire --worktree <
 through a plain `git worktree remove`, after the user agrees. Squash merges look unmerged to git, so
 PR states come from `gh pr list`: session start refreshes them in the background, at most every 12 hours
 per repo and only where linked worktrees exist (`FACTORY_NO_PR_REFRESH=1` turns that off), and the
-engine's `refresh-prs` does it on demand.
+engine's `refresh-prs` does it on demand. Each checkout's idle build output (git-ignored `node_modules`,
+`target/`, `dist/` and the like, 1 GB or more, untouched for two weeks) is listed the same way and removed
+only by the engine's `clean-output --path <folder> --apply`. At session start the status hook checks free
+space with one `statfs` call; under `minFreeGB` in `cleanup-schedule.json` (default 50) it says so and
+names what the last report found to reclaim.
 
 A daily backstop is optional:
 

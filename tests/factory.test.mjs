@@ -748,3 +748,17 @@ test('session start refreshes PR states in the background only where linked work
     t.cleanup();
   }
 });
+
+test('session start warns below the free-space threshold and names what the last report can reclaim', async () => {
+  const { diskLines, MIN_FREE_GB } = await import('../bin/factory.mjs');
+  const t = tempRoot('af-disk-'); try {
+    const home = t.root, at = (gb) => () => ({ bavail: (gb * 1e9) / 4096, bsize: 4096 });
+    assert.deepEqual(diskLines({ home, statfs: at(MIN_FREE_GB + 1) }), [], 'enough space: silent');
+    assert.match(diskLines({ home, statfs: at(10) })[0], /only 10\.0 GB free .*under 50 GB.*found nothing factory can reclaim.*Docker/);
+    write(join(home, 'cleanup-last.json'), { summary: { worktreeCandidates: 2, worktreeBytes: 4e9, outputCandidates: 1, outputBytes: 34e9 } });
+    assert.match(diskLines({ home, statfs: at(10) })[0], /2 finished worktree\(s\), 4\.0 GB and 1 idle build-output folder\(s\), 34\.0 GB/);
+    write(join(home, 'cleanup-schedule.json'), { version: 1, apply: false, minFreeGB: 5 });
+    assert.deepEqual(diskLines({ home, statfs: at(10) }), [], 'the machine threshold overrides the default');
+    assert.deepEqual(diskLines({ home, statfs: () => { throw new Error('no statfs'); } }), [], 'an unreadable disk is silent');
+  } finally { t.cleanup(); }
+});

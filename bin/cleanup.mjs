@@ -40,10 +40,11 @@ function engineResult(raw) {
   return result;
 }
 function summarize(targets, errors) {
-  const summary = { candidates: 0, removed: 0, failed: errors.length, kept: 0, absent: 0, skipped: 0, attention: 0, runs: 0, worktreeCandidates: 0, worktreeBytes: 0 };
+  const summary = { candidates: 0, removed: 0, failed: errors.length, kept: 0, absent: 0, skipped: 0, attention: 0, runs: 0, worktreeCandidates: 0, worktreeBytes: 0, outputCandidates: 0, outputBytes: 0 };
   const keys = { candidate: 'candidates', removed: 'removed', failed: 'failed', kept: 'kept', absent: 'absent' };
   for (const target of targets) {
     for (const w of target.worktrees || []) if (w.status === 'candidate') { summary.worktreeCandidates++; summary.worktreeBytes += w.bytes || 0; }
+    for (const o of target.outputs || []) if (o.status === 'candidate') { summary.outputCandidates++; summary.outputBytes += o.bytes || 0; }
     if (target.status === 'skipped') { summary.skipped++; continue; }
     if (target.status === 'failed') { summary.failed++; continue; }
     summary.failed += target.result.errors.length;
@@ -127,6 +128,10 @@ async function performCleanup(opts, runtime) {
           const ctx = JSON.parse(child(process.execPath, [resolver, '--no-cache'], worktree, home));
           if (typeof ctx?.stateRoot !== 'string' || !ctx.stateRoot || !isAbsolute(ctx.stateRoot)) throw new Error('resolver did not return an absolute stateRoot');
           const stateRoot = canonical(ctx.stateRoot); target.stateRoot = stateRoot;
+          // Idle build output, per checkout even when worktrees share a state root; reported only. An older
+          // engine answers with something else, which is ignored.
+          try { const o = JSON.parse(child(process.execPath, [engine, 'outputs', '--state-root', stateRoot, '--cwd', worktree], worktree, home)); if (Array.isArray(o?.outputs)) target.outputs = o.outputs; }
+          catch (e) { target.outputsError = e.message; }
           if (seen.has(stateRoot)) { targets.push({ ...target, status: 'skipped', reason: 'shared state root already visited' }); continue; }
           seen.add(stateRoot);
           const result = engineResult(child(process.execPath, [engine, 'gc', '--state-root', stateRoot, '--cwd', worktree, ...(apply ? ['--apply'] : [])], worktree, home));

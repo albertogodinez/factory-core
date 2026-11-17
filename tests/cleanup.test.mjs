@@ -262,3 +262,21 @@ test('the coordinator reports finished worktrees with their size and never retir
     assert.ok(existsSync(f.wt), 'reporting only: the worktree is still there');
   } finally { f.cleanup(); }
 });
+
+test('the coordinator reports idle build output per checkout, shared state root or not, and an old engine is ignored', async () => {
+  const f = fixture(); try {
+    write(join(f.repo, '.agents/skills/factory-teardown/scripts/lifecycle.mjs'), `
+      const cmd = process.argv[2], cwd = process.argv[process.argv.indexOf('--cwd') + 1];
+      if (cmd === 'outputs') console.log(JSON.stringify({ checkout: cwd, outputs: [{ path: cwd + '/target', kind: 'target', bytes: 5e9, status: 'candidate', reason: 'unused 30d' }, { path: cwd + '/node_modules', kind: 'node_modules', bytes: 2e9, status: 'kept', reason: 'used 1d ago' }] }));
+      else console.log(JSON.stringify({ runs: [], errors: [] }));
+    `);
+    const r = await cleanup({ all: true }, { home: f.home });
+    assert.equal(r.summary.outputCandidates, 2, 'both checkouts, though the worktree shares the state root');
+    assert.equal(r.summary.outputBytes, 10e9);
+    assert.ok(r.targets.every(t => t.outputs?.length === 2));
+    const old = fixture(); try {
+      const r2 = await cleanup({ all: true }, { home: old.home });
+      assert.equal(r2.summary.outputCandidates, 0); assert.equal(r2.summary.failed, 0, 'an engine without outputs is not a failure');
+    } finally { old.cleanup(); }
+  } finally { f.cleanup(); }
+});

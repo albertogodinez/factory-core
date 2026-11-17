@@ -26,7 +26,7 @@
 // a bundle's path in ~/.agents/factory/sources.json: {"expedia": "/path/to/bundles/expedia"}.
 import {
   readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, lstatSync, rmSync,
-  cpSync, symlinkSync, readlinkSync, realpathSync, renameSync, appendFileSync, openSync, fstatSync, readSync, closeSync,
+  cpSync, symlinkSync, readlinkSync, realpathSync, renameSync, appendFileSync, openSync, fstatSync, readSync, closeSync, statfsSync,
 } from 'node:fs';
 import { join, dirname, resolve, relative, basename, sep } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -904,6 +904,20 @@ export function launchPrRefresh(main, home = toolkitHome(), now = Date.now()) {
   try { spawn(process.execPath, [engine, 'refresh-prs'], { cwd: main, detached: true, stdio: 'ignore' }).unref(); } catch {}
   return true;
 }
+// Free space, checked live at session start with one statfs call (no spawn). Below the machine's threshold
+// (cleanup-schedule.json minFreeGB, default 50) it says so and points at what the last report found reclaimable,
+// and at what that report can't see.
+export const MIN_FREE_GB = 50;
+export function diskLines({ path = homedir(), home = toolkitHome(), statfs = statfsSync } = {}) {
+  let free; try { const s = statfs(path); free = Number(s.bavail) * Number(s.bsize); } catch { return []; }
+  const set = Number(readJson(join(home, 'cleanup-schedule.json'), {})?.minFreeGB);
+  const min = Number.isFinite(set) && set > 0 ? set : MIN_FREE_GB;
+  if (!(free < min * 1e9)) return [];
+  const sum = readJson(join(home, 'cleanup-last.json'), null)?.summary || {};
+  const gb = (b) => `${(b / 1e9).toFixed(1)} GB`;
+  const found = [sum.worktreeCandidates ? `${sum.worktreeCandidates} finished worktree(s), ${gb(sum.worktreeBytes || 0)}` : '', sum.outputCandidates ? `${sum.outputCandidates} idle build-output folder(s), ${gb(sum.outputBytes || 0)}` : ''].filter(Boolean);
+  return [`factory: only ${gb(free)} free on this disk (under ${min} GB). ${found.length ? `The last cleanup report found ${found.join(' and ')} to reclaim (${join(home, 'cleanup-last.json')}); factory-teardown removes them with the user's OK.` : 'The last cleanup report found nothing factory can reclaim.'} It doesn't measure Docker, package or browser caches, or repos factory doesn't manage: measure those (du) before deleting anything.`];
+}
 // Repo lessons a reflect run proposed but nobody applied or dropped (~/.agents/factory/repo-lessons.jsonl,
 // written by lessons.mjs record --scope repo). The newest record per fingerprint decides; 90 days expire it.
 export function repoLessonLines(here, home = toolkitHome(), now = Date.now()) {
@@ -1000,6 +1014,7 @@ function hookStatus(opts) {
   if (cleanupAt && cleanupAt !== state?.cleanupAt) {
     const summary = cleanupReport.summary;
     if (summary?.failed || summary?.candidates || summary?.attention) lines.push(`factory: scheduled cleanup found ${summary.candidates || 0} candidates and ${summary.failed || 0} failures, with ${summary.attention || 0} inactive runs needing inspection. Read ${join(toolkitHome(), 'cleanup-last.json')}; inspect before applying cleanup.`);
+    if (summary?.outputCandidates) lines.push(`factory: ${summary.outputCandidates} idle build-output folder${summary.outputCandidates === 1 ? '' : 's'} (${((summary.outputBytes || 0) / 1e9).toFixed(1)} GB: node_modules, target/, dist/ …) can be regenerated. Read ${join(toolkitHome(), 'cleanup-last.json')} and follow factory-teardown's "Idle build output"; ask before cleaning any.`);
     if (summary?.worktreeCandidates) lines.push(`factory: ${summary.worktreeCandidates} finished worktree${summary.worktreeCandidates === 1 ? '' : 's'}${summary.worktreeBytes ? ` (${(summary.worktreeBytes / 1e9).toFixed(1)} GB)` : ''} can be retired. Read ${join(toolkitHome(), 'cleanup-last.json')} and follow factory-teardown's "Retiring finished worktrees"; ask before removing any.`);
     if (cleanupReport.errors?.length) lines.push(`factory: scheduled cleanup could not run: ${cleanupReport.errors[0]}`);
     if (cleanupReport.targets?.some(t => t.reason?.startsWith('upgrade required'))) lines.push('factory: scheduled cleanup skipped repos without factory-teardown; run factory update --all to install the engine.');
@@ -1011,6 +1026,7 @@ function hookStatus(opts) {
     for (const l of due) out(l);
     if (due.some((l) => / wait here /.test(l))) launchDueTriage();
     launchPrRefresh(g.mainRoot);
+    for (const l of diskLines()) out(l);
     for (const l of repoLessonLines([g.mainRoot, g.toplevel])) out(l);
     for (const l of harnessLines()) out(l);
     for (const l of nodeLines(g.toplevel)) out(l);

@@ -1,6 +1,6 @@
 ---
 name: factory-teardown
-description: Register run-owned artifacts and resources, perform targeted teardown, inspect stale runs, or retire finished worktrees. Other skills and scheduled cleanup call the same repo-local scripts. Use for cleanup, low disk space, or before removing a worktree.
+description: Register run-owned artifacts and resources, perform targeted teardown, inspect stale runs, retire finished worktrees, or clean idle build output. Other skills and scheduled cleanup call the same repo-local scripts. Use for cleanup, low disk space, or before removing a worktree.
 ---
 
 # Teardown and artifact lifecycle
@@ -57,9 +57,21 @@ A worktree is **finished** when its branch's PR is merged or closed, its remote 
 
 `retire --apply` removes those symlinks, then runs `git worktree remove` without `--force`, so git's own clean check still applies; ignored files go with it and the branch stays. Show the user the candidates and sizes and ask before retiring; never retire a kept one by cleaning it first unless they ask. For uncommitted work they want gone, save `git diff` as a patch outside the worktree first.
 
+## Idle build output
+
+`outputs` lists big folders a build or install regenerates, in the current checkout: `node_modules`, `target/` (beside `Cargo.toml` or `pom.xml`), `dist/` and `build/` (beside a build file), `.next/`, `.turbo/`, `.gradle/`, `coverage/` and similar. Only folders git ignores and tracks nothing under count, at least `--min-gb` (default 1) in size; one untouched for `--idle-days` (default 14) is a candidate. Nested checkouts and symlinks are skipped.
+
+```bash
+node "$L" outputs                                         # candidate/kept, size, and what regenerates each
+node "$L" clean-output --path <folder>                    # re-checks; preview
+node "$L" clean-output --path <folder> --apply            # after the user agrees
+```
+
+Show the sizes and what brings each back (`again`), then ask. Cleaning deletes that one folder; the next build or install recreates it.
+
 ## Scheduled backstop
 
-`factory cleanup --all` coordinates installed copies across registered repos/worktrees. Preview is the default. The opt-in machine schedule runs this same command in reporting mode; it does not install a job in each downstream repo. Its report lists each repo's finished worktrees and their size from the last saved PR states; it never retires one, even when applying. The session status line names them; retire them with the user as above.
+`factory cleanup --all` coordinates installed copies across registered repos/worktrees. Preview is the default. The opt-in machine schedule runs this same command in reporting mode; it does not install a job in each downstream repo. Its report lists each repo's finished worktrees (from the last saved PR states) and each checkout's idle build output, with sizes; it never retires or cleans either, even when applying. At session start, free space under the machine's `minFreeGB` (in `cleanup-schedule.json`, default 50) is reported too, with what the report found and a reminder that Docker, caches and unmanaged repos aren't measured. The session status line names them; retire them with the user as above.
 
 Automatic GC requires both explicit apply and a repo policy:
 

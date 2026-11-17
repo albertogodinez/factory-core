@@ -52,7 +52,7 @@ function parseList(text) {
       locked: Boolean(get('locked')), prunable: Boolean(get('prunable')) };
   });
 }
-function bytesOf(dir) {
+export function bytesOf(dir) {
   let total = 0;
   const walk = d => {
     let entries; try { entries = readdirSync(d, { withFileTypes: true }); } catch { return; }
