@@ -57,6 +57,21 @@ test('start --rolling keeps one lesson/triage branch: reused, brought up to trun
   } finally { r.done(); }
 });
 
+test('start --rolling leaves feature-map entries (Map-entry: trailer) out of the cap', () => {
+  const r = repo();
+  try {
+    const a = start({ repo: r.root, rolling: true, trunk: 'main' });
+    for (let i = 1; i <= 6; i++) commit(a.worktree, `entry${i}.md`, `${i}\n`, `docs(map): entry ${i}\n\nMap-entry: entry-${i}`);
+    const maps = start({ repo: r.root, rolling: true, trunk: 'main' });
+    assert.equal(maps.commits, 0); assert.equal(maps.mapEntries, 6); assert.equal(maps.full, false, 'six map entries leave room for lessons');
+    for (let i = 1; i <= 4; i++) commit(a.worktree, `lesson${i}.md`, `${i}\n`, `lesson ${i}`);
+    const mixed = start({ repo: r.root, rolling: true, trunk: 'main' });
+    assert.equal(mixed.commits, 4); assert.equal(mixed.full, false);
+    commit(a.worktree, 'lesson5.md', '5\n', 'lesson 5');
+    assert.equal(start({ repo: r.root, rolling: true, trunk: 'main' }).full, true, 'five lessons is still full');
+  } finally { r.done(); }
+});
+
 test('start --rolling merges trunk into a pushed branch instead of rewriting it, and backs out of a conflict', () => {
   const r = repo();
   try {

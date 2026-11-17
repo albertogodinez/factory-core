@@ -213,6 +213,13 @@ test('the CLI: a downstream fact prints its launch; a pattern queues; queue list
     const q = run('queue');
     assert.equal(q.out.repos[0].repo, src);
     assert.equal(q.out.repos[0].queued, 6);
+    assert.ok(q.out.repos[0].candidates.every((c) => !c.map), 'no feature map in this fixture');
+    // A candidate for a skill with features/README.md is a map entry.
+    mkdirSync(join(src, 'bundles', 'core', 'factory-features-x', 'features'), { recursive: true });
+    writeFileSync(join(src, 'bundles', 'core', 'factory-features-x', 'features', 'README.md'), '# map\n');
+    run('candidate', '--kind', 'fact', '--queue', '--skill', 'factory-features-x', '--summary', 'map entry', ...base);
+    const mq = run('queue').out.repos[0].candidates;
+    assert.deepEqual(mq.filter((c) => c.map).map((c) => c.summary), ['map entry']);
     assert.equal(q.out.repos[0].start, `cd ${src} && <your agent CLI>`);
     assert.equal(q.out.repos[0].prompt, '/factory-triage', 'no bundle SKILL.md in this fixture');
     // A bundle repo that doesn't install core gets the SKILL.md by path.

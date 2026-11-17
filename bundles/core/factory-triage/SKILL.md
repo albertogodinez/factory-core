@@ -29,6 +29,8 @@ Drop what's already decided. `lessons.mjs known --never` lists the families the 
 
 Read each candidate. Open its evidence when the summary leaves the *why* unclear: grep the transcript for its `grep` words, or read the PR thread. A transcript that no longer exists is fine: the summary and the PR links are enough.
 
+Set aside **map entries** first: the candidates `queue` marks `map: true` (their skill is a feature map). They aren't lessons, so they skip clustering and ranking; §3's [Map entries](#map-entries) builds them. Cluster the rest.
+
 Group candidates that the same edit would fix: the same skill section, the same missing check, the same wrong fact. Similar wording isn't enough. Two candidates belong together when one commit settles both.
 
 Rank the clusters by size (largest first), then by cost: a fact with a draft patch is cheap, and a new check is dear. For each cluster, write:
@@ -45,7 +47,7 @@ Rank the clusters by size (largest first), then by cost: a fact with a draft pat
 Follow factory-reflect's [Landing a lesson branch](../factory-reflect/SKILL.md#landing-a-lesson-branch), from step 2, but start the branch with `lessons.mjs start --repo <repo> --rolling` instead of `--slug`. Every triage run, whole queue or one fact, adds to the repo's one `lesson/triage` branch. A candidate stays queued while its branch is undecided, so dated branches rebuilt the same commits again (one repo ended up with three). `start` prints what you need:
 
 - `reused` / `created`, and `sync`: `new`, `current`, `rebased` or `merged` (trunk was brought in), `dirty` (the worktree has uncommitted edits: don't add to it, finish or ask), or `conflict` (it stopped: say so in the explainer, don't add anything, and go to the review).
-- `commits`, `oldestDays` and `full`. **When `full` is true, add nothing**: go straight to the review gate on what's there, and say at the top of the explainer that the branch is full and needs a decision before more lessons join it.
+- `commits`, `oldestDays` and `full` (lessons only; `mapEntries` counts the map commits). **When `full` is true, add no lessons** (map entries still go on): go straight to the review gate on what's there, and say at the top of the explainer that the branch is full and needs a decision before more lessons join it.
 - `older`: dated lesson branches from earlier runs. Don't add to them. The explainer lists them, so the user can drop the ones whose commits `lesson/triage` holds.
 
 On a reused branch, read its `Candidates:` trailers (`git log <trunk>..<branch> --format=%B`). A cluster whose members are all listed is already built: leave it. Commit only clusters with candidates the branch doesn't hold; when a new candidate belongs to a cluster already on the branch, amend that commit's edit and its trailers, which raises its counts. Put "new since the last review" at the top of the explainer: the commits and amendments this run made. The branch's head moved, so note it again before the gate. A reused branch that was pushed gets the trunk merge as a new commit, so the push is a plain push. A repo-scope branch in a team repo lands through a PR (that section's `lessonLanding` rule). For each cluster:
@@ -53,6 +55,15 @@ On a reused branch, read its `Candidates:` trailers (`git log <trunk>..<branch> 
 - Make the edit in the worktree. Apply a member's draft patch when it still fits; otherwise write the edit (read `writing-for-agents` first). Prove a check: it must go **red** on the past mistake before it goes green.
 - A `harness` cluster edits the bundle's `harness/<claude-code|codex>.json` (hooks and permission rules only; a broad allow such as `Bash(*)` is refused). `factory harness` shows what it would change in the user's settings; prove a guard hook by running it on the past command. After the land, factory-core's trunk hook runs `factory harness --apply`, which merges it and keeps a backup; where that hook isn't installed, the status hook says to run it.
 - Commit it on its own. The subject is the edit. The body quotes the evidence grep hits, one line each, and ends with trailers: `Candidates:` (the member files' basenames) and `Fixed-when:` (the merged signal).
+
+### Map entries
+
+A map entry records code that a PR review already gated, and maps change with nearly every ticket, so it is built lighter than a lesson, on the same branch:
+
+- **Clear merged PRs first.** Run `clear-pending-prs.mjs --skills-dir <the bundle dir in the worktree> --apply` (from `factory-feature-map`). When it changes anything, commit that as its own map entry.
+- **One commit per entry**, no clustering. Apply its draft patch, or write the entry from it when the patch no longer fits. The proof is a clean `check-map.mjs --map <the map in the worktree> --cwd <the app repo's checkout>`, not a red-then-green check; an anchor that exists only on an open PR needs `pending_pr`. When the entry won't go clean, drop it (`done --outcome dropped`) and say why in the summary.
+- **The commit** is `docs(<map skill>): <the entry>`, with the trailers `Map-entry: <feature id>` and `Candidates:`. `Map-entry:` keeps it out of the branch's cap: `commits` and `full` count lessons only, and `start` reports the map commits as `mapEntries`. A full branch still takes map entries.
+- An entry whose draft edits anything besides the map's `features/` (SKILL.md, scripts, a README rule) is a lesson, not a map entry: cluster it with the rest.
 
 Then do the landing steps in order: the internal-data screen, the review gate (with the head noted), land, and push. A cluster dropped in review is reverted on the branch before landing: `git rebase --onto` past its commit.
 
@@ -63,6 +74,8 @@ When the source repo's `adapters.reviewUI` is `plannotator-review`, write an exp
 - **How many times it happened.** Lead with it, as stat cards, and say it in one sentence under them: "seen N times across M sessions in P projects". N and P are the live `occurrences` and `projects` for the cluster's fingerprints from `node <lessons.mjs> known` (members' fingerprints, summed; projects de-duplicated). M is `sessions` from the same `known` output: distinct session ids on the index entries, which `lessons.mjs record` stamps from the session's environment. Entries recorded before that carry none, so M can be smaller than N; say so rather than letting it read as one session. When `sessions` is 0 for a cluster, count the distinct transcripts in its members' `evidence` instead and label that as a lower bound. Add the cluster's member count, and, when a landed lesson on the same family came back `flat` or `worse` in the last report, that this is a repeat, with its commit.
 - **What it changes.** The current text or code next to the commit's diff, for each file the commit touches.
 - **Why.** The evidence lines from the commit body, and the `fixedWhen` signal that will show whether it worked.
+
+Map entries go last, in one **Map updates** section marked low-attention: a row per entry with its feature id, its `pending_pr`, and the checker result, so the user can approve them together.
 
 Open the explainer without a gate, in the background (`plannotator annotate <file>`), then open the review gate. Annotations on either one are feedback.
 

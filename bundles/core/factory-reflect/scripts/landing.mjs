@@ -82,10 +82,16 @@ function syncTrunk(wt, trunk) {
   git(wt, ...(pushed ? ['merge', '--abort'] : ['rebase', '--abort']));
   return 'conflict';
 }
+// A feature-map entry (a commit with a `Map-entry:` trailer) documents code a PR review already
+// gated, and maps change with nearly every ticket, so it counts toward neither cap: the caps bound
+// the lessons waiting on a decision, and map entries alone would otherwise fill the branch in days.
 function rollingSize(root, trunk, branch) {
-  const stamps = git(root, 'log', '--format=%ct', `${trunk}..${branch}`).out.split('\n').filter(Boolean).map(Number);
-  const commits = stamps.length, oldestDays = commits ? Math.floor((Date.now() / 1000 - Math.min(...stamps)) / 86400) : 0;
-  return { commits, oldestDays, full: commits >= ROLLING_MAX_COMMITS || oldestDays >= ROLLING_MAX_DAYS };
+  const rows = git(root, 'log', '--format=%ct%x09%(trailers:key=Map-entry,valueonly,separator=%x2C)', `${trunk}..${branch}`).out
+    .split('\n').filter(Boolean).map((l) => l.split('\t'));
+  const stamps = rows.filter(([, map]) => !map?.trim()).map(([t]) => Number(t));
+  const commits = stamps.length, mapEntries = rows.length - commits;
+  const oldestDays = commits ? Math.floor((Date.now() / 1000 - Math.min(...stamps)) / 86400) : 0;
+  return { commits, mapEntries, oldestDays, full: commits >= ROLLING_MAX_COMMITS || oldestDays >= ROLLING_MAX_DAYS };
 }
 
 export function start({ repo, slug, date, rolling = false, trunk: trunkArg, home }) {

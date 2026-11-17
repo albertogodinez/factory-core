@@ -114,6 +114,10 @@ function context() {
 }
 
 // The main checkout of a repo or worktree, so a lesson recorded in one worktree shows in the others.
+// A feature map is a skill whose directory holds features/README.md: in a bundle source, or in a
+// repo's own .agents/skills. Triage handles its candidates as map entries, not lessons.
+const isMapSkill = (skill, dirs) => !!skill && dirs.some((d) => d && existsSync(join(d, skill, 'features', 'README.md')));
+
 function mainOf(dir) {
   if (!dir) return null;
   const r = spawnSync('git', ['-C', dir, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
@@ -243,7 +247,8 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
       const repo = own || sourceRepo(sc, sources);
       const agent = pickAgent(machine, { repoAdapters: repo && readJson(join(repo, '.agents/factory-metadata', 'project.json'), {}).adapters, env });
       return { scope: sc, repo, queued: items.length, oldestDays: items.length ? Math.max(...items.map((c) => c.ageDays)) : null,
-        candidates: items.map(({ file, kind, skill, summary, lane, ageDays }) => ({ file, kind, skill, summary, lane, ageDays })),
+        candidates: items.map(({ file, kind, skill, summary, lane, ageDays }) => ({ file, kind, skill, summary, lane, ageDays,
+          ...(isMapSkill(skill, [...Object.values(sources), repo && join(repo, '.agents/skills')]) ? { map: true } : {}) })),
         ...(repo && items.length ? { start: `cd ${repo} && ${agent.configured ? agent.bin : '<your agent CLI>'}`, prompt: triagePrompt(repo, '', sources, agent) } : {}) };
     });
     const branches = open({ repos: Object.values(sources) }).map(({ repo, branch, commits, worktree }) => ({ repo, branch, commits: commits.length, worktree }));
