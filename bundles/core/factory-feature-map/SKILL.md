@@ -80,7 +80,7 @@ node .agents/skills/factory-feature-map/scripts/clear-pending-prs.mjs --pr <PR U
 
 Removes `pending_pr` from entries whose PR merged, and flags one whose PR closed unmerged. It reads PR state with `gh`, so it never runs as a pre-commit check. Without `--apply` it reports only. Commit the change.
 
-When the map is installed from a bundle, edit it in the bundle's source, not in the installed copy (`factory update` refuses to overwrite an edited one): pass `--skills-dir <bundle dir>`, commit there, then run `factory update` in the repos that install it.
+When the map is installed from a bundle, the change belongs in the bundle's source, not the installed copy (`factory update` refuses to overwrite an edited one). From a session in the source repo, pass `--skills-dir <bundle dir>`, commit there, then run `factory update` in the repos that install it. From any other repo, hand it over as a `fact` candidate with a draft patch, as in step 2 of [Add or update one feature](#add-or-update-one-feature).
 
 ## Design authority
 
@@ -99,7 +99,7 @@ Follow [references/create.md](references/create.md). Short version: interview th
 ## Add or update one feature
 
 1. Run `inventory.mjs`. Pick the ids the feature `covers`.
-2. Write `features/<id>.md` per the contract, and link it from `features/README.md`. **Write it where the map's source is.** A map listed in `.agents/factory-metadata/skills-lock.json` came from a bundle: `factory-reflect`'s `lessons.mjs target --skill <map>` names the source repo, so write the entry on a lesson branch there and run the checker with `--skills-dir <bundle dir>`. A map missing from the lock is this repo's own, so write it here.
+2. Write `features/<id>.md` per the contract, and link it from `features/README.md`. **Write it where the map's source is.** A map missing from `.agents/factory-metadata/skills-lock.json` is this repo's own, so write it here. A map listed there came from a bundle, and only a session in that bundle's source repo writes to it (`factory-reflect`'s `lessons.mjs target --skill <map>` names the repo). From any other repo, hand the entry over as a candidate: copy the map's source directory to your scratch directory, write the entry in the copy, run the checker with `--map <copy>`, save `git diff --no-index <source dir> <copy>` to a patch file, and queue it with `lessons.mjs candidate --kind fact --scope org|core --skill <map> --draft <patch>` (`lessons.mjs classify --file <entry>` picks the scope), then run the launch it prints. Triage in the source repo commits it on that repo's one `lesson/triage` branch. Never create a branch or worktree in the source repo yourself: `lessons.mjs start` is the only thing that registers one, so a hand-made branch is never named at session start and becomes a second review beside `lesson/triage`.
 3. Run the checker until it is clean. An entry written for an open PR, whose anchors exist only on its branch, sets `pending_pr` so it can be committed now.
 4. Drive it live once, using the map's own SKILL.md, and set `last_verified` to today. If you couldn't drive it, leave `last_verified` alone and say why.
 
