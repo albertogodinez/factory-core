@@ -145,11 +145,13 @@ const xml = text => String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;'
 const systemdQuote = (text, expandDollars = true) => '"' + String(text).replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%').replaceAll('$', expandDollars ? '$$' : '$') + '"';
 // The scheduled jobs factory installs. Each is one user-level launchd agent, systemd timer or Task
 // Scheduler task that runs `factory <args>`; its marker proves a file is ours before it's replaced.
+// launchd gets clock times (`hours`), not StartInterval: an interval's clock stops while a Mac sleeps, so a
+// "daily" job on a laptop ran every few days. A clock time missed asleep runs on wake, like Persistent=true.
 export const JOBS = {
   cleanup: { marker: MARKER, label: 'local.factory.cleanup', unit: 'factory-cleanup', task: 'FactoryCleanup', log: 'cleanup-scheduler',
-    wrapper: 'cleanup-scheduled.cmd', description: 'Factory cleanup inventory', args: ['cleanup', '--all', '--scheduled'], seconds: 86400, calendar: 'daily', windows: ['/SC', 'DAILY', '/ST', '10:00'] },
+    wrapper: 'cleanup-scheduled.cmd', description: 'Factory cleanup inventory', args: ['cleanup', '--all', '--scheduled'], hours: [10], calendar: 'daily', windows: ['/SC', 'DAILY', '/ST', '10:00'] },
   triage: { marker: 'factory triage schedule', label: 'local.factory.triage', unit: 'factory-triage', task: 'FactoryTriage', log: 'triage-scheduler',
-    wrapper: 'triage-scheduled.cmd', description: 'Factory lesson triage when due', args: ['triage', '--due', '--scheduled'], seconds: 14400, calendar: '*-*-* 00/4:00:00', windows: ['/SC', 'HOURLY', '/MO', '4'],
+    wrapper: 'triage-scheduled.cmd', description: 'Factory lesson triage when due', args: ['triage', '--due', '--scheduled'], hours: [0, 4, 8, 12, 16, 20], calendar: '*-*-* 00/4:00:00', windows: ['/SC', 'HOURLY', '/MO', '4'],
     // It starts the launcher and agent CLIs (hc, claude, codex), which a scheduler's bare PATH can't find.
     keepPath: true },
 };
@@ -159,7 +161,7 @@ export function scheduleDefinitions({ platform = process.platform, userHome = ho
   const argv = [node, cli, ...job.args];
   if (platform === 'darwin') {
     const path = join(userHome, 'Library', 'LaunchAgents', `${job.label}.plist`);
-    const contents = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- ${job.marker} -->\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>${job.label}</string>\n<key>ProgramArguments</key><array>${argv.map(a => `<string>${xml(a)}</string>`).join('')}</array>\n<key>EnvironmentVariables</key><dict><key>FACTORY_HOME</key><string>${xml(factoryHome)}</string>${keepPath ? `<key>PATH</key><string>${xml(envPath)}</string>` : ''}</dict>\n<key>StartInterval</key><integer>${job.seconds}</integer>\n<key>RunAtLoad</key><true/>\n<key>StandardOutPath</key><string>${xml(join(factoryHome, `${job.log}.log`))}</string>\n<key>StandardErrorPath</key><string>${xml(join(factoryHome, `${job.log}-error.log`))}</string>\n</dict></plist>\n`;
+    const contents = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- ${job.marker} -->\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>${job.label}</string>\n<key>ProgramArguments</key><array>${argv.map(a => `<string>${xml(a)}</string>`).join('')}</array>\n<key>EnvironmentVariables</key><dict><key>FACTORY_HOME</key><string>${xml(factoryHome)}</string>${keepPath ? `<key>PATH</key><string>${xml(envPath)}</string>` : ''}</dict>\n<key>StartCalendarInterval</key><array>${job.hours.map(h => `<dict><key>Hour</key><integer>${h}</integer><key>Minute</key><integer>0</integer></dict>`).join('')}</array>\n<key>RunAtLoad</key><true/>\n<key>StandardOutPath</key><string>${xml(join(factoryHome, `${job.log}.log`))}</string>\n<key>StandardErrorPath</key><string>${xml(join(factoryHome, `${job.log}-error.log`))}</string>\n</dict></plist>\n`;
     return { files: [{ path, contents }], commands: [{ bin: 'launchctl', args: ['bootout', `gui/${uid}`, path], allowFailure: true }, { bin: 'launchctl', args: ['bootstrap', `gui/${uid}`, path] }] };
   }
   if (platform === 'linux') {

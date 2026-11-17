@@ -64,7 +64,12 @@ test('pre-existing coordinator lock prevents concurrent mutation and is retained
 test('schedule definitions use one daily report-only job and escape machine paths', () => {
   const common = { userHome: '/test/user home', factoryHome: '/test/factory home', node: '/test/node binary', cli: '/test/factory source/bin/factory.mjs', uid: 42 };
   const mac = scheduleDefinitions({ ...common, platform: 'darwin' });
-  assert.equal(mac.files.length, 1); assert.match(mac.files[0].contents, /StartInterval/); assert.match(mac.files[0].contents, /--scheduled/);
+  assert.equal(mac.files.length, 1); assert.match(mac.files[0].contents, /--scheduled/);
+  // A clock time, not StartInterval, whose clock stops while the Mac sleeps.
+  assert.ok(!mac.files[0].contents.includes('StartInterval<'), 'no sleep-paused interval');
+  assert.match(mac.files[0].contents, /<key>StartCalendarInterval<\/key><array><dict><key>Hour<\/key><integer>10<\/integer><key>Minute<\/key><integer>0<\/integer><\/dict><\/array>/);
+  const triage = scheduleDefinitions({ ...common, platform: 'darwin', job: JOBS.triage }).files[0].contents;
+  assert.equal(triage.match(/<key>Hour<\/key>/g).length, 6, 'triage every 4 hours by the clock');
   assert.ok(!mac.files[0].contents.includes('--apply'));
   const linux = scheduleDefinitions({ ...common, platform: 'linux' });
   assert.equal(linux.files.length, 2); assert.match(linux.files[0].contents, /Persistent=true/);
@@ -79,7 +84,7 @@ test('the triage job gets its own label, unit and task, every 4 hours, and never
   assert.match(mac.files[0].contents, /<key>PATH<\/key><string>\/test\/bin:\/usr\/bin<\/string>/, 'the launcher and agent CLIs are found under a scheduler');
   assert.match(mac.files[0].path, /local\.factory\.triage\.plist$/);
   assert.match(mac.files[0].contents, /<string>triage<\/string><string>--due<\/string><string>--scheduled<\/string>/);
-  assert.match(mac.files[0].contents, /<integer>14400<\/integer>/);
+  assert.match(mac.files[0].contents, /<key>Hour<\/key><integer>4<\/integer>/);
   assert.match(mac.files[0].contents, /factory triage schedule/);
   const linux = scheduleDefinitions({ ...common, platform: 'linux' });
   assert.deepEqual(linux.files.map(f => f.path.split('/').pop()), ['factory-triage.timer', 'factory-triage.service']);
