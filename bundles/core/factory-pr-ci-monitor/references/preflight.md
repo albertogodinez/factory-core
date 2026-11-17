@@ -12,7 +12,7 @@ node .agents/skills/factory-context/scripts/resolve.mjs --field project.packageM
 
 - Run `commands.build`, then `commands.test`. A field that isn't present means "not configured": skip that step and say so in the report.
 - Don't assume a package manager or test runner. Use only what the resolver reports. If it reports neither command, read the repo's README or CI config for the commands CI runs, and say that's what you did.
-- If the repo pins a runtime version (`.nvmrc`, `.tool-versions`, a `rust-toolchain` file, CI config), switch to it before running anything, and check the active version matches. A failed switch that is hidden by redirecting output has produced a "passing" run on the wrong version.
+- If the repo pins a runtime version (`.nvmrc`, `.tool-versions`, a `rust-toolchain` file, CI config), switch to it before running anything, and check the active version matches. A failed switch that is hidden by redirecting output has produced a "passing" run on the wrong version. Make the check fail loudly: `test "$(node -v)" = "v$(cat .nvmrc)" || { echo wrong node; exit 1; }` (a major-only `.nvmrc` needs a prefix match), and run it in the same command as the commit, since the pre-commit hook runs the suite under whatever `node` that shell has (`npm: command not found` came from a shell that had not switched). Read `git commit`'s own exit status, never a pipe's: `git commit … | tail` exits 0 when the commit failed.
 - For a monorepo, run the build and test commands for the affected packages only, using the repo's own filter convention.
 
 ## 2. Check for a stale install after a rebase
