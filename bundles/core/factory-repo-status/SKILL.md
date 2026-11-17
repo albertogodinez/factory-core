@@ -23,6 +23,7 @@ It only reads. It fetches only with `--fetch`, so without it the "behind origin"
 |---|---|
 | Behind origin | commits on `origin/<trunk>` that local `<trunk>` lacks. Why it matters: a worktree cut from a stale trunk starts from old code. |
 | Checked out, Dirty | the branch in the main checkout and its count of changed files |
+| worktrees header, `cut new ones at …` | the folder layout the repo's existing worktrees follow (grouped by type, or flat). Cut a new worktree there, before `git worktree add`, so it is not moved afterwards. |
 | worktree `prunable` | git says the path or branch is gone; `git worktree prune` clears it |
 | `merged` | the tip is already an ancestor of `origin/<trunk>` |
 | `gone` | its upstream was deleted on the remote, which usually means the PR merged or closed |

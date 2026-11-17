@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeFixtures, makeRepo, write, git } from '../../../../tests/fixtures/make.mjs';
-import { parseWorktrees } from './status.mjs';
+import { parseWorktrees, worktreeLayout } from './status.mjs';
 
 const STATUS = join(dirname(fileURLToPath(import.meta.url)), 'status.mjs');
 const run = (f, cwd, ...args) => {
@@ -59,4 +59,11 @@ test('a missing neighbor is reported, not fatal', () => {
 test('parseWorktrees reads the porcelain format', () => {
   const w = parseWorktrees('worktree /r\nHEAD abc\nbranch refs/heads/main\n\nworktree /r/.worktrees/x\nHEAD def\ndetached\nprunable gitdir file points to non-existent location\n');
   assert.deepEqual(w.map((x) => [x.path, x.branch, x.prunable]), [['/r', 'main', false], ['/r/.worktrees/x', null, true]]);
+});
+
+test('worktreeLayout names the folder convention existing worktrees follow', () => {
+  assert.equal(worktreeLayout([]), null);
+  assert.equal(worktreeLayout(['../sibling-x']), null);
+  assert.equal(worktreeLayout(['.worktrees/spike']), '.worktrees/<slug>');
+  assert.equal(worktreeLayout(['.worktrees/research/a', '.worktrees/feat/b', '.worktrees/spike']), '.worktrees/<group>/<slug> (groups: feat, research)');
 });

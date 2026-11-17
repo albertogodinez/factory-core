@@ -60,12 +60,21 @@ export function inspect(name, root, trunk, { fetch = false } = {}) {
     const status = w.prunable ? 'prunable' : !w.branch ? 'detached' : classify(w.branch, w.head);
     return { path: (rel.startsWith('..') ? w.path : rel).split(sep).join('/'), branch: w.branch, status };
   });
+  r.worktreeLayout = worktreeLayout(r.worktrees.map((w) => w.path));
   r.branches = (git(root, 'for-each-ref', '--format=%(refname:short)\t%(objectname)', 'refs/heads') || '').split('\n').filter(Boolean)
     .map((l) => l.split('\t')).filter(([b]) => b !== r.trunk)
     .map(([b, tip]) => ({ branch: b, status: classify(b, tip), worktree: byBranch.has(b) }))
     .filter((b) => b.status !== 'active');
   r.status = r.behind > 0 ? 'behind' : 'ok';
   return r;
+}
+
+// The folder convention existing worktrees follow, so a new one is cut where the repo keeps them.
+export function worktreeLayout(paths) {
+  const inside = paths.filter((p) => p.startsWith('.worktrees/')).map((p) => p.split('/').slice(1));
+  if (!inside.length) return null;
+  const groups = [...new Set(inside.filter((s) => s.length > 1).map((s) => s[0]))].sort();
+  return groups.length ? `.worktrees/<group>/<slug> (groups: ${groups.join(', ')})` : '.worktrees/<slug>';
 }
 
 export function targets(cwd, { neighbors = true } = {}) {
@@ -86,7 +95,7 @@ function render(reports, mode) {
     out.push(row([r.name, r.trunk ?? '-', r.behind ?? '?', r.current ?? '-', r.dirty ?? '-', status + (r.note ? ` (${r.note})` : '')]));
   }
   for (const r of reports.filter((x) => x.worktrees?.length)) {
-    out.push('', `worktrees in ${r.name}:`);
+    out.push('', `worktrees in ${r.name}:` + (r.worktreeLayout ? `  (cut new ones at ${r.worktreeLayout})` : ''));
     for (const w of r.worktrees) out.push(`  ${w.status.padEnd(9)} ${w.path}  (${w.branch ?? 'detached'})`);
   }
   for (const r of reports.filter((x) => x.branches?.length)) {

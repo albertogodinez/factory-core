@@ -38,6 +38,7 @@ A sibling checkout or worktree of a registered repo resolves to that repo, match
  "stateRoot":"","writeAllowed":true}
 ```
 
+- To place a new worktree, run `factory-repo-status` first: its worktrees header prints the layout the repo already uses (`.worktrees/<group>/<slug>` or flat).
 - Empty and null fields are left out. A comment marker's banner text is elided (`--full` prints it). Read a missing field as "not configured".
 - A neighbor's `root` is left out when it is `<project.root>/../<name>`, and its `access` when it is `read`.
 - `stateRoot` is where a skill writes scratch state (recordings, handoffs, lessons). It also holds lessons, handoffs and preserved evidence; never wipe it wholesale. `factory-teardown` registers per-run intermediates and resources for scoped cleanup. It's per worktree in project/zero-config mode; legacy workspace mode shares the hub's tmp directory. The resolver doesn't create it, so `mkdir -p` it before writing.
