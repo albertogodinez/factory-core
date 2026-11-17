@@ -1,6 +1,6 @@
 ---
 name: factory-pr-ci-monitor
-description: Watch a GitHub PR's CI checks until they finish, and triage review comments from AI reviewers (validate each finding, fix the valid ones, reply in-thread). Use after opening a PR or when asked to "monitor this PR", "watch CI", "address the bot comments", "wait for checks then mark ready", or when given a PR number or URL with a monitoring request.
+description: Watch a GitHub PR's CI checks until they finish, and triage review comments from AI reviewers (validate each finding, fix the valid ones, reply in-thread). Use after opening a PR or when asked to "monitor this PR", "watch CI", "address the bot comments", "I left comments", "respond to my comments", "wait for checks then mark ready", or when given a PR number or URL with a monitoring request.
 user_invocable: true
 ---
 
@@ -127,6 +127,8 @@ node .agents/skills/factory-pr-ci-monitor/scripts/open-findings.mjs --pr <N> --r
 
 It reads every page of inline comments, reviews and top-level comments and prints the findings with no reply (`open`), other humans' comments (`others`) and bot review bodies with no thread (`bodyOnly`). To read a comment's full body, `gh api repos/<owner>/<repo>/pulls/comments/<id>`.
 
+Never find unanswered comments with a time cutoff of your own (`created_at > …`): a clock guess hid nine comments inside one review. `open-findings.mjs` lists every comment with no reply, pending reviews included. When the session's account differs from the PR author's, pass `--self <login>` for the account whose comments need replies.
+
 An AI reviewer is one where `user.type == "Bot"`. Prefer that over a login list, so a new reviewer bot is handled without a code change. `bodyOnly` holds findings that never became inline comments (4.4 covers replying to them). The session account's own unreplied comments are in `open` too: each gets a reply or a stated reason for none.
 
 Then, per finding:
@@ -134,7 +136,8 @@ Then, per finding:
 1. **Skip handled ones.** A thread with a reply from the PR author is done: skip any comment whose `id` is another's `in_reply_to_id`. Track by `id`, never `commit_id`, since GitHub re-anchors old comments to the newest SHA. Answer the first of two identical findings, and point the duplicate at it in one line.
 2. **Validate against the tree first.** A finding is a hypothesis, not a work order. Outcomes: valid (fix, then reply with what changed and how it was checked), invalid (change nothing; reply with the evidence that refutes it), unclear (surface to the user with what you checked; don't guess).
 3. **Fix, verify, then reply, in that order.** Apply the fix, run `project.commands.test` and any contract or source-assertion suites the change could invalidate, add or extend a test that locks the invariant, then **ask the user before committing and pushing**. Reply once the fix is pushed, so the reply references a real commit.
-4. **Reply in-thread** on the finding's comment id, through `factory-pr-comment`:
+4. **Acknowledge the owner's comments in-thread the same tick.** A comment from the session account is a request, so reply to it in its own thread before the fix starts ("taking this: <plan>"). After the push, reply again with the commit SHA. An owner who sees no reply has to ask whether it was read.
+5. **Reply in-thread** on the finding's comment id, through `factory-pr-comment`:
 
    ```bash
    node .agents/skills/factory-pr-comment/scripts/post-comment.mjs --pr <N> \
@@ -142,7 +145,7 @@ Then, per finding:
    ```
 
    Write the body to a file: replies hold backticks and quotes that break inline shell strings. State the commit SHA, what changed, how it was verified (real numbers, not "tested"), and, when true, that the finding was broader than reported or that this PR introduced the bug. Credit the catch. Never resolve threads; that is the human reviewer's call.
-5. **Re-fetch right before replying.** Findings land asynchronously. Re-run the fetch, diff against the ids you've handled, and pick up anything new.
+6. **Re-fetch right before replying.** Findings land asynchronously. Re-run the fetch, diff against the ids you've handled, and pick up anything new.
 
 Never answer a finding with a top-level PR comment (`issues/<N>/comments`): it is detached from the code and doesn't mark the thread answered. Top-level is only for a body-only review finding with no thread (name the review it answers and say why it is top-level), a re-review request, or a final summary. Post it with `post-comment.mjs --kind toplevel --body-file <file>`, so it carries the marker and is not left unposted. Before falling back, confirm no thread exists by re-scanning for a bot comment on the same file and line.
 
