@@ -1,6 +1,6 @@
 ---
 name: factory-dev-slot
-description: Give each worktree its own local dev server (a dev slot) so parallel agents can validate the same app at once, as a per-worktree container published on 127.0.0.1:<port> with no app changes. Use before starting a dev server or validating in a browser when another agent or worktree may be running one, when the app's fixed dev port is taken (EADDRINUSE), when you would stop and restart one server to compare branches, or when stopping a dev server you started. Triggers on "port in use", "another worktree has the dev server", "run agents in parallel", "start a dev slot", "stop the dev server".
+description: Give each worktree its own local dev server (a dev slot), a per-worktree container published on 127.0.0.1:<port> with no app changes, so parallel agents can validate the same app at once. Use before starting a dev server or validating in a browser when another agent may be running one, when the fixed dev port is taken (EADDRINUSE), when tests exit 137 (OOM) with a server up, or when stopping a dev server you started. Triggers on "port in use", "run agents in parallel", "start a dev slot", "stop the dev server".
 ---
 
 # Dev slots
@@ -128,4 +128,5 @@ Stop that server by its PID, proven yours: `lsof -tiTCP:<port> -sTCP:LISTEN`, th
 - **Ports bind `127.0.0.1` only, and no container gets the Docker socket.** Keep both when adding an app.
 - **Sign-in happens on the host, never in a slot.** A container serves the app and nothing else.
 - **Preflight before the first commit in a worktree.** `node .agents/skills/factory-dev-slot/scripts/preflight.mjs [--after-commit <sha-before>]` exits 1 when `node -v` misses `.nvmrc`, `node_modules` is a symlink, or HEAD did not move: a hook that died on the wrong Node looks like a finished commit. The session-start status hook (`factory status --hook`) runs the same Node-vs-`.nvmrc` comparison, so a machine default older than `.nvmrc` is named before any shell command runs, not only when a dev slot starts.
+- **Exit 137 while a slot is up is the container's memory, not the test.** Run the test runner (vitest, jest) on the host, outside the slot, and confirm with `docker inspect <container> --format '{{.State.OOMKilled}}'`.
 - **Secrets stay out of argv and logs.** Profiles pass secrets through the child env only.
