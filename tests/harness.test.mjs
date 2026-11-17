@@ -2,7 +2,7 @@
 // entry is taken back out, the user's own entries are never touched, and a broad allow is refused.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync, readFileSync, readdirSync, writeFileSync, realpathSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, readFileSync, readdirSync, writeFileSync, realpathSync, cpSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -121,4 +121,41 @@ test('the shipped PR-body guard is a Bash PreToolUse hook that runs the installe
   const hook = frag.hooks.PreToolUse.flatMap((g) => g.matcher === 'Bash' ? g.hooks : []).find((h) => /guard-pr-edit\.mjs/.test(h.command));
   assert.ok(hook, 'a Bash hook runs guard-pr-edit.mjs');
   assert.match(hook.command, /\.agents\/skills\/factory-pr-create\/scripts\/guard-pr-edit\.mjs/);
+});
+
+// The hooks are global: they run in every session, from any directory, whether or not core is installed there.
+const shippedHooks = () => JSON.parse(readFileSync(join(ROOT, 'bundles', 'core', 'harness', 'claude-code.json'), 'utf8')).hooks.PreToolUse.flatMap((g) => g.hooks);
+const runHook = (command, { cwd, projectDir, tool = 'ls' }) => {
+  const env = { ...process.env };
+  delete env.CLAUDE_PROJECT_DIR;
+  if (projectDir) env.CLAUDE_PROJECT_DIR = projectDir;
+  return spawnSync('sh', ['-c', command], { cwd, env, input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: tool } }), encoding: 'utf8' });
+};
+
+test('every shipped hook passes quietly in a directory where nothing is installed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'harness-empty-'));
+  try {
+    for (const h of shippedHooks()) {
+      for (const opts of [{ cwd: dir }, { cwd: tmpdir(), projectDir: dir }]) {
+        const r = runHook(h.command, { ...opts, tool: 'gh pr edit 1 --body x' });
+        assert.equal(r.status, 0, `${h.command}\n${r.stderr}`);
+        assert.equal(r.stderr, '', h.command);
+      }
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the PR-body guard finds the installed copy from the project root or a subdirectory, and the source copy in factory-core', () => {
+  const hook = shippedHooks().find((h) => /guard-pr-edit\.mjs/.test(h.command));
+  const repo = mkdtempSync(join(tmpdir(), 'harness-installed-'));
+  try {
+    cpSync(join(ROOT, 'bundles', 'core', 'factory-pr-create', 'scripts'), join(repo, '.agents', 'skills', 'factory-pr-create', 'scripts'), { recursive: true });
+    mkdirSync(join(repo, 'src'));
+    for (const opts of [{ cwd: repo }, { cwd: join(repo, 'src'), projectDir: repo }, { cwd: ROOT }]) {
+      const r = runHook(hook.command, { ...opts, tool: 'gh pr edit 1 --body x' });
+      assert.equal(r.status, 2, JSON.stringify(opts));
+      assert.match(r.stderr, /unchecked string/);
+      assert.equal(runHook(hook.command, { ...opts, tool: 'ls' }).status, 0);
+    }
+  } finally { rmSync(repo, { recursive: true, force: true }); }
 });

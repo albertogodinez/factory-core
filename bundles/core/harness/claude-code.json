@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "N=$(command -v node || ls -d \"$HOME\"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1); [ -n \"$N\" ] || exit 0; \"$N\" .agents/skills/factory-pr-create/scripts/guard-pr-edit.mjs"
+            "command": "N=$(command -v node || ls -d \"$HOME\"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1); [ -n \"$N\" ] || exit 0; D=\"${CLAUDE_PROJECT_DIR:-.}\"; for G in \"$D/.agents/skills/factory-pr-create/scripts/guard-pr-edit.mjs\" \"$D/bundles/core/factory-pr-create/scripts/guard-pr-edit.mjs\"; do [ -f \"$G\" ] && exec \"$N\" \"$G\"; done; exit 0"
           }
         ]
       }
