@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync, lstatSync, readlinkSync, appendFileSync, rmSync, readdirSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync, lstatSync, readlinkSync, appendFileSync, rmSync, readdirSync, chmodSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tempRoot, makeRepo, write, git } from './fixtures/make.mjs';
@@ -723,4 +723,28 @@ test('the status hook says when the shell\'s Node misses .nvmrc', async () => {
   assert.deepEqual(nodeLines(dir, 'v24.0.0'), []);
   write(join(dir, '.nvmrc'), 'lts/*\n');
   assert.deepEqual(nodeLines(dir, 'v20.19.0'), [], 'an alias is not a version it can compare');
+});
+
+test('session start refreshes PR states in the background only where linked worktrees and the engine exist, twice a day at most', async () => {
+  const { launchPrRefresh, PR_REFRESH_MS } = await import('../bin/factory.mjs');
+  const t = tempRoot('af-pr-refresh-'), before = process.env.FACTORY_NO_PR_REFRESH;
+  delete process.env.FACTORY_NO_PR_REFRESH;
+  try {
+    const home = join(t.root, 'home'), repo = realpathSync(makeRepo(join(t.root, 'repo'))), ran = join(t.root, 'ran');
+    const now = Date.now();
+    assert.equal(launchPrRefresh(repo, home, now), false, 'no linked worktree');
+    git(repo, 'worktree', 'add', '-q', join(t.root, 'wt'), '-b', 'wt');
+    assert.equal(launchPrRefresh(repo, home, now), false, 'no engine installed');
+    write(join(repo, '.agents/skills/factory-teardown/scripts/lifecycle.mjs'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(ran)}, process.argv[2] + ' ' + process.cwd());`);
+    assert.equal(launchPrRefresh(repo, home, now), true);
+    for (let i = 0; i < 100 && !existsSync(ran); i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(readFileSync(ran, 'utf8'), `refresh-prs ${repo}`);
+    assert.equal(launchPrRefresh(repo, home, now + 60000), false, 'refreshed recently');
+    assert.equal(launchPrRefresh(repo, home, now + PR_REFRESH_MS + 1), true, 'due again after 12 hours');
+    process.env.FACTORY_NO_PR_REFRESH = '1';
+    assert.equal(launchPrRefresh(repo, home, now + 3 * PR_REFRESH_MS), false, 'tests and opt-outs never launch');
+  } finally {
+    if (before === undefined) delete process.env.FACTORY_NO_PR_REFRESH; else process.env.FACTORY_NO_PR_REFRESH = before;
+    t.cleanup();
+  }
 });

@@ -47,13 +47,13 @@ Existing unregistered files are not deletion candidates. Preserve legacy `stateR
 Worktrees pile up: each one is a full checkout plus its own `node_modules` or build output. `worktrees` lists the linked ones; `retire` removes one. Both are local git only.
 
 ```bash
-gh pr list --state all --limit 300 --json headRefName,state,number > "$TMP/prs.json"   # the forge step is yours; scripts never fetch
-node "$L" worktrees --pr-states "$TMP/prs.json" --sizes   # saves the states, then lists candidate/kept with a reason
+node "$L" refresh-prs                                     # asks gh for every PR's state and saves it
+node "$L" worktrees --sizes                               # lists candidate/kept with a reason; local git only
 node "$L" retire --worktree <path>                        # re-checks; preview
 node "$L" retire --worktree <path> --apply                # after the user agrees
 ```
 
-A worktree is **finished** when its branch's PR is merged or closed, its remote branch is gone, or it has no commits beyond the base branch and has been idle `--idle-days` (default 7). Squash merges look unmerged to git, so refresh PR states first; without them only the last two signals apply. A finished worktree is still **kept** when it has tracked changes or untracked files (other than the skill symlinks factory links in), is locked, is the current one, or has a teardown run that is active or holds resources there. A detached HEAD with commits on no branch is kept: removing it would lose them.
+A worktree is **finished** when its branch's PR is merged or closed, its remote branch is gone, or it has no commits beyond the base branch and has been idle `--idle-days` (default 7). Squash merges look unmerged to git, so the PR states matter: session start refreshes them in the background (at most every 12 hours, only in repos with linked worktrees), and `refresh-prs` does it now. Without gh, save `gh pr list --state all --json headRefName,state,number` output elsewhere and pass it with `worktrees --pr-states <file>`; with no states only the last two signals apply. A finished worktree is still **kept** when it has tracked changes or untracked files (other than the skill symlinks factory links in), is locked, is the current one, or has a teardown run that is active or holds resources there. A detached HEAD with commits on no branch is kept: removing it would lose them.
 
 `retire --apply` removes those symlinks, then runs `git worktree remove` without `--force`, so git's own clean check still applies; ignored files go with it and the branch stays. Show the user the candidates and sizes and ask before retiring; never retire a kept one by cleaning it first unless they ask. For uncommitted work they want gone, save `git diff` as a patch outside the worktree first.
 

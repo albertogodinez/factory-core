@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, symlinkSync, writeFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, symlinkSync, writeFileSync, realpathSync, readFileSync, chmodSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { inventory, retire, savePrStates } from './worktrees.mjs';
+import { inventory, retire, savePrStates, refreshPrStates } from './worktrees.mjs';
 import { saveState, readState, listRuns, beginRun } from './lifecycle.mjs';
 import { tempRoot, makeRepo, git, write } from '../../../../tests/fixtures/make.mjs';
 
@@ -106,5 +106,21 @@ test('PR states must be gh pr list JSON; the CLI saves them and reports when the
     assert.equal(cli.status, 0, cli.stderr);
     assert.ok(JSON.parse(cli.stdout).prStatesCheckedAt > 0);
     assert.deepEqual(readState(f.state, 'pr-states.json').prs, [{ headRefName: 'a', state: 'MERGED', number: 1 }]);
+  } finally { f.cleanup(); }
+});
+
+test('refresh-prs asks gh for every PR state and saves it; a gh failure saves nothing', { skip: process.platform === 'win32' }, () => {
+  const f = fixture(); try {
+    const gh = join(f.root, 'gh'), args = join(f.root, 'args');
+    write(gh, `#!/bin/sh\necho "$@" > ${JSON.stringify(args)}\necho '[{"headRefName":"a","state":"MERGED","number":3}]'\n`); chmodSync(gh, 0o755);
+    const v = refreshPrStates({ root: f.repo, stateRoot: f.state, store, gh });
+    assert.equal(readFileSync(args, 'utf8').trim(), 'pr list --state all --limit 300 --json headRefName,state,number');
+    assert.deepEqual(readState(f.state, 'pr-states.json'), v);
+    const broken = join(f.root, 'gh-broken'); write(broken, '#!/bin/sh\necho "not logged in" >&2\nexit 4\n'); chmodSync(broken, 0o755);
+    assert.throws(() => refreshPrStates({ root: f.repo, stateRoot: f.state, store, gh: broken }), /gh pr list failed: not logged in/);
+    assert.equal(readState(f.state, 'pr-states.json').checkedAt, v.checkedAt, 'the last good states stay');
+    const cli = spawnSync(process.execPath, [LIFECYCLE, 'refresh-prs', '--state-root', f.state, '--cwd', f.repo], { cwd: f.repo, encoding: 'utf8', env: { ...process.env, FACTORY_GH: gh } });
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.equal(JSON.parse(cli.stdout).prs, 1);
   } finally { f.cleanup(); }
 });

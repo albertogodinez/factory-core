@@ -359,15 +359,16 @@ export async function main(argv) {
     ctx = JSON.parse(resolver.stdout);
   }
   const opts = { ...o, stateRoot: boundRoot || ctx.stateRoot, root: ctx?.project.root || cwd, intermediateHours: Number(o['intermediate-hours']), ...(o['owner-pid'] ? { ownerPid: Number(o['owner-pid']) } : {}) };
-  if (command === 'worktrees' || command === 'retire') {
+  if (['worktrees', 'retire', 'refresh-prs'].includes(command)) {
     const w = await import('./worktrees.mjs');
     const wo = { ...opts, root: cwd, current: process.cwd(), store: { saveState, readState, listRuns }, ...(o['idle-days'] ? { idleDays: Number(o['idle-days']) } : {}) };
     if (!(wo.idleDays === undefined || (Number.isFinite(wo.idleDays) && wo.idleDays >= 1))) throw new Error('idle-days must be at least 1');
     if (o['pr-states']) w.savePrStates({ stateRoot: opts.stateRoot, store: wo.store, file: resolve(o['pr-states']) });
+    if (command === 'refresh-prs') { const v = w.refreshPrStates(wo); return { checkedAt: v.checkedAt, prs: v.prs.length }; }
     return command === 'retire' ? w.retire(wo) : w.inventory(wo);
   }
   const commands = { launch: launchProcess, release: releaseInputs, stop: stopResources, show: inspectRun, begin: beginRun, add: addArtifact, scratch: createScratch, resource: registerResource, finish: finishRun, heartbeat, pin: x => pinRun({ ...x, pinned: true }), unpin: x => pinRun({ ...x, pinned: false }), publish: publishArtifact, configure, teardown, gc };
-  if (!commands[command]) throw new Error('usage: lifecycle.mjs begin|add|scratch|resource|finish|heartbeat|pin|unpin|publish|configure|teardown|gc|worktrees|retire');
+  if (!commands[command]) throw new Error('usage: lifecycle.mjs begin|add|scratch|resource|finish|heartbeat|pin|unpin|publish|configure|teardown|gc|worktrees|retire|refresh-prs');
   return commands[command](opts);
 }
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {

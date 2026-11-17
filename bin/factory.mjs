@@ -888,6 +888,22 @@ function launchDueTriage() {
     child.unref();
   } catch {}
 }
+// Squash merges look unmerged to git, so finished-worktree detection (factory-teardown) needs PR states from gh.
+// Session start refreshes them in the background: at most every 12 hours per repo, only where linked worktrees
+// exist and the engine is installed. File reads only until it launches; the marker is written first so parallel
+// sessions launch once.
+export const PR_REFRESH_MS = 12 * 3600e3;
+export function launchPrRefresh(main, home = toolkitHome(), now = Date.now()) {
+  if (process.env.FACTORY_NO_PR_REFRESH === '1') return false;
+  const engine = join(main, '.agents', 'skills', 'factory-teardown', 'scripts', 'lifecycle.mjs');
+  let linked = 0; try { linked = readdirSync(join(main, '.git', 'worktrees')).length; } catch {}
+  if (!linked || !existsSync(engine)) return false;
+  const file = join(home, 'pr-refresh.json'), seen = readJson(file, {}) || {};
+  if (now - (Number(seen[main]) || 0) < PR_REFRESH_MS) return false;
+  try { writeJson(file, { ...seen, [main]: now }); } catch { return false; }
+  try { spawn(process.execPath, [engine, 'refresh-prs'], { cwd: main, detached: true, stdio: 'ignore' }).unref(); } catch {}
+  return true;
+}
 // Repo lessons a reflect run proposed but nobody applied or dropped (~/.agents/factory/repo-lessons.jsonl,
 // written by lessons.mjs record --scope repo). The newest record per fingerprint decides; 90 days expire it.
 export function repoLessonLines(here, home = toolkitHome(), now = Date.now()) {
@@ -994,6 +1010,7 @@ function hookStatus(opts) {
     const due = candidateLines([g.mainRoot, g.toplevel]);
     for (const l of due) out(l);
     if (due.some((l) => / wait here /.test(l))) launchDueTriage();
+    launchPrRefresh(g.mainRoot);
     for (const l of repoLessonLines([g.mainRoot, g.toplevel])) out(l);
     for (const l of harnessLines()) out(l);
     for (const l of nodeLines(g.toplevel)) out(l);

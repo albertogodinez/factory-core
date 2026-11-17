@@ -1,5 +1,6 @@
-// worktrees.mjs: which linked worktrees are finished and safe to retire. Local git only. PR states come from a
-// file the agent saved from its forge CLI; nothing here fetches. Retiring removes the worktree through git, never
+// worktrees.mjs: which linked worktrees are finished and safe to retire. The inventory is local git only. PR states
+// come from gh: refreshPrStates asks it (the session-start hook runs that in the background), or the agent saves
+// its own `gh pr list` output. Retiring removes the worktree through git, never
 // with --force, and keeps the branch, so no commit is lost: only a clean checkout and its ignored files go.
 import { readFileSync, readdirSync, lstatSync, existsSync, realpathSync, unlinkSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -17,15 +18,21 @@ const run = (cwd, args) => spawnSync('git', ['--no-optional-locks', ...args], { 
 function git(cwd, args) { const r = run(cwd, args); if (r.status !== 0) throw new Error(r.stderr?.trim() || r.error?.message || `git ${args[0]} failed`); return r.stdout; }
 const real = p => { try { return realpathSync(p); } catch { return resolve(p); } };
 
-// `gh pr list --state all --json headRefName,state,number` output, kept with the time it was taken.
-export function savePrStates({ stateRoot, file, store, now = Date.now() }) {
-  const raw = JSON.parse(readFileSync(file, 'utf8'));
+export const PR_FIELDS = ['--state', 'all', '--limit', '300', '--json', 'headRefName,state,number'];
+// `gh pr list` + PR_FIELDS output, kept with the time it was taken.
+function storePrStates({ stateRoot, store, raw, now = Date.now() }) {
   if (!Array.isArray(raw) || !raw.every(p => p && typeof p.headRefName === 'string' && STATES.includes(p.state))) {
     throw new Error('PR states must be the JSON of: gh pr list --state all --json headRefName,state,number');
   }
   const value = { version: 1, checkedAt: now, prs: raw.map(p => ({ headRefName: p.headRefName, state: p.state, ...(Number.isSafeInteger(p.number) ? { number: p.number } : {}) })) };
   store.saveState(stateRoot, 'pr-states.json', value);
   return value;
+}
+export function savePrStates({ file, ...o }) { return storePrStates({ ...o, raw: JSON.parse(readFileSync(file, 'utf8')) }); }
+export function refreshPrStates({ root, gh = process.env.FACTORY_GH || 'gh', ...o }) {
+  const r = spawnSync(gh, ['pr', 'list', ...PR_FIELDS], { cwd: root, encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error(`gh pr list failed: ${r.error?.message || r.stderr?.trim() || `exit ${r.status}`}`);
+  return storePrStates({ ...o, raw: JSON.parse(r.stdout) });
 }
 // An open PR wins; otherwise the newest PR for the branch name.
 function prFor(prs, branch) {
