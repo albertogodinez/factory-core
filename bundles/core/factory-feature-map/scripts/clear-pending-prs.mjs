@@ -10,11 +10,12 @@
 // Without --apply it reports what it would do. Per entry:
 //   MERGED  -> remove the pending_pr line (with --apply)
 //   OPEN    -> keep
+//   An entry that git ignores (a local-only map) is edited in place: the line says so, so do not commit it.
 //   CLOSED  -> keep, and say so: the entry describes code that never landed; revert those parts by hand
 // Exit 0: done (also when nothing is pending). 2: usage, no project, or gh failed for a PR.
 import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { MAP_PREFIX, resolveContext } from './context.mjs';
@@ -41,6 +42,16 @@ export function entries(skills) {
     .map((name) => join(skills, name, 'features'))
     .filter((dir) => existsSync(dir))
     .flatMap((dir) => readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md').map((f) => join(dir, f)));
+}
+
+/** True when git ignores the file, so the edit is in place and there is nothing to commit. */
+export function isGitIgnored(file) {
+  try {
+    execFileSync('git', ['check-ignore', '-q', file], { cwd: dirname(file), stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function prState(url) {
@@ -91,7 +102,8 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
     const where = relative(root, entry.file);
     if (state === 'MERGED') {
       if (apply) writeFileSync(entry.file, withoutPendingPr(entry.text));
-      console.log(`${apply ? 'removed' : 'would remove'} pending_pr from ${where} (${entry.url} merged)`);
+      const ignored = isGitIgnored(entry.file);
+      console.log(`${apply ? 'removed' : 'would remove'} pending_pr from ${where} (${entry.url} merged)${ignored ? '; git-ignored, so edit in place, no commit' : ''}`);
     } else if (state === 'CLOSED') {
       console.log(`${where}: ${entry.url} closed without merging; the entry describes code that never landed, so revert those parts and drop pending_pr`);
     } else {

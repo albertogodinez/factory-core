@@ -29,3 +29,18 @@ test('entries lists map entries in a skills directory, such as a bundle source',
   assert.deepEqual(entries(dir), [join(dir, 'factory-features-app', 'features', 'a.md')]);
   assert.deepEqual(entries(join(dir, 'missing')), []);
 });
+
+test('isGitIgnored tells an ignored map file from a tracked one', async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { execFileSync } = await import('node:child_process');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { isGitIgnored } = await import('./clear-pending-prs.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'fm-ignore-'));
+  execFileSync('git', ['init', '-q'], { cwd: dir });
+  writeFileSync(join(dir, '.gitignore'), 'local.md\n');
+  writeFileSync(join(dir, 'local.md'), entry(''));
+  writeFileSync(join(dir, 'tracked.md'), entry(''));
+  assert.equal(isGitIgnored(join(dir, 'local.md')), true);
+  assert.equal(isGitIgnored(join(dir, 'tracked.md')), false);
+});

@@ -78,7 +78,7 @@ Run it before the final push of any PR in a mapped repo. The default check resol
 node .agents/skills/factory-feature-map/scripts/clear-pending-prs.mjs --pr <PR URL> [--apply]
 ```
 
-Removes `pending_pr` from entries whose PR merged, and flags one whose PR closed unmerged. It reads PR state with `gh`, so it never runs as a pre-commit check. Without `--apply` it reports only. Commit the change.
+Removes `pending_pr` from entries whose PR merged, and flags one whose PR closed unmerged. It reads PR state with `gh`, so it never runs as a pre-commit check. Without `--apply` it reports only. Commit the change, unless the line it prints says the entry is git-ignored (a local-only map): then the edit in place is the whole change, with nothing to commit.
 
 When the map is installed from a bundle, the change belongs in the bundle's source, not the installed copy (`factory update` refuses to overwrite an edited one). From a session in the source repo, pass `--skills-dir <bundle dir>`, commit there, then run `factory update` in the repos that install it. From any other repo, hand it over as a `fact` candidate with a draft patch, as in step 2 of [Add or update one feature](#add-or-update-one-feature).
 
