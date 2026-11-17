@@ -89,3 +89,10 @@ mediaTest('refuses with exit 3 when a given click has no change near it', () => 
   assert.match(r.stderr.toString(), /click offset is wrong/);
   assert.equal(existsSync(out), false);
 });
+
+test('--help prints usage and exits 0, not a parseArgs stack trace', () => {
+  const r = spawnSync(process.execPath, [SCRIPT, '--help'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /usage: side-by-side\.mjs --before/);
+  assert.match(r.stdout, /pixel change near the click/);
+});

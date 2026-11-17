@@ -99,6 +99,8 @@ function fail(code, message) {
   process.exit(code);
 }
 
+const USAGE = 'usage: side-by-side.mjs --before <take> --after <take> --out <mp4> [options]';
+
 async function main() {
   const { values: o } = parseArgs({
     options: {
@@ -107,10 +109,12 @@ async function main() {
       'before-click': { type: 'string' }, 'after-click': { type: 'string' },
       'before-label': { type: 'string', default: 'Before (main)' }, 'after-label': { type: 'string', default: 'After' },
       lead: { type: 'string', default: '2' }, tail: { type: 'string', default: '3' },
-      captions: { type: 'string' }, 'allow-different-start': { type: 'boolean', default: false }
+      captions: { type: 'string' }, 'allow-different-start': { type: 'boolean', default: false },
+      help: { type: 'boolean', short: 'h', default: false }
     }
   });
-  if (!o.before || !o.after || !o.out) fail(1, 'usage: side-by-side.mjs --before <take> --after <take> --out <mp4> [options]');
+  if (o.help) { process.stdout.write(`${USAGE}\nOptions: --sync-crop WxH+X+Y, --before-click S, --after-click S, --before-label, --after-label, --lead S, --tail S, --captions <file>, --allow-different-start\nA take needs a pixel change near the click, or exit 3.\n`); process.exit(0); }
+  if (!o.before || !o.after || !o.out) fail(1, USAGE);
   let captions = [];
   if (o.captions) {
     try {
