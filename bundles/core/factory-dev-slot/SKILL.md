@@ -123,6 +123,7 @@ Stop that server by its PID, proven yours: `lsof -tiTCP:<port> -sTCP:LISTEN`, th
 ## Rules
 
 - **One worktree per slot.** The container bind-mounts the worktree, and a dev server's start-up clean can wipe its build output, so two slots on one worktree can delete each other's assets. Run builds and tests in the worktree before `slot up`, or `slot down` / `slot up` after.
+- **One agent owns a worktree and its slot.** A second agent or fork on that worktree reads and edits, and leaves `slot up`, merging trunk, pushing and `slot down` to the owner: a teardown under a live browser session ends in `ERR_CONNECTION_REFUSED`. To work in parallel, cut a worktree of your own.
 - **Each build you compare is its own worktree.** Copying another branch's file into a worktree under a running server races hot reload. Serve the baseline from `git worktree add --detach <path> origin/<trunk>`, in its own slot or after `slot down`.
 - **`slot down --purge` before `git worktree remove`.** A running slot keeps writing into its bind mount, so removing the worktree under it fails with `Directory not empty`. If that happens, `rm -rf` the directory, `git worktree prune`, then `slot gc`.
 - **Ports bind `127.0.0.1` only, and no container gets the Docker socket.** Keep both when adding an app.
