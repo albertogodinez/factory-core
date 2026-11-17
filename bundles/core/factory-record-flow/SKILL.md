@@ -164,6 +164,7 @@ its server or inspection session is still needed. Never delete the entire state 
 ## Gotchas
 
 - Set the viewport through `record_begin <path> WxH`: a `ab set viewport` before it is overwritten.
+- **Under a teardown run, record into the run's `files` directory** (`lifecycle.mjs show --run "$FACTORY_RUN_ID"` prints its `dir`; `take-template.sh` sets `STATE` to it). A path outside it fails with `artifact outside run`, and the run's files are cleaned at teardown, so copy each finished file to a folder the user can open and report that path.
 - The browser daemon resolves a relative `record start` or `screenshot` path against its own cwd,
   not yours. A relative record path printed "Recording started", then "ffmpeg write failed: Broken
   pipe", and wrote nothing. `record_begin` makes its path absolute; pass absolute paths to any
