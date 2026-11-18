@@ -59,6 +59,7 @@ A phase ends its own run with `state.mjs end --state <file> <phase> --notes <fil
 ## Rules
 
 - **No phase work in the conductor.** Side quests go to their own agent: a Slack draft, an explainer page, a demo, a dev server that keeps dying. That agent returns a link or a one-line status, never its working context.
+- **Only agent sessions get a tab.** A dev server, watcher or other plain process that the conductor or a phase starts in the terminal app runs as a child of the session that started it, with no tab of its own. With hc that's `hc run --bg --keep --name <short-name> --cwd <dir> -- <cmd>`, with no `--no-parent` and no `herdr.tab` or `herdr.space` label. Herdr then lists it under its parent in the sidebar. This applies even when a plan or an earlier note says new terminals open in their own tab: that rule is for agents.
 - **One question at a time goes to the user,** and only one a phase has marked `blocked`. Answer a phase's question from the plan or the decision log first.
 - **No screenshots, recordings or long logs in the conductor.** Keep the path, not the bytes.
 - **Don't load the terminal app's manual** (a multiplexer's `AGENTS.md` or `--skill` output). The launcher handles where a session opens and what its tab is called. The conductor needs only `launch`, `status` and `live`.
