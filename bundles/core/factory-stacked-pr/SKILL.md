@@ -173,6 +173,10 @@ git diff --stat origin/<trunk>...<child-branch>
 - **Where force-push is off the table**, build that merge with `git commit-tree <merged tree> -p <child head> -p <new parent head>` and fast-forward the branch to it.
 - **Every PR in the stack gets its own `mergeable` and `mergeStateStatus` read** after a split or a merge (`CONFLICTING` or `DIRTY` on a lower PR hides behind a green top one; the field values are defined in `factory-pr-ci-monitor`'s tick step 1), and `factory-pr-ci-monitor` watches all of them, not just the top.
 
+## One writer per branch
+
+Every brief for a session that touches a stack carries an `owns:` line: its worktree, its branch, its slot. Only the session that owns a child's worktree merges its base in; any other session reads and reports. Two sessions writing one branch leave HEAD and `origin` out of step, and the loser finds a foreign commit at push time.
+
 ## Shared checkout: stage what you mean
 
 Before every commit in a checkout another session also uses, run `git diff --cached --name-only` and compare it to the files you meant to commit. A file another session staged rides along into your commit. Unstage it (`git restore --staged <file>`), or commit with explicit paths.
