@@ -54,6 +54,17 @@ A file-level comment (no line) omits `line` from the metadata. `ts` is ISO 8601 
   report, not the author.
 - One finding per comment, on the line it is about.
 
+### Slack posts and other off-GitHub messages
+
+A Slack post, DM or email sent from a session goes out under the user's name, the same as a PR
+comment, and has no `post-comment.mjs` to add a marker. So the caller does what the script does:
+
+- **Disclose it.** Start with the visible banner the project uses for comments, or, when none is
+  set, a line such as `Drafted with Claude`. `adapters.commentMarker` says which.
+- **Say what was not done.** When someone could not be tagged (no handle found, not in the
+  channel) or a step was left out, name them or it in one line at the end, so the reader does
+  not assume the message reached everyone or covers everything.
+
 ## 3. Before posting
 
 1. **Re-fetch the head SHA.** If it moved since the review, re-read each target line at the new
