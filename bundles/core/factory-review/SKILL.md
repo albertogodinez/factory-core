@@ -93,6 +93,7 @@ Then merge:
 7. **Agreement boost.** When two or more independent reviewers flag the same issue, add 0.10 confidence (cap 1.0). `general` and the cross-vendor `general` count as two.
 8. **Separate pre-existing** issues.
 9. **Re-review check** (PR targets with earlier comments from this tool). For each earlier `ours_kind: "review"` comment, re-read its line at the current head and decide from the code, never from whether the thread is resolved: `addressed`, `still open`, or `answered` (the author gave a reason that holds). Drop new findings that repeat a still-open comment.
+   **A finding that names a defect class** (a missing guard, an unchecked input, a skipped contract member) widens the next review of the branch: each reviewer's prompt lists the class and asks for its siblings anywhere in the files the diff touches, changed line or not. A sibling outside the diff goes in as a finding with its own line.
 10. **Route by mode.** `comment` findings to the severity tables, `question` to Questions for the Author, `human_eyes` to Needs Human Eyes. Union every persona's `checked_left_alone`.
 11. **Sort.** P0 to P3, then blocking first, then confidence descending, then file, then line.
 
