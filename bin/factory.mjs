@@ -37,6 +37,7 @@ import { cleanup, setupCleanupSchedule, installSchedule, JOBS } from './cleanup.
 import { fragments as harnessFragments, merge as harnessMerge, drifted as harnessDrifted } from './harness.mjs';
 import { findGit, toolkitHome, parseRemote } from '../bundles/core/factory-context/scripts/resolve.mjs';
 import { isDue } from '../bundles/core/factory-reflect/scripts/due.mjs';
+import { rollingSize } from '../bundles/core/factory-reflect/scripts/landing.mjs';
 
 const FACTORY = dirname(dirname(realpathSync(import.meta.filename)));
 const RESOLVE = join(FACTORY, 'bundles', 'core', 'factory-context', 'scripts', 'resolve.mjs');
@@ -833,15 +834,17 @@ export function lessonLines(waiting, here) {
 }
 // Candidates already built on the repo's open lesson/triage branch: the basenames in its commits'
 // `Candidates:` trailers. They stay queued until the branch lands, so counting them again would
-// launch a session with nothing new to build. Null when the repo has no open lesson/triage branch.
+// launch a session with nothing new to build. `full` is the branch's own cap (lessons.mjs start's):
+// past it a run adds no lessons, so nothing new can be built either. Null with no open branch.
 export function builtOnOpenBranch(repo, home = toolkitHome()) {
   const open = lessonBranches(home).find((b) => b.root === repo && b.branch === 'lesson/triage');
   if (!open) return null;
   const trunk = ['main', 'master'].find((t) => git(repo, 'rev-parse', '--verify', '-q', `refs/heads/${t}`) !== null);
+  const full = trunk ? rollingSize(repo, trunk, open.branch).full : false;
   const body = trunk ? git(repo, 'log', `${trunk}..${open.branch}`, '--format=%B') : null;
   const built = new Set();
   for (const l of (body || '').split('\n')) { const m = l.match(/^Candidates:\s*(.+)$/); if (m) for (const f of m[1].split(/[,\s]+/).filter(Boolean)) built.add(f); }
-  return built;
+  return { built, full };
 }
 // Whether a scope's queue should be triaged now. The cadence (lessons.mjs cadence) sets the mode: due
 // when the mode's interval has passed, or an early trigger fires (a fact waits, the queue is 5+, or
@@ -1265,9 +1268,10 @@ export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dry
     const row = { scope, queued: items.length, repo };
     if (!items.length) { scopes.push({ ...row, action: 'none', reason: 'queue empty' }); continue; }
     if (!repo) { scopes.push({ ...row, action: 'none', reason: 'source repo not on this machine' }); continue; }
-    const built = builtOnOpenBranch(repo, home); // already on lesson/triage, which waits for review
-    const fresh = built ? items.filter((i) => !built.has(i._file)) : items;
-    if (built && !fresh.length) { scopes.push({ ...row, action: 'none', reason: 'every queued candidate is already on lesson/triage, which waits for review' }); continue; }
+    const open = builtOnOpenBranch(repo, home); // lesson/triage, which waits for review
+    const fresh = open ? items.filter((i) => !open.built.has(i._file)) : items;
+    if (open?.full) { scopes.push({ ...row, action: 'none', reason: 'lesson/triage is full and waits for a decision' }); continue; }
+    if (open && !fresh.length) { scopes.push({ ...row, action: 'none', reason: 'every queued candidate is already on lesson/triage, which waits for review' }); continue; }
     const { due } = triageDue(fresh, state[key], now);
     if (!due) { scopes.push({ ...row, action: 'none', reason: 'not due' }); continue; }
     if (launchedRepos.has(repo)) { // one session per repo: it triages every queue the repo owns

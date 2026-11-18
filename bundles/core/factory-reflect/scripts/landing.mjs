@@ -85,7 +85,7 @@ function syncTrunk(wt, trunk) {
 // A feature-map entry (a commit with a `Map-entry:` trailer) documents code a PR review already
 // gated, and maps change with nearly every ticket, so it counts toward neither cap: the caps bound
 // the lessons waiting on a decision, and map entries alone would otherwise fill the branch in days.
-function rollingSize(root, trunk, branch) {
+export function rollingSize(root, trunk, branch) {
   const rows = git(root, 'log', '--format=%ct%x09%(trailers:key=Map-entry,valueonly,separator=%x2C)', `${trunk}..${branch}`).out
     .split('\n').filter(Boolean).map((l) => l.split('\t'));
   const stamps = rows.filter(([, map]) => !map?.trim()).map(([t]) => Number(t));

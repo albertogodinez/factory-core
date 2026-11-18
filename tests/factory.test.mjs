@@ -784,4 +784,9 @@ test('triage --due: candidates already on an open lesson/triage branch do not la
   write(join(h, 'candidates', 'core', '3-c.json'), { kind: 'pattern', scope: 'core', summary: 'c', from: { root: '/x' }, at });
   r = await triageDueRun({ home: h, now, spawn });
   assert.equal(r.scopes.find((x) => x.scope === 'core').action, 'due', 'a candidate the branch lacks makes it due again');
+  git(src, 'checkout', '-q', 'lesson/triage');
+  for (let i = 0; i < 5; i++) git(src, 'commit', '--allow-empty', '-qm', `fix(x): lesson ${i}`);
+  git(src, 'checkout', '-q', 'main');
+  r = await triageDueRun({ home: h, now, spawn });
+  assert.match(r.scopes.find((x) => x.scope === 'core').reason, /full and waits/, 'a full branch takes no more lessons, so a new candidate waits too');
 });
