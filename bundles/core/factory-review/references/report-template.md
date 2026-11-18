@@ -112,13 +112,13 @@ Include a 1-2 sentence rationale pointing to the top blockers.
 
 One row per persona that was selected, including any skipped by a gate or dropped after a timeout, so reduced coverage is visible instead of silent.
 
-| Persona | Status | Findings | Grounding | Notes |
-|---------|--------|----------|-----------|-------|
-| general | completed | N | complete | |
-| react-patterns | completed | N | complete | M rules loaded |
-| design-system-conventions | completed | N | no design-system-context.txt (query failed) | M rules loaded |
-| typescript-conventions | skipped (no .ts/.tsx) | 0 | | |
-| test-behavior | skipped (no test files) | 0 | | |
+| Persona | Model | Status | Findings | Grounding | Notes |
+|---------|-------|--------|----------|-----------|-------|
+| general | <model> | completed | N | complete | |
+| react-patterns | <model> | completed | N | complete | M rules loaded |
+| design-system-conventions | <model> | completed | N | no design-system-context.txt (query failed) | M rules loaded |
+| typescript-conventions | | skipped (no .ts/.tsx) | 0 | | |
+| test-behavior | | skipped (no test files) | 0 | | |
 
 Grounding names each context file the persona takes that was absent, and why. Below the table, paste the `check-sweep-coverage.mjs` summary line and any hits still unreviewed after the follow-up.
 

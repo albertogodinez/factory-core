@@ -22,6 +22,8 @@ Severity sorts the report. **`blocking` decides what must be fixed before merge*
 | P3 | `false` |
 | `pre_existing: true` | `false` |
 
+A behavioural defect stated as a concrete sequence ("after X, then Y, event Z carries the wrong value") is at least P2 and `blocking: true`. Marking it non-blocking needs a stated reason: the sequence is unreachable, or the user agreed to a follow-up.
+
 Posted comments mark `blocking: false` findings with a `nit:` prefix. If every finding on a PR comes out non-blocking, check you are not grading your own homework: re-read the top finding's consequence and ask whether you would accept it in production.
 
 ## The consequence gate (all reviewers)

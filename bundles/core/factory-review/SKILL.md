@@ -128,9 +128,9 @@ Only for a GitHub PR target. `references/posting.md` has the full procedure. In 
 A round is one fresh review of one commit range, run once and then finished. Never resume an earlier review coordinator or reviewer for a new round: a resumed coordinator carries every earlier round's diffs and grows without bound, while a fresh one stays small. Start each round with a new coordinator, and give it the range, the plan path and the open findings from the earlier round.
 
 - **First round on a branch:** the full panel, as above.
-- **Follow-up round:** the range starts where the last reviewed range ended. Add `--follow-up` to `resolve-personas.mjs`, with `$DIFF` built from the new range only. It keeps `general` and the personas whose `paths` gate matches the files in the new range, and skips the rest as `skipped (follow-up round, ...)`.
+- **Follow-up round:** the range starts where the last reviewed range ended. If its base is not that head, stop and name the commits that would go unreviewed. Add `--follow-up` to `resolve-personas.mjs`, with `$DIFF` built from the new range only. It keeps `general` and the personas whose `paths` gate matches the files in the new range, and skips the rest as `skipped (follow-up round, ...)`.
 - **Larger follow-up:** a range over 3 files or 80 changed lines (the script's `smallRange`) also keeps the personas that matched on a sweep or diff gate, or that have no gate. A smaller range does not.
-- **Open findings:** write them to `$RUN/open-findings.md` (id, file, one line each) and pass the path to every reviewer. Each reviewer checks that every finding is fixed, and reports any that is not, instead of finding it again. Do not carry findings that were already fixed into the report as new.
+- **Open findings:** write them to `$RUN/open-findings.md` (id, file, one line each) and pass the path to every reviewer. Each reviewer checks that every finding is fixed, and reports any that is not, instead of finding it again. Then it reviews the range as fresh code: a fix can add a fault, including in unchanged code the range now reaches, which it reports with `pre_existing: true`. Do not carry findings that were already fixed into the report as new.
 
 Everything else (one batch, merge, report) is unchanged.
 

@@ -52,7 +52,7 @@ A phase ends its own run with `state.mjs end --state <file> <phase> --notes <fil
 4. **Route on the outcome.**
    - `pass`: launch the next phase. The one exception is ci-monitor: it moves on to close only when `ci` is `merged`. A `pass` with any other `ci` is a rollover, so launch ci-monitor again. A PR that's `closed` without merging goes to the user.
    - `fail` from review or ci-monitor, with open findings: launch `work` with `--task "fix <ids>"`, then a new `review` round. That round covers only the commits since `reviewed_range`.
-   - `blocked`: ask the user the one `question`, log the answer, and launch the phase again. A ci-monitor parked on an idle PR is relaunched when the user says the PR has moved.
+   - `blocked`: ask the user the one `question`, log the answer, and launch the phase again. A ci-monitor parked on an idle PR is relaunched when the user says the PR has moved. Before telling the user a PR is ready, check that the end of `reviewed_range` is `head_sha`. If commits landed since, launch a `review` round first.
    - Stuck: the phase is looping, a session vanished, or the same check failed twice. `kill` it with the reason and relaunch it with a narrower `--task`. The reason is evidence for reflect.
 5. **Close.** After the merge, launch `close`. It runs `factory-reflect` once for the whole ticket, over `digest` rather than the transcripts.
 

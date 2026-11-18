@@ -2,7 +2,7 @@
 
 Review one range of commits, once, as a fresh agent. Read the state file first: `reviewed_range`, `head_sha`, `trunk`, `findings`.
 
-1. The range is `<end of reviewed_range>..head_sha`, or `<trunk>...head_sha` when nothing has been reviewed yet.
+1. The range is `<end of reviewed_range>..head_sha`, or `<trunk>...head_sha` when nothing has been reviewed yet. Never pick the base by hand: a base past the end of `reviewed_range` leaves commits unreviewed.
 2. Run `factory-review` on that range with the round rules in its "Rounds" section: a follow-up round on a small diff gets a smaller panel.
 3. Don't fix anything. Record each blocking finding with a stable `id`, its `severity`, a one-line `summary` and `status: open`.
 4. The conductor sends open findings back to a work run with a `Task:`, then starts a new review round on just the new commits.

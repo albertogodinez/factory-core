@@ -4,7 +4,7 @@ Read this in Phase 2, when you build each reviewer's prompt.
 
 ## Prompt contents
 
-Every reviewer is an `Agent` call with `subagent_type: "general-purpose"` and the strongest available model. The prompt opens with: "Read and follow `<personaFile>`. It defines your scope, verification steps and output format." Use the absolute `personaFile` from `personas.json`: it may live in a pack. Personas are prompt files, not registered agent types, so a new one works without restarting the session.
+Every reviewer is an `Agent` call with `subagent_type: "general-purpose"` and an explicit `model` set to the strongest available one. Pass it explicitly: an environment default for subagent models otherwise wins silently. The coordinator should run on the strongest model too, since it reconciles severity. Record each reviewer's model in the Coverage table. The prompt opens with: "Read and follow `<personaFile>`. It defines your scope, verification steps and output format." Use the absolute `personaFile` from `personas.json`: it may live in a pack. Personas are prompt files, not registered agent types, so a new one works without restarting the session.
 
 | Item | `general` | Rule personas |
 | --- | :---: | :---: |
