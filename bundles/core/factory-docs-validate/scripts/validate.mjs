@@ -10,6 +10,7 @@
 //    8  orphans            every scripts/ and references/ file is named by something else
 //   16  plan-frontmatter   plans have title, status, repos, created
 //   32  script-self-path   no `dirname $0` after a `cd` or in a sourced skill shell script
+//  128  scratchpad-evidence no session scratchpad path in skill or plan notes
 // Exit: 0 all pass; the sum of the failing checks' bits otherwise (with --only, that check's bit);
 // 64 bad usage.
 import { realpathSync } from 'node:fs';
@@ -22,6 +23,7 @@ import * as noTimeout from './checks/no-timeout.mjs';
 import * as orphans from './checks/orphans.mjs';
 import * as planFrontmatter from './checks/plan-frontmatter.mjs';
 import * as scriptSelfPath from './checks/script-self-path.mjs';
+import * as scratchpadEvidence from './checks/scratchpad-evidence.mjs';
 
 export const CHECKS = [
   { name: 'skill-frontmatter', bit: 1, mod: skillFrontmatter },
@@ -30,6 +32,7 @@ export const CHECKS = [
   { name: 'orphans', bit: 8, mod: orphans },
   { name: 'plan-frontmatter', bit: 16, mod: planFrontmatter },
   { name: 'script-self-path', bit: 32, mod: scriptSelfPath },
+  { name: 'scratchpad-evidence', bit: 128, mod: scratchpadEvidence },
 ];
 
 const HERE = dirname(fileURLToPath(import.meta.url));

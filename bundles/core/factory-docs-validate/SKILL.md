@@ -1,6 +1,6 @@
 ---
 name: factory-docs-validate
-description: 'Skill-hygiene checks for any repo with agent skills, in one command: SKILL.md frontmatter (name matches directory, description at most 600 chars), realpath run-guards, `timeout` in shell scripts, orphaned scripts and references, plan frontmatter. Use before committing a skill or plan change, in a pre-commit hook or CI, and when a skill script silently does nothing.'
+description: 'Skill-hygiene checks for any repo with agent skills, in one command: SKILL.md frontmatter (name matches directory, description at most 600 chars), realpath run-guards, `timeout` in shell scripts, orphaned scripts and references, plan frontmatter, scratchpad paths cited as evidence. Use before committing a skill or plan change, in a pre-commit hook or CI, and when a skill script silently does nothing.'
 ---
 
 # Docs validate
@@ -25,6 +25,7 @@ Other flags: `--cwd <dir>` (default the current directory), `--skills <dir>` and
 | 8 | `orphans` | a file under a skill's `scripts/` or `references/` is named by no other file in the skills directory. Tests (`*.test.*`, `*.guard.*`) are exempt. Reference the file from the skill that uses it, or delete it |
 | 16 | `plan-frontmatter` | a plan (`<planHome>/*.md`, `README.md` excluded) lacks `title`, `status`, `repos` or `created`, has a `status` outside `draft`, `active`, `completed`, `abandoned`, a bad `YYYY-MM-DD` date, or is completed or abandoned without a `completed` date |
 | 32 | `script-self-path` | a skill `.sh` file builds a path from `dirname "$0"` (or `${0%/*}`) after a `cd`, or in a file another skill script `source`s: there `$0` is the caller or a stale relative path. Use `${BASH_SOURCE[0]}`, captured before any `cd` |
+| 128 | `scratchpad-evidence` | a `*.md` note under the skills or plans directory cites a session scratchpad path (a path under `/tmp`, `/private/tmp` or `/var/folders` with a `scratchpad` segment). The scratchpad is cleared between sessions, so the recipe or evidence it names is gone for the next reader. Commit the script or cite a durable pointer. A PR body isn't a file here, so this doesn't see it |
 
 ## Exit codes
 
