@@ -176,7 +176,7 @@ git diff --stat origin/<trunk>...<child-branch>
 
 ## One writer per branch
 
-Every brief for a session that touches a stack carries an `owns:` line: its worktree, its branch, its slot. Only the session that owns a child's worktree merges its base in; any other session reads and reports. Two sessions writing one branch leave HEAD and `origin` out of step, and the loser finds a foreign commit at push time.
+Every brief for a session that touches a stack carries an `owns:` line: its worktree, its branch, its slot. A brief written by hand (an `hc run` worker, a plan-tracked session) also makes the worker claim that branch first, with `stack.mjs claim` below, so a conductor on the same stack finds it. Only the session that owns a child's worktree merges its base in; any other session reads and reports. Two sessions writing one branch leave HEAD and `origin` out of step, and the loser finds a foreign commit at push time.
 
 The **stack ledger** makes that line checkable. `scripts/stack.mjs` keeps one claim per branch (owner, base, PR) and an event log in the repo's shared state, so the sessions on one stack find each other without scanning terminals:
 
