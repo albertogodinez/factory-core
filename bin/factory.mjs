@@ -831,6 +831,18 @@ export function lessonLines(waiting, here) {
   for (const [root, ws] of away) lines.push(`factory: ${ws.length} lesson branch(es) wait for review in ${basename(root)}: ${list(ws)}. Review and land them from a session started there: cd ${root} && <your agent CLI>.`);
   return lines;
 }
+// Candidates already built on the repo's open lesson/triage branch: the basenames in its commits'
+// `Candidates:` trailers. They stay queued until the branch lands, so counting them again would
+// launch a session with nothing new to build. Null when the repo has no open lesson/triage branch.
+export function builtOnOpenBranch(repo, home = toolkitHome()) {
+  const open = lessonBranches(home).find((b) => b.root === repo && b.branch === 'lesson/triage');
+  if (!open) return null;
+  const trunk = ['main', 'master'].find((t) => git(repo, 'rev-parse', '--verify', '-q', `refs/heads/${t}`) !== null);
+  const body = trunk ? git(repo, 'log', `${trunk}..${open.branch}`, '--format=%B') : null;
+  const built = new Set();
+  for (const l of (body || '').split('\n')) { const m = l.match(/^Candidates:\s*(.+)$/); if (m) for (const f of m[1].split(/[,\s]+/).filter(Boolean)) built.add(f); }
+  return built;
+}
 // Whether a scope's queue should be triaged now. The cadence (lessons.mjs cadence) sets the mode: due
 // when the mode's interval has passed, or an early trigger fires (a fact waits, the queue is 5+, or
 // the oldest candidate is 3+ days old). Shared by the status hook and anything that schedules triage.
@@ -876,7 +888,7 @@ function repoQueue(home) {
   const dir = join(home, 'candidates', 'repo');
   let names = [];
   try { names = readdirSync(dir).filter((n) => n.endsWith('.json')); } catch { return []; }
-  return names.map((n) => readJson(join(dir, n), null)).filter((c) => c?.repo);
+  return names.map((n) => { const it = readJson(join(dir, n), null); return it && { ...it, _file: n }; }).filter((c) => c?.repo);
 }
 // A session start launches triage for a due queue without waiting for the schedule, which misses
 // runs while the machine is off. triage --due keeps the quiet hours and the one-session-per-repo
@@ -1244,7 +1256,7 @@ export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dry
   const queues = ['core', 'org'].map((scope) => {
     const dir = join(home, 'candidates', scope);
     let names = []; try { names = readdirSync(dir).filter((n) => n.endsWith('.json')); } catch {}
-    return { scope, key: scope, items: names.map((n) => readJson(join(dir, n), null)).filter(Boolean), repo: c.sourceRepo(scope, sources) };
+    return { scope, key: scope, items: names.map((n) => { const it = readJson(join(dir, n), null); return it && { ...it, _file: n }; }).filter(Boolean), repo: c.sourceRepo(scope, sources) };
   });
   const byRepo = new Map();
   for (const it of repoQueue(home)) byRepo.set(it.repo, [...(byRepo.get(it.repo) || []), it]);
@@ -1253,7 +1265,10 @@ export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dry
     const row = { scope, queued: items.length, repo };
     if (!items.length) { scopes.push({ ...row, action: 'none', reason: 'queue empty' }); continue; }
     if (!repo) { scopes.push({ ...row, action: 'none', reason: 'source repo not on this machine' }); continue; }
-    const { due } = triageDue(items, state[key], now);
+    const built = builtOnOpenBranch(repo, home); // already on lesson/triage, which waits for review
+    const fresh = built ? items.filter((i) => !built.has(i._file)) : items;
+    if (built && !fresh.length) { scopes.push({ ...row, action: 'none', reason: 'every queued candidate is already on lesson/triage, which waits for review' }); continue; }
+    const { due } = triageDue(fresh, state[key], now);
     if (!due) { scopes.push({ ...row, action: 'none', reason: 'not due' }); continue; }
     if (launchedRepos.has(repo)) { // one session per repo: it triages every queue the repo owns
       if (!dryRun) state[key] = { ...(state[key] || {}), lastLaunch: new Date(now).toISOString() };

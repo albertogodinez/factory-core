@@ -762,3 +762,26 @@ test('session start warns below the free-space threshold and names what the last
     assert.deepEqual(diskLines({ home, statfs: () => { throw new Error('no statfs'); } }), [], 'an unreadable disk is silent');
   } finally { t.cleanup(); }
 });
+
+test('triage --due: candidates already on an open lesson/triage branch do not launch another session', async () => {
+  const { triageDueRun } = await import('../bin/factory.mjs');
+  const h = join(t.root, 'home-triage-branch'); mkdirSync(h);
+  const src = makeRepo(join(t.root, 'tb-src'), {}); mkdirSync(join(src, 'bundles', 'core'), { recursive: true });
+  write(join(h, 'sources.json'), { core: join(src, 'bundles', 'core'), launchers: join(src, 'bundles', 'launchers'), expedia: join(t.root, 'absent'), trips: join(t.root, 'absent') });
+  const noon = new Date(); noon.setHours(12, 0, 0, 0);
+  const now = noon.getTime(), at = new Date(now - 4 * 864e5).toISOString();
+  for (const n of ['1-a', '2-b']) write(join(h, 'candidates', 'core', `${n}.json`), { kind: 'pattern', scope: 'core', summary: n, from: { root: '/x' }, at });
+  git(src, 'checkout', '-q', '-b', 'lesson/triage');
+  git(src, 'commit', '--allow-empty', '-qm', 'fix(x): a lesson\n\nCandidates: 1-a.json, 2-b.json\nFixed-when: never');
+  git(src, 'checkout', '-q', 'main');
+  const spawn = () => ({});
+
+  let r = await triageDueRun({ home: h, now, spawn });
+  assert.equal(r.scopes.find((x) => x.scope === 'core').action, 'due', 'no branch recorded: the queue is due');
+  writeFileSync(join(h, 'lesson-branches.jsonl'), JSON.stringify({ at: new Date(now).toISOString(), root: src, branch: 'lesson/triage', worktree: null }) + '\n');
+  r = await triageDueRun({ home: h, now, spawn });
+  assert.match(r.scopes.find((x) => x.scope === 'core').reason, /already on lesson\/triage/, 'every candidate is built and waits for review');
+  write(join(h, 'candidates', 'core', '3-c.json'), { kind: 'pattern', scope: 'core', summary: 'c', from: { root: '/x' }, at });
+  r = await triageDueRun({ home: h, now, spawn });
+  assert.equal(r.scopes.find((x) => x.scope === 'core').action, 'due', 'a candidate the branch lacks makes it due again');
+});
