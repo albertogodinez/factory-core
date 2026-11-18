@@ -1,6 +1,6 @@
 ---
 name: factory-docs-validate
-description: Skill-hygiene checks for any repo with agent skills, in one deterministic command. Checks SKILL.md frontmatter (name matches directory, description at most 600 chars), run-directly guards that skip realpath, `timeout` in shell scripts, orphaned scripts and references in a skill, and plan frontmatter. Use before committing a skill or plan change, in a pre-commit hook or CI, and when a skill script silently does nothing.
+description: 'Skill-hygiene checks for any repo with agent skills, in one command: SKILL.md frontmatter (name matches directory, description at most 600 chars), realpath run-guards, `timeout` in shell scripts, orphaned scripts and references, plan frontmatter. Use before committing a skill or plan change, in a pre-commit hook or CI, and when a skill script silently does nothing.'
 ---
 
 # Docs validate
