@@ -25,4 +25,5 @@ factory-core holds the `core` skill bundle and the `factory` CLI that installs b
 ## Commits
 
 - Commit straight to `main` in the main checkout, without asking and without a feature branch. Don't push unless asked.
+- A lesson branch approved at the review gate lands at once: run `lessons.mjs land` with the reviewed head and ask nothing more. It commits to `main` and does not push.
 - A commit on `main` runs `bin/auto-update.mjs`, which copies the change into every installed repo. Keep `main` committable: no half-done work.
