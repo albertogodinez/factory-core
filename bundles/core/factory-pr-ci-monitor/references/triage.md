@@ -35,6 +35,8 @@ A screenshot can't go through the in-thread `replies` endpoint, which takes only
 
 When the reply to a bot finding says "this is by design", link or quote where the design was decided: the PR or review thread, the feature-map entry, the plan line. A bare "by design" asks the reader to take it on trust. When no record exists, write one in the PR (the body's deviations section, or a note on the line) and link that.
 
+Before a "by design", "not applicable" or "no such rule" reply, search for the rule: grep the installed `factory-review` rules (core and packs) and the repo's `AGENTS.md` for the finding's subject. A public reply that says no rule exists, when a review rule does, has to be retracted. Check any claim about which files the PR touches against `git diff --stat` before posting it.
+
 ## De-duplication and body-only findings
 
 - Reviewers sometimes post the same finding twice on one line. Answer the first fully, and reply to the duplicate with a one-liner pointing at the answered thread.
