@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
-import { mkdtempSync, rmSync, realpathSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, realpathSync, readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -110,5 +110,28 @@ test('a repo lesson stays pending until a later record says applied or dropped, 
     assert.deepEqual(pend('shop', T0 + 4 * DAY), [], 'applied and dropped clear it');
     assert.deepEqual(pend('trips', T0 + 100 * DAY), [], 'expired after 90 days');
     assert.equal(cli(s.env, 'record', '--scope', 'repo', '--fingerprint', 'x', '--summary', 'y', '--status', 'maybe', '--project', 'p', '--root', s.dir, '--state-root', s.dir).status, 2, 'unknown status refused');
+  } finally { s.done(); }
+});
+
+test('record stamps the skill, and known divides sightings by the sessions that used it', () => {
+  const s = sandbox();
+  try {
+    const row = (session, skills, daysAgo) => JSON.stringify({ session, skills, at: new Date(T0 - daysAgo * DAY).toISOString() });
+    mkdirSync(s.env.FACTORY_HOME, { recursive: true });
+    writeFileSync(join(s.env.FACTORY_HOME, 'metrics.jsonl'), [
+      row('m1', ['factory-review'], 1), row('m2', ['factory-review', 'other'], 2), row('m3', ['other'], 3),
+      row('m4', ['factory-review'], 3), row('m5', ['factory-review'], 100),
+    ].join('\n') + '\n');
+    const rec = (fp, skill, session) => run('record', { scope: 'core', fingerprint: fp, summary: 's', project: 'p', root: '/p', 'state-root': join(s.dir, 'state'), session, ...(skill ? { skill } : {}) }, s.env, T0);
+    rec('with-skill', 'factory-review', 'a'); rec('with-skill', 'factory-review', 'b');
+    rec('no-skill', null, 'c');
+    const known = run('known', {}, s.env, T0);
+    const w = known.find((x) => x.fingerprint === 'with-skill');
+    assert.deepEqual(w.skills, ['factory-review']);
+    assert.equal(w.skillSessions, 3, 'm1, m2 and m4 used it inside 90 days; m5 is too old and m3 never used it');
+    assert.equal(w.rate, 0.67, '2 sightings over 3 sessions');
+    const n = known.find((x) => x.fingerprint === 'no-skill');
+    assert.equal(n.skillSessions, null, 'an entry with no skill has no denominator');
+    assert.equal(n.rate, null);
   } finally { s.done(); }
 });

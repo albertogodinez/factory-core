@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // lessons.mjs: the lesson log, the cross-repo index and the candidate queue for factory-reflect.
 //
-//   lessons.mjs record --scope repo|core|org --fingerprint <slug> --summary <text>
+//   lessons.mjs record --scope repo|core|org --fingerprint <slug> --summary <text> [--skill <name>]
 //                      [--destination <path>] [--status applied|proposed|queued|dropped] [--source <session|PR>]
 //   lessons.mjs pending [--root <dir>]       repo lessons still proposed here (the newest record per
 //                                            fingerprint says proposed); record applied or dropped to clear one
 //   lessons.mjs decide --fingerprint <slug> --decision never [--summary <text>]
 //                                            a lesson family triage must never land; known lists it
-//   lessons.mjs known [--scope core|org] [--never]   fingerprints seen before, and the never list
+//   lessons.mjs known [--scope core|org] [--never]   fingerprints seen before, and the never list;
+//                                            skillSessions and rate: sightings per session that used the skill
 //   lessons.mjs target --skill <name>        the source repo that owns an installed skill
 //   lessons.mjs classify --text <s> | --file <f>   core or org for new content, by the installed
 //                                            skills' internal-data.json patterns
@@ -43,7 +44,7 @@ import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { start, open, land, classify, LandingError } from './landing.mjs';
 import { writeCandidate, queue, markDone, sourceRepo, repoOwners, launchFor, triagePrompt, pickLauncher, pickAgent, sessionAgent } from './candidates.mjs';
-import { report } from './metrics.mjs';
+import { report, readRows } from './metrics.mjs';
 import { cadence } from './cadence.mjs';
 
 export const EXPIRY_DAYS = 90;
@@ -82,8 +83,8 @@ export function summarize(entries, decisions, now = Date.now()) {
   for (const e of entries) {
     const t = Date.parse(e.ts);
     if (!Number.isFinite(t)) continue;
-    const s = by.get(e.fingerprint) || { fingerprint: e.fingerprint, scope: e.scope, occurrences: [], projects: new Set(), sessions: new Set(), summary: e.summary };
-    s.occurrences.push(t); s.projects.add(e.project); if (e.session) s.sessions.add(e.session); s.summary = e.summary || s.summary; s.scope = e.scope || s.scope;
+    const s = by.get(e.fingerprint) || { fingerprint: e.fingerprint, scope: e.scope, occurrences: [], projects: new Set(), sessions: new Set(), skills: new Set(), summary: e.summary };
+    s.occurrences.push(t); s.projects.add(e.project); if (e.session) s.sessions.add(e.session); if (e.skill) s.skills.add(e.skill); s.summary = e.summary || s.summary; s.scope = e.scope || s.scope;
     by.set(e.fingerprint, s);
   }
   const out = [];
@@ -95,7 +96,7 @@ export function summarize(entries, decisions, now = Date.now()) {
     if (now - last > EXPIRY_DAYS * DAY) reason = 'expired';
     if (d?.decision === 'never') reason = 'never';
     out.push({ fingerprint: s.fingerprint, scope: s.scope, summary: s.summary, occurrences: live.length,
-      projects: [...s.projects].filter(Boolean).sort(), sessions: s.sessions.size, lastSeen: new Date(last).toISOString(), reason });
+      projects: [...s.projects].filter(Boolean).sort(), sessions: s.sessions.size, skills: [...s.skills].sort(), lastSeen: new Date(last).toISOString(), reason });
   }
   // A never decided in triage for a family no single fingerprint named.
   for (const [fp, d] of Object.entries(decisions.fingerprints || {})) {
@@ -149,7 +150,7 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     if (ctx.error) fail(ctx.error);
     const entry = { ts: new Date(now).toISOString(), fingerprint: fp, scope: o.scope, summary: o.summary,
       project: ctx.project?.name, root: ctx.project?.root, destination: o.destination || null,
-      status: o.status || 'proposed', source: o.source || 'session',
+      status: o.status || 'proposed', source: o.source || 'session', ...(o.skill ? { skill: o.skill } : {}),
       session: o.session || env.CLAUDE_CODE_SESSION_ID || env.CODEX_THREAD_ID || null }; // the session that saw it, the id metrics.mjs files its row under
     const local = join(ctx.stateRoot, 'lessons.jsonl');
     mkdirSync(dirname(local), { recursive: true });
@@ -183,9 +184,16 @@ export function run(cmd, o, env = process.env, now = Date.now()) {
     return { root, pending: pendingRepoLessons(readJsonl(repoLessonsFile(env)), [root, mainOf(root)].filter(Boolean), now) };
   }
   if (cmd === 'known') {
+    // The denominator: metrics.mjs files one row per session, with the skills it used. A lesson
+    // about a skill is judged against the sessions inside the expiry window that used that skill.
+    const rows = readRows(env).filter((r) => now - Date.parse(r.at) <= EXPIRY_DAYS * DAY);
     return summarize(readJsonl(indexFile(env)), decisions, now)
       .filter((s) => (!o.scope || s.scope === o.scope) && (!o.never || s.reason === 'never'))
-      .map(({ fingerprint, scope, summary, occurrences, projects, sessions, reason }) => ({ fingerprint, scope, summary, occurrences, projects, sessions, reason }));
+      .map(({ fingerprint, scope, summary, occurrences, projects, sessions, skills = [], reason }) => {
+        const skillSessions = skills.length ? new Set(rows.filter((r) => (r.skills || []).some((k) => skills.includes(k))).map((r) => r.session)).size : null;
+        const rate = skillSessions ? Math.round((occurrences / skillSessions) * 100) / 100 : null;
+        return { fingerprint, scope, summary, occurrences, projects, sessions, skills, skillSessions, rate, reason };
+      });
   }
   if (cmd === 'target') {
     if (!o.skill) fail('--skill is required');

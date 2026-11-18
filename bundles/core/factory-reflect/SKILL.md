@@ -93,9 +93,9 @@ For each Accepted row:
 1. **Record it**, whatever its scope:
    ```bash
    node .agents/skills/factory-reflect/scripts/lessons.mjs record --scope repo|core|org \
-     --fingerprint <slug> --summary "<one line>" --destination <path> --status queued
+     --fingerprint <slug> --summary "<one line>" --skill <installed skill> --destination <path> --status queued
    ```
-   Every lesson goes to `<stateRoot>/lessons.jsonl`. A `core` or `org` lesson also goes to the machine-wide index at `~/.agents/factory/lessons-index.jsonl`, and the output reports how often it has been seen and in which repos.
+   Every lesson goes to `<stateRoot>/lessons.jsonl`. A `core` or `org` lesson also goes to the machine-wide index at `~/.agents/factory/lessons-index.jsonl`, and the output reports how often it has been seen and in which repos. `--skill` lets `lessons.mjs known` divide the sightings by the sessions that used that skill (`skillSessions`, `rate`).
 2. **Queue it as a candidate** for the repo that owns the file:
    ```bash
    node .agents/skills/factory-reflect/scripts/lessons.mjs candidate --kind fact|pattern|harness --scope repo|core|org \
