@@ -80,7 +80,7 @@ export function init({ worktree, ticket, plan = null, recipe = null, testCmd, st
   const state = {
     // The slug tags this ticket's sessions. stateRoot's basename alone ("main") repeats across repos.
     version: 1, slug: `${basename(root)}-${createHash('sha1').update(file).digest('hex').slice(0, 8)}`, ticket: ticket || null, plan, repo: ctx.project?.root ? mainCheckout(worktree) : null, worktree,
-    branch: git(['branch', '--show-current']), trunk: ctx.project?.trunk || null, recipe,
+    branch: git(['branch', '--show-current']), trunk: ctx.project?.trunk || null, base: null, recipe,
     pr: null, head_sha: git(['rev-parse', 'HEAD']), reviewed_range: null,
     test_cmd: testCmd ?? ctx.project?.commands?.test ?? null, ci: null,
     decisions: null, phase: null, blocked: null, findings: [], phases: {},
@@ -237,6 +237,7 @@ export function status(state) {
   const open = state.findings.filter((f) => f.status === 'open').length;
   const parts = [label(state), `phase=${state.phase ?? '-'}`];
   if (state.pr) parts.push(`pr=${state.pr}`);
+  if (state.base && state.base !== state.trunk) parts.push(`stacked-on=${state.base}`);
   if (state.head_sha) parts.push(`head=${state.head_sha.slice(0, 8)}`);
   if (state.ci) parts.push(`ci=${state.ci}`);
   parts.push(`findings=${open} open/${state.findings.length}`);

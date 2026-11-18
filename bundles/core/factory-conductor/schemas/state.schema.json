@@ -13,6 +13,7 @@
     "worktree": { "type": "string", "minLength": 1, "description": "The ticket's one worktree. Every phase runs here, in order." },
     "branch": { "type": ["string", "null"] },
     "trunk": { "type": ["string", "null"] },
+    "base": { "type": ["string", "null"], "description": "The branch the PR targets: trunk, or the parent's branch when the PR is stacked. Deploy sets it." },
     "recipe": { "type": ["string", "null"], "description": "Installed skill whose phases/<phase>.md replaces the conductor's default prompt for that phase." },
     "pr": { "type": ["integer", "null"] },
     "head_sha": { "type": ["string", "null"] },

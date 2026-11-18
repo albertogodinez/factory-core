@@ -4,6 +4,8 @@ Build what the plan says, in the ticket's worktree, and prove it works. Read the
 
 A `Task:` in your prompt narrows the run, such as fixing named findings. Then do only that, and keep the diff to it.
 
+Finding `stack-resync` means the parent branch moved: merge `origin/<base>` into this branch with a merge commit, as `factory-stacked-pr` "After the parent moves" says. Resolve the conflicts, run `test_cmd`, push, and mark the finding fixed.
+
 1. Read the plan. Don't re-research what it already cites.
 2. Implement it. Commit in small steps on the ticket's branch.
 3. Run `test_cmd` and the project's lint and build.

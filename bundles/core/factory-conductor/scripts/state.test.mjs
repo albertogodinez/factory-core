@@ -115,6 +115,16 @@ test('digest totals metrics per phase', () => {
   } finally { f.dispose(); }
 });
 
+test('a stacked PR records its base and the status line names the parent', () => {
+  const f = fixture(); try {
+    assert.equal(load(f.file).base, null);
+    set(f.file, ['trunk=main', 'base=feat/PROJ-0-parent', 'pr=12']);
+    assert.match(status(load(f.file)), /pr=12 stacked-on=feat\/PROJ-0-parent/);
+    set(f.file, ['base=main']);
+    assert.doesNotMatch(status(load(f.file)), /stacked-on/, 'a PR on trunk is not stacked');
+  } finally { f.dispose(); }
+});
+
 test('set parses JSON values and the result must still be valid', () => {
   const f = fixture(); try {
     set(f.file, ['pr=42', 'ci=green']);
