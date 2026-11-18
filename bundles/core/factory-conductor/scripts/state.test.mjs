@@ -43,7 +43,7 @@ test('two state roots with the same basename get different session tags', () => 
 test('a phase run hands over only through its notes', () => {
   const f = fixture(); try {
     const r = start(f.file, 'work', '2026-01-01T00:00:00.000Z');
-    assert.deepEqual([r.n, r.tag, r.title], [1, `conductor:${load(f.file).slug}:work:1`, 'worker · build PROJ-1']);
+    assert.deepEqual([r.n, r.tag, r.title], [1, `conductor:${load(f.file).slug}:work:1`, 'PROJ-1 · work']);
     assert.throws(() => start(f.file, 'review'), /work is still running/);
     const out = end(f.file, 'work', { phase: 'work', outcome: 'pass', metrics: { turns: 40, peak_ctx: 120000 },
       handoff: { head_sha: 'abcdef0123', test_cmd: 'npm test', findings: [{ id: 'F1', summary: 'x', status: 'open' }] } }, '2026-01-01T00:10:00.000Z');
@@ -61,26 +61,24 @@ test('later rounds merge findings by id and number their tabs', () => {
   const f = fixture(); try {
     start(f.file, 'review'); end(f.file, 'review', { phase: 'review', outcome: 'pass', handoff: { findings: [{ id: 'F1', summary: 'a', status: 'open' }, { id: 'F2', summary: 'b', status: 'open' }] } });
     const r2 = start(f.file, 'review');
-    assert.equal(r2.title, 'reviewer · round 2');
+    assert.equal(r2.title, 'PROJ-1 · review 2');
     end(f.file, 'review', { phase: 'review', outcome: 'pass', handoff: { findings: [{ id: 'F1', summary: 'a', status: 'fixed' }] } });
     assert.deepEqual(load(f.file).findings.map((x) => `${x.id}:${x.status}`), ['F1:fixed', 'F2:open']);
   } finally { f.dispose(); }
 });
 
-test('a run is named by its role and a few words: --what, a short --task, else the phase', () => {
-  const st = { ticket: 'PROJ-1', pr: 1029 };
-  assert.equal(describe(st, 'work', 2, { task: 'fix page-view reset' }), 'fix page-view reset');
-  assert.equal(describe(st, 'work', 2, { task: 'fix F1 F2; keep the merge, never rebase' }), 'fix F1 F2', 'first clause of a task');
-  assert.equal(describe(st, 'ci-monitor', 7, { task: 'watch PR #1029 at 5246cc0b (base main) until all checks finish' }), 'watch PR #1029 at 5246cc0b');
-  assert.equal(describe(st, 'ci-monitor', 7, { task: 'poll every check on the open pull request and report each failure with ids' }), 'CI on #1029', 'a long task: the phase says it');
-  assert.equal(describe(st, 'ci-monitor', 7, { task: 'long '.repeat(20), what: 'CI on #1029' }), 'CI on #1029');
-  assert.equal(describe({ ...st, pr: 'https://github.com/o/r/pull/77' }, 'ci-monitor', 1), 'CI on #77');
-  assert.equal(describe(st, 'review', 3), 'round 3');
-  assert.equal(describe({ ticket: 'PROJ-1', pr: null }, 'intake', 1), 'scope PROJ-1');
+test('a run is named only by the words the conductor gives (--what); without them it keeps the default', () => {
+  assert.equal(describe('  fix   page-view reset '), 'fix page-view reset');
+  assert.equal(describe(''), null);
+  assert.equal(describe(undefined), null);
   const f = fixture(); try {
     const r = start(f.file, 'ci-monitor', undefined, { what: 'CI on #1029' });
-    assert.deepEqual([r.role, r.what, r.title], ['monitor', 'CI on #1029', 'monitor · CI on #1029']);
-    assert.deepEqual([load(f.file).phases['ci-monitor'].runs[0].role, load(f.file).phases['ci-monitor'].runs[0].what], ['monitor', 'CI on #1029']);
+    assert.deepEqual([r.role, r.what, r.title], ['monitor', 'CI on #1029', 'CI on #1029']);
+    assert.equal(load(f.file).phases['ci-monitor'].runs[0].what, 'CI on #1029');
+    end(f.file, 'ci-monitor', { phase: 'ci-monitor', outcome: 'pass' });
+    const d = start(f.file, 'ci-monitor');
+    assert.deepEqual([d.what, d.title], [null, 'PROJ-1 · ci-monitor 2']);
+    assert.equal(load(f.file).phases['ci-monitor'].runs[1].what, undefined);
   } finally { f.dispose(); }
 });
 
@@ -165,11 +163,13 @@ test('with a launcher, the session is tagged and titled for the phase', () => {
     assert.equal(r.via, 'fake-launcher');
     assert.ok(r.command.includes(`t=conductor:${load(f.file).slug}:work:1`));
     assert.match(r.command, new RegExp(`--cwd ${f.worktree.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-    assert.match(r.after, /--title 'worker · build PROJ-1'/);
+    assert.match(r.after, /--title 'PROJ-1 · work'/);
     end(f.file, 'work', { phase: 'work', outcome: 'pass' });
     writeFileSync(join(lp, 'launcher.json'), JSON.stringify({ argv: ['term', '{name}', '{prompt}'], name: ['--label', 'role={role}', '--label', 'what={what}'] }));
-    const n = launch(f.file, 'review', { task: 'round two of the review', env: f.env });
-    assert.ok(n.command.includes("--label role=reviewer --label 'what=round two of the review'"), n.command);
+    assert.ok(!launch(f.file, 'review', { task: 'a long task the conductor wrote', env: f.env }).command.includes('--label'), 'no --what: no name labels');
+    end(f.file, 'review', { phase: 'review', outcome: 'pass' });
+    const n = launch(f.file, 'deploy', { what: 'open the PR', env: f.env });
+    assert.ok(n.command.includes("--label role=deploy --label 'what=open the PR'"), n.command);
   } finally { f.dispose(); }
 });
 
@@ -209,10 +209,10 @@ test('a plan-first run starts without a ticket, named after its plan, and intake
     assert.equal(init({ worktree, plan: 'plans/feat-clickstream.md', stateRoot }).existed, true);
     assert.throws(() => init({ worktree, plan: 'plans/other.md', stateRoot }), /holds feat-clickstream/);
     const r = start(file, 'intake');
-    assert.equal(r.title, 'intake · scope feat-clickstream');
+    assert.equal(r.title, 'feat-clickstream · intake');
     assert.match(status(load(file)), /^feat-clickstream phase=intake/);
     end(file, 'intake', { phase: 'intake', outcome: 'pass', handoff: { ticket: 'PROJ-9' } });
     assert.equal(load(file).ticket, 'PROJ-9');
-    assert.equal(start(file, 'work').title, 'worker · build PROJ-9');
+    assert.equal(start(file, 'work').title, 'PROJ-9 · work');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

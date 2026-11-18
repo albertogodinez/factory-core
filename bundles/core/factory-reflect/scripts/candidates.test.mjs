@@ -100,7 +100,7 @@ test('launch: {tag} marks the session, liveTags lists the open ones, afterLaunch
     assert.deepEqual(launchFor(base).argv, ['tool', 'p'], 'no tag: the element drops out');
     writeFileSync(join(dir, 'launcher.json'), JSON.stringify({ argv: ['tool', '{name}', '{prompt}'], name: ['--label', 'r={role}', '--label', 'w={what}'] }));
     assert.deepEqual(launchFor({ ...base, role: 'worker', what: 'fix reset' }).argv, ['tool', '--label', 'r=worker', '--label', 'w=fix reset', 'p']);
-    assert.deepEqual(launchFor({ ...base, what: 'x' }).argv, ['tool', 'p'], 'no role: the element drops out');
+    assert.deepEqual(launchFor({ ...base, role: 'worker' }).argv, ['tool', 'p'], 'no words: the element drops out');
     writeFileSync(join(dir, 'launcher.json'), JSON.stringify({ argv: ['tool', '{tag}', '{prompt}'], tag: ['--label', 'k={tag}'], live: 'live.mjs', after: 'after.mjs' }));
     assert.equal(launchFor(base).after, undefined, 'no title: no naming command');
     const named = launchFor({ ...base, title: 'lesson · x' }).after;

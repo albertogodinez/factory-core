@@ -7,11 +7,12 @@
 //   init   --worktree <path> (--ticket <key> | --plan p | both) [--recipe skill] [--test-cmd c] [--state-root dir]
 //   show   --state <file> [--field a.b]
 //   set    --state <file> key=value ...           (value parsed as JSON when it parses)
-//   start  --state <file> <phase> [--task text] [--what words]
+//   start  --state <file> <phase> [--what words]
 //                                                 (records a run; prints its n, tag, role, what and title)
 //   launch --state <file> <phase> [--task text] [--what words] [--run]
 //                                                 (start + the session to open it in; --run opens it)
-//                                                 --what: a few words naming the run ("fix page-view reset")
+//                                                 --what: a few words naming the run ("fix page-view reset");
+//                                                 the session's name where the launcher shows it
 //   end    --state <file> <phase> --notes <file|->  (validates the notes, applies their handoff)
 //   kill   --state <file> <phase> --why <text>    (the conductor's notes for a phase it stopped)
 //   live   --state <file>                         (tags of this ticket's phase sessions still open)
@@ -61,7 +62,7 @@ export function load(file) {
   return JSON.parse(readFileSync(file, 'utf8'));
 }
 
-// What a ticket is called in its status line and phase descriptions: its key, or the plan's name until intake files the ticket.
+// What a ticket's status line and default tab names call it: its key, or the plan's name until intake files the ticket.
 export const label = (state) => state.ticket || (state.plan ? basename(state.plan).replace(/\.md$/, '') : state.slug);
 
 export function init({ worktree, ticket, plan = null, recipe = null, testCmd, stateRoot, ctx }) {
@@ -108,28 +109,17 @@ export function set(file, pairs) {
   return save(file, state);
 }
 
-// Who a phase session is, for wherever the launcher shows it: a role, and a few words on what this run does.
+// Who a phase session is, for wherever the launcher shows it: a role, and a few words on what this run
+// does. The words are only ever the conductor's own (--what): a session given none keeps its default name.
 export const ROLES = { intake: 'intake', work: 'worker', review: 'reviewer', deploy: 'deploy', 'ci-monitor': 'monitor', close: 'close' };
-const WHAT_WORDS = 6, WHAT_CHARS = 40;
+const WHAT_CHARS = 60;
 
-// The run's own words when the conductor gave a short --what, or a --task that is already short (its first
-// clause); else what the phase and the state say: "round 3", "CI on #1029", "scope PROJ-1".
-export function describe(state, phase, n, { task, what } = {}) {
-  const short = (s) => {
-    const t = String(s || '').replace(/\s+/g, ' ').trim();
-    return t && t.split(' ').length <= WHAT_WORDS && t.length <= WHAT_CHARS ? t : null;
-  };
-  const given = short(what) || short(String(task || '').split(/[;:\n]|\.\s| \(| until | — /)[0]);
-  if (given) return given;
-  const pr = state.pr ? `#${String(state.pr).replace(/^.*\/(?=\d+$)/, '')}` : null;
-  const fallback = {
-    intake: `scope ${label(state)}`, work: n > 1 ? `round ${n}` : `build ${label(state)}`, review: `round ${n}`,
-    deploy: pr ? `push ${pr}` : 'open the PR', 'ci-monitor': pr ? `CI on ${pr}` : 'CI', close: `wrap up ${label(state)}`,
-  }[phase];
-  return (fallback || phase).slice(0, WHAT_CHARS);
+export function describe(what) {
+  const t = String(what ?? '').replace(/\s+/g, ' ').trim();
+  return t ? t.slice(0, WHAT_CHARS) : null;
 }
 
-export function start(file, phase, at = now(), { task, what } = {}) {
+export function start(file, phase, at = now(), { what } = {}) {
   if (!phase) fail('start needs a phase');
   const state = load(file);
   if (state.phase && state.phase !== phase) fail(`${state.phase} is still running; end or kill it before starting ${phase}`);
@@ -139,12 +129,12 @@ export function start(file, phase, at = now(), { task, what } = {}) {
   const n = runs.length + 1;
   const tag = `conductor:${state.slug}:${phase}:${n}`;
   const role = ROLES[phase] || phase;
-  const desc = describe(state, phase, n, { task, what });
-  runs.push({ n, started: at, tag, role, what: desc });
+  const desc = describe(what);
+  runs.push({ n, started: at, tag, role, ...(desc ? { what: desc } : {}) });
   state.phase = phase;
   state.blocked = null;
   save(file, state);
-  return { phase, n, tag, role, what: desc, title: `${role} · ${desc}` };
+  return { phase, n, tag, role, what: desc, title: desc || `${label(state)} · ${phase}${n > 1 ? ` ${n}` : ''}` };
 }
 
 // The prompt a phase session starts with. A recipe skill's phases/<phase>.md replaces the default.
@@ -177,10 +167,10 @@ function launcherSetup(state, env) {
   return { launcher: pickLauncher(repoAdapters, machine), agent: pickAgent(machine, { repoAdapters, env }), skillsDirs };
 }
 
-// Start a phase run and say how to open it: in its own launcher session (a terminal tab named
-// "<role> · <what>", such as "monitor · CI on #1029") when the machine has a launcher, else as a subagent of the conductor.
+// Start a phase run and say how to open it: in its own launcher session (a terminal tab named by --what,
+// such as "CI on #1029", else "<ticket> · <phase>") when the machine has a launcher, else as a subagent of the conductor.
 export function launch(file, phase, { task, what, run = false, env = process.env } = {}) {
-  const r = start(file, phase, now(), { task, what });
+  const r = start(file, phase, now(), { what });
   const state = load(file);
   const { path, prompt } = phasePrompt(state, phase, file, r.n, task);
   const { launcher, agent, skillsDirs } = launcherSetup(state, env);
@@ -287,7 +277,7 @@ export function main(argv, env = process.env) {
     }
     case 'show': { const s = load(need()); return o.field ? o.field.split('.').reduce((v, k) => v?.[k], s) ?? null : s; }
     case 'set': return { status: status(set(need(), o._)) };
-    case 'start': return start(need(), o._[0], now(), { task: o.task, what: o.what });
+    case 'start': return start(need(), o._[0], now(), { what: o.what });
     case 'launch': return launch(need(), o._[0], { task: o.task, what: o.what, run: !!o.run, env });
     case 'end': {
       if (!o.notes) fail('end needs --notes <file|->');
