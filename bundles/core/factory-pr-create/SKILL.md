@@ -1,6 +1,6 @@
 ---
 name: factory-pr-create
-description: 'Open any PR, stacked or not. Use instead of a bare `gh pr create`, which skips the stack link. Triggers on "open a PR", "PR this", "stack this on #NNN", "open the stacked PR". Writes the title and body from the repo template, links the stack, and with a tracker adapter links the ticket and moves it to review.'
+description: 'Open or update any PR, stacked or not. Use instead of a bare `gh pr create`, which skips the stack link. Triggers on "open a PR", "PR this", "stack this on #NNN", "open the stacked PR", "update the PR body", "attach screenshots, an image or a video to the PR". Writes the title and body from the repo template, attaches evidence, links the stack, and with a tracker adapter links the ticket and moves it to review.'
 user_invocable: true
 ---
 
