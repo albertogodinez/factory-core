@@ -81,6 +81,34 @@ test('--only resolves exactly the named personas, gates still applied, and drops
   assert.deepEqual(j.personas.map((p) => [p.name, p.status]), [['acme-conv', 'dispatch'], ['react-patterns', 'skipped']]);
 });
 
+test('--follow-up keeps general and path-matched personas on a small range', () => {
+  const bare = makeRepo(join(t.root, 'bare-fu'), {});
+  const go = (diff) => {
+    const r = run('resolve-personas.mjs', ['--cwd', bare, '--run', join(t.root, 'run-fu'), '--diff', join(t.root, diff), '--follow-up']);
+    assert.equal(r.status, 0, r.stderr);
+    return Object.fromEntries(JSON.parse(r.stdout).personas.map((p) => [p.name, p.status]));
+  };
+  const small = go('tsx.diff');
+  assert.equal(small.general, 'dispatch');
+  assert.equal(small['fix-root-causes'], 'skipped');
+  assert.equal(small['no-comments'], 'skipped');
+  write(join(t.root, 'big.diff'), tsDiff + '+x\n'.repeat(90));
+  const big = go('big.diff');
+  assert.equal(big['fix-root-causes'], 'dispatch');
+  assert.equal(big['no-comments'], 'skipped');
+});
+
+test('--follow-up on a large range keeps a persona that matched on its diff gate but not its paths gate', () => {
+  const p2 = join(t.root, 'factory-review-gated');
+  write(join(p2, 'personas/gated.md'), '---\nname: gated\ndescription: Gated.\npaths: \\.py$\ndiff: ^\\+x$\n---\nBody\n');
+  write(join(p2, 'rules/gated/one.md'), '---\ntitle: One\nrepos: [cross-repo]\n---\nRule one\n');
+  const proj = makeRepo(join(t.root, 'proj-gated'), { files: { '.agents/factory-metadata/project.json': { version: 1, name: 'proj-gated', review: { personas: ['gated'] } } } });
+  write(join(t.root, 'big-gated.diff'), tsDiff + '+x\n'.repeat(90));
+  const r = run('resolve-personas.mjs', ['--cwd', proj, '--run', join(t.root, 'run-gated'), '--diff', join(t.root, 'big-gated.diff'), '--packs', p2, '--follow-up']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).personas.find((p) => p.name === 'gated').status, 'dispatch');
+});
+
 test('a pack rule file replaces the core file of the same name, and repos: scoping applies', () => {
   const c = run('compile-rules.mjs', ['no-comments', 'proj', join(t.root, 'compiled'), '--packs', pack]);
   assert.equal(c.status, 0, c.stderr);

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Conductor"
+  short_description: "Run a ticket as fresh phase agents over one state file"
+policy:
+  allow_implicit_invocation: false

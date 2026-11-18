@@ -23,6 +23,7 @@ Lessons land in the project the resolver names (`project.root`), in the repo the
 
 Inputs, in order of preference:
 
+- **Phase notes**, when a `factory-conductor` close phase runs you: `node .agents/skills/factory-conductor/scripts/state.mjs digest --state <state file>`. This is the digest. It holds every phase run's notes (friction, misses, evidence pointers) and its totals (runs, rounds, turns, peak context). Give it to each reviewer in place of a transcript, and add the PR (below). A reviewer opens a transcript only to confirm a moment a note points at, by grepping it, never by reading it whole. A `killed` run is primary evidence. A phase with many runs or rounds is where to look first.
 - **The current session** (default). Claude Code: the newest `~/.claude/projects/<cwd-with-slashes-as-dashes>/*.jsonl` whose first user message matches this conversation's opening prompt. Codex: the newest file under `~/.codex/sessions/`. Stay inside the session's own project directory; never glob across other projects. If nothing matches, write a tight digest of the session instead.
 - **A PR or branch** the user names: `gh pr view <N> --comments` (with `GH_HOST` from `project.remote.host`), its review threads (factory-review's `fetch-pr-threads` script, if installed), its commits, reverts and CI failures.
 

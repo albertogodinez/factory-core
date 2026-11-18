@@ -46,7 +46,7 @@ Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-archite
 │   ├── .agents/factory-metadata/
 │   │   ├── project.json                      # config: neighbors, marker policy, cohort, commands
 │   │   ├── skills-lock.json                  # what factory installed, with hashes
-│   │   └── state/<worktree-id>/              # resolver cache, lessons.jsonl, recordings, handoffs
+│   │   └── state/<worktree-id>/              # resolver cache, lessons.jsonl, recordings, handoffs, conductor/
 │   └── .git/info/exclude                     # hides the install; covers every worktree
 └── ccui-components-web/            # same local-only layout
 
@@ -117,6 +117,10 @@ Budget: one file, `node:` imports only, no network. A cached call adds under 15 
 | Zero-config | `~/.agents/factory/cache/<repo-id>/` | a path you choose | printed to you; nothing is written into the repo |
 | Project | `<repo>/.agents/factory-metadata/state/<worktree-id>/` | `planHome` in config, default `<repo>/plans/` | that repo |
 | Workspace (migration) | `<hub>/tmp/` | `<hub>/plans/` | by scope |
+
+## Running a ticket with the conductor
+
+`factory-conductor` runs a ticket as a chain of fresh phase agents: intake, work, review, deploy, ci-monitor and close. They hand over through one file, `<stateRoot>/conductor/state.json`, never through a transcript. Each phase opens in its own session through `adapters.sessionLauncher` (a Herdr tab with the hc launcher), or as a subagent when the machine has no launcher. It leaves notes on exit (`schemas/phase-notes.schema.json`). `close` runs `factory-reflect` once over those notes. A project changes a phase without forking the conductor through a recipe skill with `phases/<phase>.md`.
 
 ## Neighbors (cross-repo work)
 

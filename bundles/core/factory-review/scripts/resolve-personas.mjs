@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-// resolve-personas.mjs --run <dir> --diff <diff.txt> [--repo <name|owner/name>] [--cwd <dir>] [--packs a:b] [--only a,b]
+// resolve-personas.mjs --run <dir> --diff <diff.txt> [--repo <name|owner/name>] [--cwd <dir>] [--packs a:b] [--only a,b] [--follow-up]
 // Decides which reviewer personas to dispatch for this project and compiles their rules.
 // --only names the personas to consider instead of the configured or default set, without general.
+// --follow-up marks a later round, whose diff is only the new commits. Keeps `general` and the personas
+//    whose `paths` gate matched. A diff over 3 files or 80 changed lines also keeps the personas
+//    that matched on a sweep or diff gate or have no gate. The first round never uses it.
 // 1. Asks factory-context for the project and adapters.personas (review.personas in the config).
 //    With none configured, the default set is every persona whose frontmatter says `default: true`.
 //    `general` always runs.
@@ -16,9 +19,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { allPersonas, compileRules, findPersona, parseArgs, parseFrontmatter, resolveContext, searchRoots } from './lib.mjs';
 
-const o = parseArgs(process.argv.slice(2));
+const o = parseArgs(process.argv.slice(2), ['follow-up']);
 if (!o.run || !o.diff) {
-  console.error('Usage: resolve-personas.mjs --run <dir> --diff <diff.txt> [--repo <name>] [--cwd <dir>] [--packs a:b] [--only a,b]');
+  console.error('Usage: resolve-personas.mjs --run <dir> --diff <diff.txt> [--repo <name>] [--cwd <dir>] [--packs a:b] [--only a,b] [--follow-up]');
   process.exit(2);
 }
 let ctx;
@@ -35,6 +38,8 @@ const files = [...diffText.matchAll(/^\+\+\+ (?:b\/)?(.+)$/gm)].map((m) => m[1])
 const sweepFile = join(o.run, 'sweep-hits.tsv');
 const sweepSignals = new Set(existsSync(sweepFile) ? readFileSync(sweepFile, 'utf8').split('\n').slice(1).map((l) => l.split('\t')[0]).filter(Boolean) : []);
 const diffLines = diffText.split('\n');
+const changedLines = diffLines.filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l)).length;
+const smallRange = files.length <= 3 && changedLines <= 80;
 
 const configured = ctx.adapters?.personas ?? [];
 const only = typeof o.only === 'string' ? o.only.split(',').map((s) => s.trim()).filter(Boolean) : [];
@@ -60,8 +65,9 @@ function gate(fm) {
   if (fm.paths) checks.push({ label: `paths ${fm.paths}`, ok: files.some((f) => new RegExp(fm.paths).test(f)) });
   if (fm.sweep) checks.push({ label: `sweep ${asList(fm.sweep).join('|')}`, ok: asList(fm.sweep).some((s) => sweepSignals.has(s)) });
   if (fm.diff) { const re = new RegExp(fm.diff); checks.push({ label: 'diff pattern', ok: diffLines.some((l) => re.test(l)) }); }
-  if (!checks.length) return { ok: true };
-  return checks.some((c) => c.ok) ? { ok: true } : { ok: false, reason: `skipped (gate not met: ${checks.map((c) => c.label).join('; ')})` };
+  const pathsMatched = Boolean(fm.paths) && checks[0].ok;
+  if (!checks.length) return { ok: true, pathsMatched };
+  return checks.some((c) => c.ok) ? { ok: true, pathsMatched } : { ok: false, reason: `skipped (gate not met: ${checks.map((c) => c.label).join('; ')})` };
 }
 
 const personas = names.map((name) => {
@@ -72,13 +78,15 @@ const personas = names.map((name) => {
   const g = gate(fm);
   if (!g.ok) return { ...base, status: 'skipped', reason: g.reason };
   if (name === 'general') return { ...base, status: 'dispatch', ruleCount: 0 };
+  if (o['follow-up'] && smallRange && !g.pathsMatched)
+    return { ...base, status: 'skipped', reason: 'skipped (follow-up round, small range, no path match)' };
   const c = compileRules(name, target, roots, o.run);
   if (!c.anyDir) return { ...base, status: 'gap', reason: 'no rules directory in core or any installed pack' };
   if (c.included === 0) return { ...base, status: 'skipped', reason: 'skipped (zero rules for this project)', ruleCount: 0 };
   return { ...base, status: 'dispatch', rulesFile: c.file, ruleCount: c.included };
 });
 
-const result = JSON.stringify({ project: target, personaSource: source, changedFiles: files.length, personas, packs: roots.slice(1) }, null, 2);
+const result = JSON.stringify({ project: target, personaSource: source, followUp: Boolean(o['follow-up']), smallRange, changedFiles: files.length, personas, packs: roots.slice(1) }, null, 2);
 mkdirSync(o.run, { recursive: true });
 writeFileSync(join(o.run, 'personas.json'), result);
 console.log(result);

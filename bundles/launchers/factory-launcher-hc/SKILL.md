@@ -1,6 +1,6 @@
 ---
 name: factory-launcher-hc
-description: Session-launcher adapter that starts an agent session in another repo with hc, so a lesson's source repo reviews and lands it in its own session. factory setup turns it on for the machine when hc is on PATH. factory-reflect calls it; you don't run it by hand.
+description: Session-launcher adapter that starts an agent session in another repo with hc, so a lesson's source repo reviews and lands it in its own session. factory setup turns it on for the machine when hc is on PATH. factory-reflect and factory-conductor call it; you don't run it by hand.
 disable-model-invocation: true
 ---
 
@@ -15,3 +15,7 @@ An adapter for `adapters.sessionLauncher` (contract: `factory-context/references
 `tools.json` pins `hc` and `plannotator`: the lesson flow runs the review gate through plannotator, and this adapter starts sessions through hc. `factory-tool-sync` reports either one as MISSING, BELOW or BEHIND.
 
 `{agent}` is the agent CLI the machine picks (`adapters.agentCLI` in `~/.agents/factory/config.json`; `claude` when unset), and `{prompt}` is that agent's way of running the triage skill.
+
+## Conductor phase sessions
+
+`factory-conductor`'s `state.mjs launch` uses the same `launcher.json` to open each phase of a ticket as its own session, with `{repo}` set to the ticket's worktree. The tag is `conductor:<slug>:<phase>:<n>`, and `after.mjs` names the tab `<ticket> · <phase>` (with ` <n>` from the second run on). `--no-parent` is what makes it a tab: a terminal an agent starts with a parent belongs to that agent's tab with no pane of its own. Herdr shows a phase that's waiting on the user as `blocked` in its agents list, so the conductor doesn't watch the screen. It reads the state file, and `live.mjs` tells it whether a phase session is still open. Neither the conductor nor a phase needs Herdr's own manual.

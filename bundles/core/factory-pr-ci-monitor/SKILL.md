@@ -167,6 +167,20 @@ The bar is that a reviewer would plausibly stop at the line and ask. Don't narra
 
 Report the PR and repo, current check status, the base interval, cap and next tick's time, the pending job id (and how to cancel it), that jobs end with the session, and that it stops after 3 idle ticks and how to restart it.
 
+## Under the conductor
+
+Applies only when your prompt names a `factory-conductor` state file: you are its ci-monitor phase. Elsewhere, ignore this section.
+
+- **Inputs:** read `pr`, `head_sha` and `findings` from the state file at the start of every tick. Don't rely on memory of an earlier tick.
+- **Waiting:** don't use step 3's scheduler, and never schedule anything that re-sends `/factory-pr-ci-monitor ... tick` into this session: each one reloads this file into a long context. Load the skill once. Wait with a blocking call: `gh pr checks <N> --watch --interval 60` in Bash, a bounded until-loop over `gh pr checks`, or the harness's own wait. Keep each wait under the tool's timeout and repeat. Keep the idle-tick stop (3a); the state file in step 3a still holds the snapshot.
+- **Read, reply, classify, never commit.** Skip the pre-flight and the fix steps in 4.3 and `ci-failure.md`. Triage as usual. A comment that needs a code change, or a failing check you can't dismiss, becomes an open finding in the handoff: a stable `id` (`pr<N>-c<comment id>` or `pr<N>-ci-<check name>`), `severity`, a one-line `summary`, `status: open`, and `source` set to the thread URL or id. You may reply "fixing in a follow-up commit" under the usual reply rules. Reply only to what you would have replied to outside the conductor.
+- **Outcomes**, written per the conductor's `_exit.md`:
+  - open findings: `outcome: fail`, `ci` set to `red` or `green`. The conductor runs work, then a review round.
+  - merged or closed: `outcome: pass`, `ci: merged` or `closed`. Run teardown only if the prompt says so.
+  - a question only the user can answer, or an other-human comment that needs them: `outcome: blocked` with the `question`.
+  - the idle-tick stop (3a) on an open PR: `outcome: blocked`, with a `question` that says what the PR waits on (an approval, the merge, a queued runner). Never `pass`: the conductor would relaunch you at once.
+  - context past about 150k tokens: `outcome: pass` with the current `ci`, `head_sha` and `findings`. A fresh run continues from the state file.
+
 ## Tracker hook
 
 If `adapters.tracker` is set, run that adapter skill's link and transition steps at the points below. If it is unset, skip them and say they were skipped. Core doesn't implement a tracker.

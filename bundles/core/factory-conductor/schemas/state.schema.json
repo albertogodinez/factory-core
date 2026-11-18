@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "factory-conductor state",
+  "description": "The one file every phase of a ticket reads and writes. Phases hand over through it, never through a transcript.",
+  "type": "object",
+  "required": ["version", "slug", "ticket", "worktree", "phases"],
+  "properties": {
+    "version": { "const": 1 },
+    "slug": { "type": "string", "minLength": 1 },
+    "ticket": { "type": ["string", "null"], "minLength": 1, "description": "Null on a plan-first run until intake files the ticket." },
+    "plan": { "type": ["string", "null"] },
+    "repo": { "type": ["string", "null"], "description": "Main checkout of the repo the ticket changes." },
+    "worktree": { "type": "string", "minLength": 1, "description": "The ticket's one worktree. Every phase runs here, in order." },
+    "branch": { "type": ["string", "null"] },
+    "trunk": { "type": ["string", "null"] },
+    "recipe": { "type": ["string", "null"], "description": "Installed skill whose phases/<phase>.md replaces the conductor's default prompt for that phase." },
+    "pr": { "type": ["integer", "null"] },
+    "head_sha": { "type": ["string", "null"] },
+    "reviewed_range": { "type": ["string", "null"], "description": "base..head the last review round covered." },
+    "test_cmd": { "type": ["string", "null"] },
+    "ci": { "enum": [null, "pending", "green", "red", "merged", "closed"] },
+    "decisions": { "type": ["string", "null"], "description": "Path of the show-me-your-work log for this ticket." },
+    "phase": { "type": ["string", "null"], "description": "The phase running now, or null between phases." },
+    "blocked": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "object", "required": ["phase", "question"], "properties": { "phase": { "type": "string" }, "question": { "type": "string" } } }
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "summary", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "type": "string" },
+          "summary": { "type": "string" },
+          "source": { "type": "string" },
+          "status": { "enum": ["open", "fixed", "declined", "by-design"] }
+        }
+      }
+    },
+    "phases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["runs"],
+        "properties": {
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["n", "started"],
+              "properties": {
+                "n": { "type": "integer" },
+                "started": { "type": "string" },
+                "ended": { "type": "string" },
+                "wall_ms": { "type": "integer" },
+                "tag": { "type": "string" },
+                "outcome": { "enum": ["pass", "fail", "blocked", "killed"] },
+                "notes": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

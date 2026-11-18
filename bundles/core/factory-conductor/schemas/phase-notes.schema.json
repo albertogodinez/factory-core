@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "factory-conductor phase notes",
+  "description": "What a phase agent leaves when it exits, while its context is fresh. factory-reflect reads these instead of the transcript. Evidence is a pointer, never pasted content.",
+  "type": "object",
+  "required": ["phase", "outcome"],
+  "additionalProperties": false,
+  "properties": {
+    "phase": { "type": "string", "minLength": 1 },
+    "outcome": { "enum": ["pass", "fail", "blocked", "killed"] },
+    "summary": { "type": "string", "description": "One line: what the phase did." },
+    "skills": { "type": "array", "items": { "type": "string" }, "description": "Skills the phase loaded." },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "turns": { "type": "integer" },
+        "peak_ctx": { "type": "integer" },
+        "rounds": { "type": "integer" },
+        "agents": { "type": "integer" },
+        "user_interventions": { "type": "integer" }
+      }
+    },
+    "friction": { "type": "array", "items": { "type": "string" }, "description": "What slowed the phase: retries, wrong assumptions, a tool that failed." },
+    "misses": { "type": "array", "items": { "type": "string" }, "description": "Something an earlier phase should have caught." },
+    "question": { "type": "string", "description": "With outcome blocked: the one decision the conductor or user must make." },
+    "evidence": { "type": "array", "items": { "type": "string" }, "description": "Pointers: a commit, PR thread, file:line, transcript path and grep words." },
+    "handoff": {
+      "type": "object",
+      "description": "Fields this phase sets in state.json for the next one.",
+      "additionalProperties": false,
+      "properties": {
+        "ticket": { "type": "string", "minLength": 1, "description": "Set by intake when it files the ticket on a plan-first run." },
+        "plan": { "type": "string" },
+        "branch": { "type": "string" },
+        "pr": { "type": "integer" },
+        "head_sha": { "type": "string" },
+        "reviewed_range": { "type": "string" },
+        "test_cmd": { "type": "string" },
+        "ci": { "enum": ["pending", "green", "red", "merged", "closed"] },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "summary", "status"],
+            "properties": {
+              "id": { "type": "string" },
+              "severity": { "type": "string" },
+              "summary": { "type": "string" },
+              "source": { "type": "string" },
+              "status": { "enum": ["open", "fixed", "declined", "by-design"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}
