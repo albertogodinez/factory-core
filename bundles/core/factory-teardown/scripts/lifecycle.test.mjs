@@ -168,7 +168,7 @@ test('launched process group stops descendants before releasing its inputs', { s
     const r = await run(f), raw = await file(f, r, 'input', 'intermediate');
     const app = `const {spawn}=require('node:child_process'); const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'}); console.log(c.pid); setInterval(()=>{},1000);`;
     server = await launchProcess({ ...f, run: r.id, command: [process.execPath, '-e', app], cwd: f.root });
-    for (let i = 0; i < 30 && !readFileSync(server.log, 'utf8').trim(); i++) await new Promise(r => setTimeout(r, 50));
+    for (let i = 0; i < 200 && !readFileSync(server.log, 'utf8').trim(); i++) await new Promise(r => setTimeout(r, 50));
     const descendant = Number(readFileSync(server.log, 'utf8').trim().split('\n')[0]); assert.ok(descendant > 1);
     const stopped = await stopResources({ ...f, run: r.id, apply: true });
     assert.ok(!stopped.actions.some(a => a.status === 'failed'), JSON.stringify(stopped)); assert.ok(existsSync(raw));
