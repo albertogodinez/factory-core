@@ -779,8 +779,16 @@ test('triage --due: candidates already on an open lesson/triage branch do not la
   let r = await triageDueRun({ home: h, now, spawn });
   assert.equal(r.scopes.find((x) => x.scope === 'core').action, 'due', 'no branch recorded: the queue is due');
   writeFileSync(join(h, 'lesson-branches.jsonl'), JSON.stringify({ at: new Date(now).toISOString(), root: src, branch: 'lesson/triage', worktree: null }) + '\n');
-  r = await triageDueRun({ home: h, now, spawn });
+  const notes = [], notify = (title, body) => notes.push({ title, body });
+  r = await triageDueRun({ home: h, now, spawn, notify });
   assert.match(r.scopes.find((x) => x.scope === 'core').reason, /already on lesson\/triage/, 'every candidate is built and waits for review');
+  assert.equal(notes.length, 1, 'a waiting branch is announced'); assert.match(notes[0].body, /lesson\/triage has 1 lesson/);
+  await triageDueRun({ home: h, now: now + 2 * 36e5, spawn, notify });
+  assert.equal(notes.length, 1, 'once a day, not every tick');
+  await triageDueRun({ home: h, now: now + 25 * 36e5, spawn, notify, dryRun: true });
+  assert.equal(notes.length, 1, 'a dry run announces nothing');
+  await triageDueRun({ home: h, now: now + 25 * 36e5, spawn, notify });
+  assert.equal(notes.length, 2, 'a day later it announces again');
   write(join(h, 'candidates', 'core', '3-c.json'), { kind: 'pattern', scope: 'core', summary: 'c', from: { root: '/x' }, at });
   r = await triageDueRun({ home: h, now, spawn });
   assert.equal(r.scopes.find((x) => x.scope === 'core').action, 'due', 'a candidate the branch lacks makes it due again');

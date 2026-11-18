@@ -840,11 +840,11 @@ export function builtOnOpenBranch(repo, home = toolkitHome()) {
   const open = lessonBranches(home).find((b) => b.root === repo && b.branch === 'lesson/triage');
   if (!open) return null;
   const trunk = ['main', 'master'].find((t) => git(repo, 'rev-parse', '--verify', '-q', `refs/heads/${t}`) !== null);
-  const full = trunk ? rollingSize(repo, trunk, open.branch).full : false;
+  const size = trunk ? rollingSize(repo, trunk, open.branch) : { commits: 0, oldestDays: 0, full: false };
   const body = trunk ? git(repo, 'log', `${trunk}..${open.branch}`, '--format=%B') : null;
   const built = new Set();
   for (const l of (body || '').split('\n')) { const m = l.match(/^Candidates:\s*(.+)$/); if (m) for (const f of m[1].split(/[,\s]+/).filter(Boolean)) built.add(f); }
-  return { built, full };
+  return { built, full: size.full, commits: size.commits, oldestDays: size.oldestDays };
 }
 // Whether a scope's queue should be triaged now. The cadence (lessons.mjs cadence) sets the mode: due
 // when the mode's interval has passed, or an early trigger fires (a fact waits, the queue is 5+, or
@@ -1249,7 +1249,16 @@ async function setup(opts) {
 // With no launcher, the run only records that triage is due: the status hook in the source repo
 // already says so at its next session start.
 export const RELAUNCH_HOURS = 20, MIN_GAP_HOURS = 3, QUIET_HOURS = [22, 7];
-export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dryRun = false, spawn = spawnLaunch } = {}) {
+// A desktop notice, so a branch nobody reviewed does not sit unseen now that the scheduler skips it.
+// Local only: macOS or Linux, nothing on other systems; a failure is ignored.
+export function desktopNotify(title, body) {
+  const argv = process.platform === 'darwin'
+    ? ['osascript', '-e', `display notification ${JSON.stringify(body)} with title ${JSON.stringify(title)}`]
+    : process.platform === 'linux' ? ['notify-send', title, body] : null;
+  if (argv) spawnSync(argv[0], argv.slice(1), { stdio: 'ignore', timeout: 5000 });
+}
+const NOTIFY_HOURS = 24;
+export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dryRun = false, spawn = spawnLaunch, notify = desktopNotify } = {}) {
   const hour = new Date(now).getHours();
   if (hour >= QUIET_HOURS[0] || hour < QUIET_HOURS[1]) return { at: new Date(now).toISOString(), skipped: 'quiet hours', scopes: [] };
   const c = await import('../bundles/core/factory-reflect/scripts/candidates.mjs'); // only here: the hook never loads it
@@ -1270,8 +1279,16 @@ export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dry
     if (!repo) { scopes.push({ ...row, action: 'none', reason: 'source repo not on this machine' }); continue; }
     const open = builtOnOpenBranch(repo, home); // lesson/triage, which waits for review
     const fresh = open ? items.filter((i) => !open.built.has(i._file)) : items;
-    if (open?.full) { scopes.push({ ...row, action: 'none', reason: 'lesson/triage is full and waits for a decision' }); continue; }
-    if (open && !fresh.length) { scopes.push({ ...row, action: 'none', reason: 'every queued candidate is already on lesson/triage, which waits for review' }); continue; }
+    if (open && (open.full || !fresh.length)) {
+      const reason = open.full ? 'lesson/triage is full and waits for a decision' : 'every queued candidate is already on lesson/triage, which waits for review';
+      const nk = `notify:${repo}`, lastNote = Date.parse(state[nk]?.at || '');
+      const notified = !dryRun && !(now - lastNote < NOTIFY_HOURS * 36e5); // once a day per repo, never in quiet hours (returned above)
+      if (notified) {
+        try { notify(`${basename(repo)}: lesson branch waits for review`, `lesson/triage has ${open.commits} lesson(s), oldest ${open.oldestDays} day(s). Review it from a session in ${basename(repo)}: lessons.mjs open.`); } catch {}
+        state[nk] = { at: new Date(now).toISOString() };
+      }
+      scopes.push({ ...row, action: 'none', reason, ...(notified ? { notified: true } : {}) }); continue;
+    }
     const { due } = triageDue(fresh, state[key], now);
     if (!due) { scopes.push({ ...row, action: 'none', reason: 'not due' }); continue; }
     if (launchedRepos.has(repo)) { // one session per repo: it triages every queue the repo owns
