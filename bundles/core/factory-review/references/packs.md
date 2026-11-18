@@ -14,6 +14,8 @@ The project names its personas in `review.personas` in `.agents/factory-metadata
 
 `--packs a:b` or `TOOLKIT_REVIEW_PACKS=a:b` adds directories outside `.agents/skills`, for a pack that is not installed.
 
+To inspect one persona's compiled rules independently, run `node .agents/skills/factory-review/scripts/compile-rules.mjs <persona> <target-repo> <output-dir> --json`. It uses the same core and pack resolution and writes `compiled-<persona>.md` to the output directory.
+
 ## Persona gates
 
 A persona file may carry gate keys in its frontmatter. If it has any, it runs only when at least one matches. A skipped persona is recorded as `skipped (<gate>)`.
