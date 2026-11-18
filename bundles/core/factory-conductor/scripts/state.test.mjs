@@ -110,6 +110,50 @@ test('digest totals metrics per phase', () => {
     for (const [t, p] of [[10, 50000], [5, 90000]]) { start(f.file, 'review'); end(f.file, 'review', { phase: 'review', outcome: 'pass', metrics: { turns: t, peak_ctx: p, rounds: 1 } }); }
     const d = digest(f.file).phases.review;
     assert.deepEqual([d.runs, d.turns, d.peak_ctx, d.rounds], [2, 15, 90000, 2]);
+    assert.equal(d.measured, 0);
+  } finally { f.dispose(); }
+});
+
+// A Claude Code session log for the run, as the harness writes it: one line per content block.
+function sessionLog(root, id, startedAt, model = 'claude-haiku-5-5') {
+  const dir = join(root, 'claude', 'projects', '-wt');
+  mkdirSync(dir, { recursive: true });
+  const t = (s) => new Date(Date.parse(startedAt) + s * 1000).toISOString();
+  const a = (s, mid, u) => JSON.stringify({ type: 'assistant', timestamp: t(s), message: { id: mid, model, usage: u, content: [] } });
+  const u1 = { input_tokens: 10, cache_read_input_tokens: 80000, cache_creation_input_tokens: 5000, output_tokens: 300 };
+  const u2 = { input_tokens: 5, cache_read_input_tokens: 90000, cache_creation_input_tokens: 0, output_tokens: 200 };
+  writeFileSync(join(dir, `${id}.jsonl`), [a(5, 'm1', u1), a(5, 'm1', u1),
+    JSON.stringify({ type: 'user', timestamp: t(20), message: { content: [{ type: 'tool_result' }] } }), a(26, 'm2', u2)].join('\n') + '\n');
+  return { CLAUDE_CODE_SESSION_ID: id, CLAUDE_CONFIG_DIR: join(root, 'claude') };
+}
+
+test('end measures the run from its session log, over the phase\'s own count', () => {
+  const f = fixture(); try {
+    const r = start(f.file, 'ci-monitor', '2026-01-01T00:00:00.000Z');
+    const env = sessionLog(f.root, 'SID', '2026-01-01T00:00:01.000Z');
+    end(f.file, 'ci-monitor', { phase: 'ci-monitor', outcome: 'pass', metrics: { turns: 99, peak_ctx: 0, user_interventions: 1 } }, '2026-01-01T00:05:00.000Z', { env });
+    const run = load(f.file).phases['ci-monitor'].runs[r.n - 1];
+    assert.equal(run.model, 'claude-haiku-5-5');
+    const m = JSON.parse(readFileSync(run.notes, 'utf8')).metrics;
+    assert.deepEqual([m.source, m.turns, m.peak_ctx, m.user_interventions, m.model_ms], ['measured', 2, 90005, 1, 6000]);
+    assert.deepEqual(m.tokens, { input: 15, cache_read: 170000, cache_write: 5000, output: 500 });
+    const d = digest(f.file).phases['ci-monitor'];
+    assert.equal(d.measured, 1);
+    assert.deepEqual(d.by_model['claude-haiku-5-5'], { runs: 1, wall_ms: 300000, model_ms: 6000, turns: 2, tokens: m.tokens });
+  } finally { f.dispose(); }
+});
+
+test('a run with no session log of its own keeps its self-report, marked as such; kill measures nothing', () => {
+  const f = fixture(); try {
+    start(f.file, 'work', '2026-01-01T00:00:00.000Z');
+    const env = sessionLog(f.root, 'OLD', '2025-12-31T20:00:00.000Z'); // started hours before the run: not this run's
+    end(f.file, 'work', { phase: 'work', outcome: 'pass', metrics: { turns: 7, source: 'measured' } }, '2026-01-01T00:10:00.000Z', { env });
+    const run = load(f.file).phases.work.runs[0];
+    assert.equal(run.model, undefined);
+    assert.deepEqual(JSON.parse(readFileSync(run.notes, 'utf8')).metrics, { turns: 7, source: 'self' });
+    start(f.file, 'work');
+    kill(f.file, 'work', 'looping');
+    assert.equal(JSON.parse(readFileSync(load(f.file).phases.work.runs[1].notes, 'utf8')).metrics, undefined);
   } finally { f.dispose(); }
 });
 

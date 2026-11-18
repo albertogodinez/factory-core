@@ -13,7 +13,8 @@
 //                                                 (start + the session to open it in; --run opens it)
 //                                                 --what: a few words naming the run ("fix page-view reset");
 //                                                 the session's name where the launcher shows it
-//   end    --state <file> <phase> --notes <file|->  (validates the notes, applies their handoff)
+//   end    --state <file> <phase> --notes <file|->  (validates the notes, applies their handoff; measures the
+//                                                 run from its session log, see usage.mjs)
 //   kill   --state <file> <phase> --why <text>    (the conductor's notes for a phase it stopped)
 //   live   --state <file>                         (tags of this ticket's phase sessions still open)
 //   status --state <file>
@@ -29,6 +30,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { validate } from '../../factory-context/scripts/validate.mjs';
 import { launchFor, afterLaunch, liveTags, pickLauncher, pickAgent } from '../../factory-reflect/scripts/candidates.mjs';
+import { measure } from './usage.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL = dirname(HERE);
@@ -197,7 +199,17 @@ function mergeFindings(old = [], next = []) {
   return [...byId.values()];
 }
 
-export function end(file, phase, notes, at = now()) {
+// The run's metrics from its own session log, over the phase's self-report: measured values win, and
+// what a log can't show (rounds, user_interventions) stays as the phase wrote it. No log, no change.
+export function withMeasured(notes, measured) {
+  if (!measured) return notes.metrics ? { ...notes, metrics: { ...notes.metrics, source: 'self' } } : notes;
+  const merged = { ...notes, metrics: { ...notes.metrics, ...measured, source: 'measured' } };
+  return validate(schema('phase-notes'), merged).length ? notes : merged;
+}
+
+// `env` is the environment of the session ending the run, which names its session log. The CLI passes
+// its own; a caller that passes none measures nothing.
+export function end(file, phase, notes, at = now(), { env = {} } = {}) {
   const errs = validate(schema('phase-notes'), notes);
   if (errs.length) fail(`notes are invalid: ${errs.join('; ')}`);
   if (notes.phase !== phase) fail(`notes are for ${notes.phase}, not ${phase}`);
@@ -205,10 +217,12 @@ export function end(file, phase, notes, at = now()) {
   const state = load(file);
   const run = state.phases[phase]?.runs.find((r) => !r.ended);
   if (!run) fail(`no open ${phase} run to end`);
+  notes = withMeasured(notes, measure(env, { since: Date.parse(run.started), until: Date.parse(at) }));
   const notesFile = join(dirname(file), 'notes', `${phase}-${run.n}.json`);
   mkdirSync(dirname(notesFile), { recursive: true });
   writeFileSync(notesFile, JSON.stringify(notes, null, 2) + '\n');
-  Object.assign(run, { ended: at, wall_ms: Math.max(0, Date.parse(at) - Date.parse(run.started)), outcome: notes.outcome, notes: notesFile });
+  Object.assign(run, { ended: at, wall_ms: Math.max(0, Date.parse(at) - Date.parse(run.started)), outcome: notes.outcome, notes: notesFile,
+    ...(notes.metrics?.source === 'measured' && notes.metrics.model ? { model: notes.metrics.model } : {}) });
   const { findings, ...rest } = notes.handoff || {};
   Object.assign(state, rest);
   if (findings) state.findings = mergeFindings(state.findings, findings);
@@ -237,18 +251,33 @@ export function status(state) {
   return parts.join(' ');
 }
 
+const TOKEN_KEYS = ['input', 'cache_read', 'cache_write', 'output'];
+const addTokens = (into, t = {}) => { for (const k of TOKEN_KEYS) if (t[k]) into[k] = (into[k] || 0) + t[k]; };
+
 // What factory-reflect reads instead of transcripts: each run's notes and the per-phase totals.
+// `measured` counts the runs whose numbers came from a session log, not the phase's own count, and
+// by_model splits each phase by the model its runs ran on, so a tier change can be compared.
 export function digest(file) {
   const state = load(file);
   const phases = {};
   const runs = [];
   for (const [phase, { runs: rs }] of Object.entries(state.phases)) {
-    phases[phase] = { runs: rs.length, wall_ms: rs.reduce((a, r) => a + (r.wall_ms || 0), 0),
-      outcomes: rs.map((r) => r.outcome || 'open'), rounds: 0, turns: 0, agents: 0, user_interventions: 0, peak_ctx: 0 };
+    const p = phases[phase] = { runs: rs.length, wall_ms: rs.reduce((a, r) => a + (r.wall_ms || 0), 0),
+      outcomes: rs.map((r) => r.outcome || 'open'), rounds: 0, turns: 0, agents: 0, user_interventions: 0, peak_ctx: 0,
+      measured: 0, model_ms: 0, tokens: {}, by_model: {} };
     for (const r of rs) {
       const notes = r.notes ? readJson(r.notes, null) : null;
-      if (notes?.metrics) for (const k of ['rounds', 'turns', 'agents', 'user_interventions']) phases[phase][k] += notes.metrics[k] || 0;
-      if (notes?.metrics?.peak_ctx) phases[phase].peak_ctx = Math.max(phases[phase].peak_ctx, notes.metrics.peak_ctx);
+      const m = notes?.metrics;
+      if (m) for (const k of ['rounds', 'turns', 'agents', 'user_interventions']) p[k] += m[k] || 0;
+      if (m?.peak_ctx) p.peak_ctx = Math.max(p.peak_ctx, m.peak_ctx);
+      if (m?.source === 'measured') {
+        p.measured++;
+        p.model_ms += m.model_ms || 0;
+        addTokens(p.tokens, m.tokens);
+        const b = p.by_model[m.model || 'unknown'] ??= { runs: 0, wall_ms: 0, model_ms: 0, turns: 0, tokens: {} };
+        b.runs++; b.wall_ms += r.wall_ms || 0; b.model_ms += m.model_ms || 0; b.turns += m.turns || 0;
+        addTokens(b.tokens, m.tokens);
+      }
       runs.push({ phase, n: r.n, started: r.started, ended: r.ended ?? null, notes });
     }
   }
@@ -282,7 +311,7 @@ export function main(argv, env = process.env) {
     case 'end': {
       if (!o.notes) fail('end needs --notes <file|->');
       const notes = JSON.parse(o.notes === '-' ? readFileSync(0, 'utf8') : readFileSync(o.notes, 'utf8'));
-      return end(need(), o._[0], notes);
+      return end(need(), o._[0], notes, now(), { env });
     }
     case 'kill': return kill(need(), o._[0], o.why);
     case 'live': return live(need(), env);

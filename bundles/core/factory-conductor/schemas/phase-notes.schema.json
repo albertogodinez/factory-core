@@ -5,6 +5,13 @@
   "type": "object",
   "required": ["phase", "outcome"],
   "additionalProperties": false,
+  "$defs": {
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "input": { "type": "integer" }, "cache_read": { "type": "integer" }, "cache_write": { "type": "integer" }, "output": { "type": "integer" } }
+    }
+  },
   "properties": {
     "phase": { "type": "string", "minLength": 1 },
     "outcome": { "enum": ["pass", "fail", "blocked", "killed"] },
@@ -18,7 +25,16 @@
         "peak_ctx": { "type": "integer" },
         "rounds": { "type": "integer" },
         "agents": { "type": "integer" },
-        "user_interventions": { "type": "integer" }
+        "user_interventions": { "type": "integer" },
+        "source": { "enum": ["measured", "self"], "description": "Set by end: measured when it read the run's session log, self when the numbers are the phase's own." },
+        "model": { "type": "string", "description": "Measured: the model most of the run's messages came from." },
+        "model_ms": { "type": "integer", "description": "Measured: time from each tool result to the model's next message, summed." },
+        "tokens": { "$ref": "#/$defs/tokens" },
+        "subagents": {
+          "type": "object",
+          "description": "Measured: subagents the run started, by model.",
+          "additionalProperties": { "type": "object", "required": ["n"], "additionalProperties": false, "properties": { "n": { "type": "integer" }, "tokens": { "$ref": "#/$defs/tokens" } } }
+        }
       }
     },
     "friction": { "type": "array", "items": { "type": "string" }, "description": "What slowed the phase: retries, wrong assumptions, a tool that failed." },

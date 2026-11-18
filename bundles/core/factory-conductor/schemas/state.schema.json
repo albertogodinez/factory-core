@@ -62,6 +62,7 @@
                 "role": { "type": "string", "description": "Who the session is: intake, worker, reviewer, deploy, monitor, close." },
                 "what": { "type": "string", "description": "A few words on what this run does, shown with the role where the launcher shows the session." },
                 "outcome": { "enum": ["pass", "fail", "blocked", "killed"] },
+                "model": { "type": "string", "description": "The model the run ran on, when end measured it from the session log." },
                 "notes": { "type": "string" }
               }
             }

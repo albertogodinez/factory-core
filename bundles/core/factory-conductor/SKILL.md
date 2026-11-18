@@ -64,7 +64,7 @@ A phase ends its own run with `state.mjs end --state <file> <phase> --notes <fil
 - **No screenshots, recordings or long logs in the conductor.** Keep the path, not the bytes.
 - **Don't load the terminal app's manual** (a multiplexer's `AGENTS.md` or `--skill` output). The launcher handles where a session opens and what its tab is called. The conductor needs only `launch`, `status` and `live`.
 - **Notes before exit, always.** A phase that dies without notes gets `kill` notes from you. A failed run teaches the most.
-- **Measure per phase.** `digest` totals the runs, wall time, rounds, turns and peak context for each phase. Compare these across tickets before you change a phase's prompt or skill.
+- **Measure per phase.** `digest` totals the runs, wall time, rounds, turns and peak context for each phase, with tokens, model time and a `by_model` split for the runs `end` measured from their session logs (`scripts/usage.mjs`; `measured` counts them). Compare these across tickets before you change a phase's prompt, skill or model.
 - **Look before you spawn.** Before `launch` for a ticket, check `live`, the session launcher's own list, `gh pr list --search <KEY>`, and the worktrees and branches for the key. An existing run is adopted, not duplicated.
 - **Look before you alarm.** Before telling the user a worker's worktree holds changes nobody made, read `git log -3`, `git reflog -5`, run `git fetch`, and read the worker's last notes. A merge in progress looks like foreign staged files.
 - **Verify a branch claim.** A worker's hand-off attaches `git rev-parse HEAD origin/<branch>`. Check `git ls-remote` or `gh pr view` before writing the tracker or telling the user the work is pushed.
