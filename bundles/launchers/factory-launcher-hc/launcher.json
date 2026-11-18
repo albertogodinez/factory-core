@@ -1,7 +1,8 @@
 {
-  "argv": ["hc", "run", "--bg", "--no-parent", "--outlive-parent", "{place}", "{tag}", "--cwd", "{repo}", "{agent}", "{prompt}"],
+  "argv": ["hc", "run", "--bg", "--no-parent", "--outlive-parent", "{place}", "{tag}", "{name}", "--cwd", "{repo}", "{agent}", "{prompt}"],
   "place": "place.mjs",
   "tag": ["--label", "factory.tag={tag}"],
+  "name": ["--label", "agent.role={role}", "--label", "agent.what={what}"],
   "live": "live.mjs",
   "after": "after.mjs"
 }

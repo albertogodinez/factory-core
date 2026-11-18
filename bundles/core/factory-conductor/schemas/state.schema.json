@@ -58,6 +58,8 @@
                 "ended": { "type": "string" },
                 "wall_ms": { "type": "integer" },
                 "tag": { "type": "string" },
+                "role": { "type": "string", "description": "Who the session is: intake, worker, reviewer, deploy, monitor, close." },
+                "what": { "type": "string", "description": "A few words on what this run does, shown with the role where the launcher shows the session." },
                 "outcome": { "enum": ["pass", "fail", "blocked", "killed"] },
                 "notes": { "type": "string" }
               }

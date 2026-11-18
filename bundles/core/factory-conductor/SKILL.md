@@ -32,7 +32,7 @@ Phases of one ticket run **in order, in the ticket's one worktree**. Never run t
 ```bash
 S=node\ .agents/skills/factory-conductor/scripts/state.mjs
 $S init --worktree <path> [--ticket <key>] [--plan <path>] [--recipe <skill>] # one of ticket or plan; prints the state file
-$S launch --state <file> <phase> [--task "<what this run does>"] [--run]
+$S launch --state <file> <phase> [--task "<what this run does>"] [--what "<a few words>"] [--run]
 $S status --state <file>                                                      # one line
 $S live --state <file>                                                        # this ticket's sessions still open
 $S kill --state <file> <phase> --why "<reason>"
@@ -46,7 +46,7 @@ A phase ends its own run with `state.mjs end --state <file> <phase> --notes <fil
 
 1. **Set up.** Create or find the ticket's worktree, then `init`. A plan-first run (a detailed plan, no ticket yet) passes `--plan` alone. Intake files the ticket after the user's scope yes, and until then tabs are named after the plan. Start a decision log with `show-me-your-work` and `set decisions=<its path>`. Every call the user makes goes there, one row each. A phase reads the log, never the conversation.
 2. **Launch the next phase.** The order is intake, work, review, then deploy, then ci-monitor, then close. `launch` starts the run and works out where it opens:
-   - **A session launcher is configured** (`adapters.sessionLauncher`, see factory-context's `references/adapters.md`). The phase opens as its own session, in the worktree, tagged `conductor:<slug>:<phase>:<n>` and titled `<ticket> · <phase>`. With the hc launcher, that's a Herdr tab. Pass `--run` to open it, or run the `command` it prints, then its `after` command.
+   - **A session launcher is configured** (`adapters.sessionLauncher`, see factory-context's `references/adapters.md`). The phase opens as its own session, in the worktree, tagged `conductor:<slug>:<phase>:<n>` and named `<role> · <what>` (`monitor · CI on #1029`, `worker · fix page-view reset`, `reviewer · round 3`). The role comes from the phase; `what` is `--what`, else `--task` when its first clause is a few words, else the phase's default. Give `--what` whenever the task is longer than that. With the hc launcher, that's a Herdr tab and its sidebar row. Pass `--run` to open it, or run the `command` it prints, then its `after` command. Never start a phase with your own `hc run` (or `--name`): the session then belongs to your tab, unnamed, and `live` can't see it.
    - **No launcher** (`via: subagent`). Dispatch the printed `prompt` to a general-purpose subagent, unchanged.
 3. **Wait without polling the phase.** A launched phase signals by ending its run. Check `status` when you're woken, and check `live` only to see whether a session that should be open has gone. Never read a phase's terminal or transcript to follow its progress. If you need to know something, the phase should have written it down: add a `friction` note to its run instead.
 4. **Route on the outcome.**

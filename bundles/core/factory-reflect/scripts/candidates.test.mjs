@@ -98,6 +98,10 @@ test('launch: {tag} marks the session, liveTags lists the open ones, afterLaunch
     const base = { launcher: 'launch-t', skillsDirs: [skills], repo: '/r', prompt: 'p' };
     assert.deepEqual(launchFor({ ...base, tag: 'triage:/r' }).argv, ['tool', '--label', 'k=triage:/r', 'p']);
     assert.deepEqual(launchFor(base).argv, ['tool', 'p'], 'no tag: the element drops out');
+    writeFileSync(join(dir, 'launcher.json'), JSON.stringify({ argv: ['tool', '{name}', '{prompt}'], name: ['--label', 'r={role}', '--label', 'w={what}'] }));
+    assert.deepEqual(launchFor({ ...base, role: 'worker', what: 'fix reset' }).argv, ['tool', '--label', 'r=worker', '--label', 'w=fix reset', 'p']);
+    assert.deepEqual(launchFor({ ...base, what: 'x' }).argv, ['tool', 'p'], 'no role: the element drops out');
+    writeFileSync(join(dir, 'launcher.json'), JSON.stringify({ argv: ['tool', '{tag}', '{prompt}'], tag: ['--label', 'k={tag}'], live: 'live.mjs', after: 'after.mjs' }));
     assert.equal(launchFor(base).after, undefined, 'no title: no naming command');
     const named = launchFor({ ...base, title: 'lesson · x' }).after;
     assert.deepEqual(named.argv, [process.execPath, join(dir, 'after.mjs'), '--title', 'lesson · x']);
