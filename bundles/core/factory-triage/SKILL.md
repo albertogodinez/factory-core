@@ -21,7 +21,7 @@ Triage only the queues this session's repo owns (`project.root`'s main checkout)
 
 - **One fact** (you were given a candidate file): take that candidate, plus the queued candidates for the same skill (`queue --skill <its skill>`), because a fix to that file should account for them. Leave the rest for the scheduled run.
 - **Whole queue** (no file): every queued candidate this repo owns.
-- **Scheduled** (`--scheduled`): the triage schedule, or a session start that found the queue due, opened this session. Take the whole queue. Run straight through to the review gate. **Ask nothing in this chat**: the user may never look at this terminal, so a chat question waits forever. Every decision is made in the review (§3, "Scheduled runs"), and the run ends the session when it's done (§5).
+- **Scheduled** (`--scheduled`): the triage schedule, or a session start that found the queue due, opened this session. The scheduler launches a repo only when its `lesson/triage` branch lacks a queued candidate and isn't full, and sends a desktop notice once a day while a branch waits for review. A scheduled run that finds the branch otherwise was launched by mistake: build nothing, say so in the summary, and go to the review gate on what's there. Take the whole queue. Run straight through to the review gate. **Ask nothing in this chat**: the user may never look at this terminal, so a chat question waits forever. Every decision is made in the review (§3, "Scheduled runs"), and the run ends the session when it's done (§5).
 
 Drop what's already decided. `lessons.mjs known --never` lists the families the user refused. A candidate in one of them goes straight to `done --outcome dropped`.
 
