@@ -3,19 +3,23 @@
 //
 // State: <home>/triage-state.json, {<key>: {mode, pinned, since, lastRun, lastClusterMax, quietWeeks}}.
 // The key is the scope (core, org), or repo:<main checkout> for one repo's own queue.
+// Modes: thrice (Monday, Wednesday and Thursday), weekly, and daily (only when pinned). One person's
+// queue rarely has a repeat inside a day, so thrice lets sightings pile up between runs.
 // Rules, at the end of each triage run (and on demand):
-//   daily -> weekly  after 14+ days in daily, two 7-day windows in a row with <= 2 new candidates,
-//                    no fact candidates, and no cluster >= 3
-//   weekly -> daily  an early trigger: queue >= 5, oldest >= 3 days, a cluster >= 3, or a lesson that
-//                    landed a week or more ago whose fixedWhen signal didn't drop
-// A pinned mode never switches. The first mode is daily.
+//   thrice -> weekly  after 14+ days in thrice, two 7-day windows in a row with <= 2 new candidates,
+//                     no fact candidates, and no cluster >= 3
+//   weekly -> thrice  an early trigger: queue >= 5, oldest >= 3 days, a cluster >= 3, or a lesson that
+//                     landed a week or more ago whose fixedWhen signal didn't drop
+// A pinned mode never switches. The first mode is thrice; an unpinned `daily` from an older state
+// file is read as thrice.
 import { readFileSync, writeFileSync, mkdirSync, renameSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { queue } from './candidates.mjs';
 import { readRows, trend } from './metrics.mjs';
+import { isDue, INTERVAL, RUN_DAYS } from './due.mjs';
+export { isDue, INTERVAL, RUN_DAYS };
 
-export const MODES = ['daily', 'weekly'];
-export const INTERVAL = { daily: 1, weekly: 7 };
+export const MODES = ['thrice', 'daily', 'weekly'];
 const DAY = 86400000;
 const stateFile = (home) => join(home, 'triage-state.json');
 export const readState = (home) => { try { return JSON.parse(readFileSync(stateFile(home), 'utf8')); } catch { return {}; } };
@@ -62,11 +66,12 @@ export function cadence({ home, scope, repo, pin, ran, clusterMax, env, now = Da
   if (scope === 'repo' && !repo) throw new Error('a repo cadence needs --repo <main checkout>');
   const key = stateKey(scope, repo);
   const all = readState(home);
-  const s = all[key] || { mode: 'daily', pinned: false, since: new Date(now).toISOString(), lastRun: null, lastClusterMax: 0 };
+  const s = all[key] || { mode: 'thrice', pinned: false, since: new Date(now).toISOString(), lastRun: null, lastClusterMax: 0 };
+  if (!s.pinned && s.mode === 'daily') s.mode = 'thrice';
   if (pin) {
     if (pin === 'off') s.pinned = false;
     else if (MODES.includes(pin)) { if (s.mode !== pin) s.since = new Date(now).toISOString(); s.mode = pin; s.pinned = true; }
-    else throw new Error('--pin must be daily, weekly or off');
+    else throw new Error('--pin must be thrice, daily, weekly or off');
   }
   if (ran) { s.lastRun = new Date(now).toISOString(); s.lastClusterMax = Number(clusterMax) || 0; }
   const queued = queue(home, scope, now, repo);
@@ -76,8 +81,8 @@ export function cadence({ home, scope, repo, pin, ran, clusterMax, env, now = Da
   const quietWeeks = [0, 1].every((w) => quiet(items, now - (w + 1) * 7 * DAY, now - w * 7 * DAY)) && s.lastClusterMax < 3;
   const before = s.mode;
   if (!s.pinned) {
-    if (s.mode === 'daily' && quietWeeks && !why.length && now - Date.parse(s.since) >= 14 * DAY) s.mode = 'weekly';
-    else if (s.mode === 'weekly' && why.length) s.mode = 'daily';
+    if (s.mode === 'thrice' && quietWeeks && !why.length && now - Date.parse(s.since) >= 14 * DAY) s.mode = 'weekly';
+    else if (s.mode === 'weekly' && why.length) s.mode = 'thrice';
   }
   if (s.mode !== before) s.since = new Date(now).toISOString();
   s.quietWeeks = quietWeeks;
@@ -85,10 +90,4 @@ export function cadence({ home, scope, repo, pin, ran, clusterMax, env, now = Da
   writeState(home, all);
   return { scope, ...(repo ? { repo } : {}), mode: s.mode, pinned: s.pinned, switched: s.mode !== before ? `${before} -> ${s.mode}` : null,
     triggers: why, quietWeeks, lastRun: s.lastRun, due: isDue(s, now), queued: queued.length };
-}
-
-// Triage is due when its interval has passed since the last run (or it never ran).
-export function isDue(s, now = Date.now()) {
-  if (!s?.lastRun) return true;
-  return now - Date.parse(s.lastRun) >= INTERVAL[s.mode || 'daily'] * DAY;
 }

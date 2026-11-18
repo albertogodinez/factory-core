@@ -62,7 +62,7 @@ Adopted upstream skills (`handoff`, `diagnosing-bugs`, `improve-codebase-archite
 ├── candidates/<core|org>/          # lessons handed to their source repo; triage moves them to done/
 ├── metrics.jsonl                   # counted signals per session (no content), 180 days
 ├── reports/<date>-<core|org>.html  # the trend report triage posts
-├── triage-state.json               # triage's daily / weekly mode per scope
+├── triage-state.json               # triage's thrice / weekly mode per scope
 └── cache/<repo-id>/                # state for zero-config repos
 ```
 
@@ -178,7 +178,7 @@ land and push from that session → trunk moved: every installed repo is updated
 - `adapters.sessionLauncher` starts the source repo's session. It's machine config (`~/.agents/factory/config.json`), set by `factory setup` when `hc` is on PATH; a repo's `project.json` can override it or set `null`. Unset, reflect prints the command. `adapters.agentCLI` (also machine config) names the agent CLI the launcher starts, `claude` or `codex`; `factory setup` sets it to the first one on PATH.
 - `/factory-ask` answers "what's waiting" from `lessons.mjs queue`.
 - Every session's end appends counts to `~/.agents/factory/metrics.jsonl` (`metrics.mjs capture`, installed by `factory setup` as a SessionEnd hook, Codex's Stop). A row holds tool counts, command heads, failures, hook blocks, denials, stuck signals, corrections (a heuristic), the skills used, tagged core or org, and the revision each layer was installed at. It never holds prompts, file contents or tokens: a schema check refuses the row first. It keeps 180 days, up to 5 MB.
-- Cadence: triage ends with `lessons.mjs cadence --ran`, which keeps each scope's mode in `~/.agents/factory/triage-state.json`. It's daily for the first 14 days and stays daily until two quiet weeks pass (at most 2 candidates a week, no facts, no cluster of 3). Then it's weekly until an early trigger brings daily back. The status hook nudges in the source repo only when triage is due, or a trigger fires. `--pin daily|weekly|off` overrides.
+- Cadence: triage ends with `lessons.mjs cadence --ran`, which keeps each scope's mode in `~/.agents/factory/triage-state.json`. It runs Monday, Wednesday and Thursday for the first 14 days and stays there until two quiet weeks pass (at most 2 candidates a week, no facts, no cluster of 3). Then it's weekly until an early trigger brings the three days back. A run builds only clusters with 2 or more sightings (a fact, or a draft patch that applies as it stands, builds at one). The status hook nudges in the source repo only when triage is due, or a trigger fires. `--pin thrice|daily|weekly|off` overrides.
 - Triage also runs `check-tools.mjs --online` and names each changed tool.
 - Triage runs `lessons.mjs report` and posts the trend per layer: each landed lesson's `fixedWhen` signal before and after, with a verdict (better, flat, worse). A session row records the revision each layer was installed at (`revs`, from the lock's `sourceRev`), and a land records its commit (`done --commit`), so before and after split by what each session actually ran. A worse verdict queues a fact to revert or rework the lesson. The git log is the decision record: each lesson commit carries `Candidates:` and `Fixed-when:` trailers. The newest 12 reports per layer are kept.
 

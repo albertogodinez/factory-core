@@ -36,6 +36,7 @@ import { homedir } from 'node:os';
 import { cleanup, setupCleanupSchedule, installSchedule, JOBS } from './cleanup.mjs';
 import { fragments as harnessFragments, merge as harnessMerge, drifted as harnessDrifted } from './harness.mjs';
 import { findGit, toolkitHome, parseRemote } from '../bundles/core/factory-context/scripts/resolve.mjs';
+import { isDue } from '../bundles/core/factory-reflect/scripts/due.mjs';
 
 const FACTORY = dirname(dirname(realpathSync(import.meta.filename)));
 const RESOLVE = join(FACTORY, 'bundles', 'core', 'factory-context', 'scripts', 'resolve.mjs');
@@ -836,8 +837,7 @@ export function lessonLines(waiting, here) {
 export function triageDue(items, st, now = Date.now()) {
   const oldest = items.length ? Math.max(...items.map((c) => Math.floor((now - (Date.parse(c.at) || now)) / 864e5))) : 0;
   if (!items.length) return { due: false, oldest, st };
-  const interval = (st?.mode === 'weekly' ? 7 : 1) * 864e5;
-  const byMode = !st?.lastRun || now - Date.parse(st.lastRun) >= interval;
+  const byMode = isDue(st, now);
   return { due: byMode || items.length >= 5 || oldest >= 3 || items.some((c) => c.kind === 'fact'), oldest, st };
 }
 // Queued factory-reflect candidates (~/.agents/factory/candidates/<scope>/*.json). In a scope's source

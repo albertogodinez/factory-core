@@ -1,5 +1,5 @@
-// Cadence: daily until two quiet weeks (after at least 14 days), weekly until an early trigger,
-// a pinned mode holds, and a lesson whose signal stayed flat brings daily back.
+// Cadence: Monday, Wednesday and Thursday until two quiet weeks (after at least 14 days), weekly until
+// an early trigger, a pinned mode holds, and a lesson whose signal stayed flat brings thrice back.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
@@ -37,36 +37,36 @@ test('a quiet week: <= 2 new candidates and none a fact', () => {
   assert.equal(quiet([{ kind: 'fact', at: 1 }], 0, 10), false);
 });
 
-test('daily -> weekly after 14 days and two quiet weeks; weekly -> daily on a trigger; --pin holds', () => {
+test('thrice -> weekly after 14 days and two quiet weeks; weekly -> thrice on a trigger; --pin holds', () => {
   const s = sandbox();
   try {
     const run = (now, extra = {}) => cadence({ home: s.home, scope: 'core', env: s.env, now, ...extra });
-    assert.equal(run(T0).mode, 'daily', 'the first mode is daily');
-    assert.equal(run(T0 + 10 * DAY).mode, 'daily', 'quiet, but not yet 14 days in daily');
+    assert.equal(run(T0).mode, 'thrice', 'the first mode is thrice');
+    assert.equal(run(T0 + 10 * DAY).mode, 'thrice', 'quiet, but not yet 14 days in thrice');
     // A fact 10 days in makes the week before T0+16 loud.
     writeCandidate({ home: s.home, kind: 'fact', scope: 'core', summary: 'f', at: T0 + 10 * DAY });
     const st = run(T0 + 16 * DAY, { ran: true, clusterMax: 1 });
-    assert.equal(st.mode, 'daily');
+    assert.equal(st.mode, 'thrice');
     assert.equal(st.quietWeeks, false);
     // Land it so it leaves the queue (an old queued candidate is itself a trigger).
     for (const c of queue(s.home, 'core')) markDone(s.home, c.file, 'landed', T0 + 16 * DAY);
     const w = run(T0 + 25 * DAY, { ran: true, clusterMax: 1 });
     assert.equal(w.mode, 'weekly');
-    assert.equal(w.switched, 'daily -> weekly');
+    assert.equal(w.switched, 'thrice -> weekly');
     assert.equal(w.due, false, 'just ran');
     assert.equal(isDue(readState(s.home).core, T0 + 32 * DAY), true, 'a week later it is due');
     for (let i = 0; i < 5; i++) writeCandidate({ home: s.home, kind: 'pattern', scope: 'core', summary: `p${i}`, at: T0 + 26 * DAY });
     const back = run(T0 + 26 * DAY);
-    assert.equal(back.mode, 'daily');
+    assert.equal(back.mode, 'thrice');
     assert.match(back.triggers[0], /queue 5/);
     assert.equal(run(T0 + 26 * DAY, { pin: 'weekly' }).mode, 'weekly', 'a pin holds against the trigger');
     assert.equal(run(T0 + 27 * DAY).mode, 'weekly');
-    assert.equal(run(T0 + 27 * DAY, { pin: 'off' }).mode, 'daily', 'unpinned, the trigger applies again');
+    assert.equal(run(T0 + 27 * DAY, { pin: 'off' }).mode, 'thrice', 'unpinned, the trigger applies again');
     assert.throws(() => run(T0, { pin: 'hourly' }), /--pin must be/);
   } finally { s.done(); }
 });
 
-test('a landed lesson whose fixedWhen signal stayed flat sends weekly back to daily', () => {
+test('a landed lesson whose fixedWhen signal stayed flat sends weekly back to thrice', () => {
   const s = sandbox();
   try {
     const st = { core: { mode: 'weekly', pinned: false, since: new Date(T0 - 30 * DAY).toISOString(), lastRun: new Date(T0 - DAY).toISOString(), lastClusterMax: 0 } };
@@ -77,7 +77,7 @@ test('a landed lesson whose fixedWhen signal stayed flat sends weekly back to da
     writeFileSync(join(done, 'l.json'), JSON.stringify({ kind: 'fact', scope: 'core', summary: 'land from home', at: new Date(land).toISOString(),
       fixedWhen: { metric: 'permission_denials', match: 'lessons.mjs' }, done: { outcome: 'landed', at: new Date(land).toISOString() } }));
     const r = cadence({ home: s.home, scope: 'core', env: s.env, now: T0 });
-    assert.equal(r.mode, 'daily');
+    assert.equal(r.mode, 'thrice');
     assert.match(r.triggers.join(' '), /"land from home" landed but permission_denials didn't drop/);
   } finally { s.done(); }
 });
@@ -88,8 +88,35 @@ test('the CLI: cadence prints both scopes, --ran records the run, a bad pin exit
     const cli = (...a) => spawnSync(process.execPath, [LESSONS, 'cadence', ...a], { encoding: 'utf8', env: { ...process.env, ...s.env } });
     const p = cli('--ran', '--clusters', '2');
     assert.equal(p.status, 0, p.stderr);
-    assert.deepEqual(JSON.parse(p.stdout).scopes.map((x) => [x.scope, x.mode, x.due]), [['core', 'daily', false], ['org', 'daily', false]]);
+    assert.deepEqual(JSON.parse(p.stdout).scopes.map((x) => [x.scope, x.mode, x.due]), [['core', 'thrice', false], ['org', 'thrice', false]]);
     assert.equal(readState(s.home).core.lastClusterMax, 2);
     assert.equal(cli('--pin', 'hourly').status, 2);
+  } finally { s.done(); }
+});
+
+test('thrice is due on Monday, Wednesday and Thursday, and a missed run day still shows up', () => {
+  const at = (iso) => Date.parse(`${iso}T12:00:00Z`); // 2026-11-02 is a Monday
+  const st = (lastRun, mode = 'thrice') => ({ mode, lastRun: lastRun && new Date(at(lastRun)).toISOString() });
+  assert.equal(isDue(st(null), at('2026-11-02')), true, 'never ran');
+  assert.equal(isDue(st('2026-11-02'), at('2026-11-02')), false, 'ran Monday, still Monday');
+  assert.equal(isDue(st('2026-11-02'), at('2026-11-03')), false, 'Tuesday is not a run day');
+  assert.equal(isDue(st('2026-11-02'), at('2026-11-04')), true, 'Wednesday');
+  assert.equal(isDue(st('2026-11-04'), at('2026-11-05')), true, 'Thursday');
+  assert.equal(isDue(st('2026-11-05'), at('2026-11-07')), false, 'Friday and Saturday are not run days');
+  assert.equal(isDue(st('2026-11-05'), at('2026-11-09')), true, 'the next Monday');
+  assert.equal(isDue(st('2026-10-30'), at('2026-11-01')), false, 'a Friday run, checked on Sunday');
+  assert.equal(isDue(st('2026-10-30'), at('2026-11-03')), true, 'Monday was missed, so Tuesday is due');
+  assert.equal(isDue(st('2026-11-02', 'daily'), at('2026-11-03')), true, 'a pinned daily keeps its one-day interval');
+});
+
+test('an older unpinned daily state reads as thrice; a pinned daily stays', () => {
+  const s = sandbox();
+  try {
+    const old = (pinned) => ({ core: { mode: 'daily', pinned, since: new Date(T0).toISOString(), lastRun: new Date(T0).toISOString(), lastClusterMax: 0 } });
+    mkdirSync(s.home, { recursive: true });
+    writeFileSync(join(s.home, 'triage-state.json'), JSON.stringify(old(false)));
+    assert.equal(cadence({ home: s.home, scope: 'core', env: s.env, now: T0 + DAY }).mode, 'thrice');
+    writeFileSync(join(s.home, 'triage-state.json'), JSON.stringify(old(true)));
+    assert.equal(cadence({ home: s.home, scope: 'core', env: s.env, now: T0 + DAY }).mode, 'daily');
   } finally { s.done(); }
 });

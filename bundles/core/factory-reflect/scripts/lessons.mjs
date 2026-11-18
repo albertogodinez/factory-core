@@ -24,7 +24,7 @@
 //                                            queued candidates, their owner repo and launch command,
 //                                            and the open lesson branches: what's waiting
 //   lessons.mjs done --file <candidate> --outcome landed|dropped|merged [--commit <sha>]
-//   lessons.mjs cadence [--scope core|org|repo [--repo <dir>]] [--pin daily|weekly|off] [--ran --clusters <largest>]
+//   lessons.mjs cadence [--scope core|org|repo [--repo <dir>]] [--pin thrice|daily|weekly|off] [--ran --clusters <largest>]
 //                                            triage's mode per scope (cadence.mjs); triage ends with --ran
 //   lessons.mjs report [--days 90]           the trend report per layer (metrics.mjs), for triage to post
 //   lessons.mjs land --repo <dir> --branch <b> --reviewed <sha>
