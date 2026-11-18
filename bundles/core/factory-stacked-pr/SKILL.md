@@ -181,12 +181,12 @@ Every brief for a session that touches a stack carries an `owns:` line: its work
 The **stack ledger** makes that line checkable. `scripts/stack.mjs` keeps one claim per branch (owner, base, PR) and an event log in the repo's shared state, so the sessions on one stack find each other without scanning terminals:
 
 ```bash
-S="node .agents/skills/factory-stacked-pr/scripts/stack.mjs"
-$S claim --branch <mine> --owner <tag> --base <parent> --pr <N>   # when the branch is cut; again to refresh
-$S peers --branch <mine>                 # the parent's owner and every child based on mine
-$S guard --branch <b> --owner <tag>      # before a commit or push: exit 1 when someone else owns it
-$S event --branch <mine> --owner <tag> pushed --head <sha>    # after a push; merging --method squash before landing
-$S since --branch <parent> --seen <sha>  # what the parent did since the head you last merged
+S() { node .agents/skills/factory-stacked-pr/scripts/stack.mjs "$@"; }   # a function: zsh doesn't word-split a variable
+S claim --branch <mine> --owner <tag> --base <parent> --pr <N>   # when the branch is cut; again to refresh
+S peers --branch <mine>                 # the parent's owner and every child based on mine
+S guard --branch <b> --owner <tag>      # before a commit or push: exit 1 when someone else owns it
+S event --branch <mine> --owner <tag> pushed --head <sha>    # after a push; merging --method squash before landing
+S since --branch <parent> --seen <sha>  # what the parent did since the head you last merged
 ```
 
 The owner tag is whatever finds the session again: a conductor's slug, or `hc:<terminal>`. A refused claim means another session owns the branch: ask the user before `--takeover --why`. Git refs, not the log, say whether the parent moved; the log says who moved it and what's coming.

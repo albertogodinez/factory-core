@@ -30,14 +30,14 @@ Phases of one ticket run **in order, in the ticket's one worktree**. Never run t
 `scripts/state.mjs` owns it. The file is `<stateRoot>/conductor/state.json`, where `stateRoot` is the factory-context resolver's for the ticket's worktree. Its shape is `schemas/state.schema.json`. Every write is checked against that schema, and a write that would break it is refused.
 
 ```bash
-S=node\ .agents/skills/factory-conductor/scripts/state.mjs
-$S init --worktree <path> [--ticket <key>] [--plan <path>] [--recipe <skill>] # one of ticket or plan; prints the state file
-$S launch --state <file> <phase> [--task "<what this run does>"] [--what "<a few words>"] [--run]
-$S status --state <file>                                                      # one line
-$S live --state <file>                                                        # this ticket's sessions still open
-$S kill --state <file> <phase> --why "<reason>"
-$S set --state <file> key=value ...                                           # a fix the conductor makes by hand
-$S digest --state <file>                                                      # every run's notes, for reflect
+S() { node .agents/skills/factory-conductor/scripts/state.mjs "$@"; }   # a function: zsh doesn't word-split a variable
+S init --worktree <path> [--ticket <key>] [--plan <path>] [--recipe <skill>] # one of ticket or plan; prints the state file
+S launch --state <file> <phase> [--task "<what this run does>"] [--what "<a few words>"] [--run]
+S status --state <file>                                                      # one line
+S live --state <file>                                                        # this ticket's sessions still open
+S kill --state <file> <phase> --why "<reason>"
+S set --state <file> key=value ...                                           # a fix the conductor makes by hand
+S digest --state <file>                                                      # every run's notes, for reflect
 ```
 
 A phase ends its own run with `state.mjs end --state <file> <phase> --notes <file>`. The notes follow `schemas/phase-notes.schema.json`. Their `handoff` object is the only way a phase changes the state.
