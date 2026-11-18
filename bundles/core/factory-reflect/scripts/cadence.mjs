@@ -67,6 +67,8 @@ export function cadence({ home, scope, repo, pin, ran, clusterMax, env, now = Da
   const key = stateKey(scope, repo);
   const all = readState(home);
   const s = all[key] || { mode: 'thrice', pinned: false, since: new Date(now).toISOString(), lastRun: null, lastClusterMax: 0 };
+  // A launcher can write a state entry with no mode yet (lastLaunch only): start it as a new scope.
+  s.mode ||= 'thrice'; s.pinned ??= false; s.since ||= new Date(now).toISOString();
   if (!s.pinned && s.mode === 'daily') s.mode = 'thrice';
   if (pin) {
     if (pin === 'off') s.pinned = false;

@@ -120,3 +120,15 @@ test('an older unpinned daily state reads as thrice; a pinned daily stays', () =
     assert.equal(cadence({ home: s.home, scope: 'core', env: s.env, now: T0 + DAY }).mode, 'daily');
   } finally { s.done(); }
 });
+
+test('a state entry with only a launch time still gets a mode', () => {
+  const s = sandbox();
+  try {
+    mkdirSync(s.home, { recursive: true });
+    writeFileSync(join(s.home, 'triage-state.json'), JSON.stringify({ core: { lastLaunch: new Date(T0).toISOString() } }));
+    const r = cadence({ home: s.home, scope: 'core', env: s.env, now: T0 + DAY, ran: true, clusterMax: 1 });
+    assert.equal(r.mode, 'thrice');
+    assert.equal(readState(s.home).core.mode, 'thrice');
+    assert.equal(readState(s.home).core.lastLaunch, new Date(T0).toISOString(), 'the launch time is kept');
+  } finally { s.done(); }
+});
