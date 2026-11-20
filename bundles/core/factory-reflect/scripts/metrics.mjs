@@ -239,6 +239,7 @@ export const SIGNALS = {
   stuck: (r) => (r.stuck?.retries || 0) + (r.stuck?.failStreaks || 0) + (r.stuck?.idleGaps || 0),
 };
 const sumMatch = (m, s) => Object.entries(m || {}).filter(([k]) => k.includes(s) || s.includes(k)).reduce((a, [, n]) => a + n, 0);
+const BY_DAY_MAX = 42; // a point per day up to six weeks of data, then a point per week
 const SERIES = ['tool_failures', 'permission_denials', 'hook_blocks', 'corrections', 'stuck'];
 const PLOT = [...SERIES, 'repeats']; // the chart also draws how often a known lesson came back
 const LABEL = { repeats: 'lessons seen again' };
@@ -262,19 +263,26 @@ export function sightings(index, layer) {
   }
   return out;
 }
-// Weekly per-session rates for one layer, landed lessons as markers, and before/after per fixedWhen.
+// Per-session rates for one layer, a point per day (per week once the data spans more than BY_DAY_MAX
+// days), from the first day with data; the days lessons landed; and before/after per fixedWhen.
 // A lesson whose land recorded its commit splits the 14 days either side by revision: a session ran
 // the lesson when its revs[layer] contains that commit (`contains(rev, commit)`, git ancestry).
 // Without a commit, or with no session carrying revs, it splits by the land's date.
 export function trend(rows, landed, layer, { days = 90, now = Date.now(), contains, index = [] } = {}) {
   const from = now - days * DAY, mine = rows.filter((r) => Date.parse(r.at) >= from && (r.layers || []).includes(layer));
-  const weeks = [], seen = sightings(index, layer);
-  for (let s = from; s < now; s += 7 * DAY) {
-    const w = mine.filter((r) => { const t = Date.parse(r.at); return t >= s && t < s + 7 * DAY; });
+  const points = [], seen = sightings(index, layer).filter((x) => x.at >= from);
+  // An empty window before the first session would squeeze every point to the right edge.
+  const first = Math.min(...mine.map((r) => Date.parse(r.at)), ...seen.map((x) => x.at));
+  const start = Number.isFinite(first) ? Math.floor(first / DAY) * DAY : now;
+  const step = now - start > BY_DAY_MAX * DAY ? 7 * DAY : DAY;
+  const landedIn = (a, b) => landed.filter((c) => c.scope === layer && Date.parse(c.done?.at) >= a && Date.parse(c.done?.at) < b);
+  for (let s = start; s < now; s += step) {
+    const w = mine.filter((r) => { const t = Date.parse(r.at); return t >= s && t < s + step; });
     const rate = Object.fromEntries(SERIES.map((k) => [k, w.length ? w.reduce((a, r) => a + SIGNALS[k](r), 0) / w.length : null]));
-    const sw = seen.filter((x) => x.at >= s && x.at < s + 7 * DAY);
-    weeks.push({ start: new Date(s).toISOString().slice(0, 10), sessions: w.length, ...rate,
-      sightings: sw.length, repeats: w.length ? sw.filter((x) => x.repeat).length / w.length : null }); // lesson sightings that were repeats, per session
+    const sw = seen.filter((x) => x.at >= s && x.at < s + step);
+    points.push({ start: new Date(s).toISOString().slice(0, 10), sessions: w.length, ...rate,
+      sightings: sw.length, repeats: w.length ? sw.filter((x) => x.repeat).length / w.length : null, // lesson sightings that were repeats, per session
+      landed: landedIn(s, s + step).map((c) => c.summary) });
   }
   const lessons = landed.filter((c) => c.scope === layer && Date.parse(c.done?.at) >= from).map((c) => {
     const t = Date.parse(c.done.at), f = c.fixedWhen;
@@ -292,32 +300,48 @@ export function trend(rows, landed, layer, { days = 90, now = Date.now(), contai
     return { at: c.done.at, summary: c.summary, metric: f?.metric || null, match: f?.match || null, ...(c.done.commit ? { commit: c.done.commit } : {}),
       before, after, by, verdict: verdict(before, after) };
   });
-  return { layer, sessions: mine.length, weeks, lessons };
+  return { layer, sessions: mine.length, bucket: step === DAY ? 'day' : 'week', points, lessons };
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// Small multiples: one panel per signal on its own scale, so a rate under 1 isn't flattened by one near
+// 15, with sessions and lessons landed per point as bar panels first. A tick under each axis marks a
+// point where lessons landed; hovering a bar or dot gives its value, and a landed bar lists the lessons.
 export function renderHtml(t, date) {
-  const W = 720, H = 220, P = 32, max = Math.max(1, ...t.weeks.flatMap((w) => PLOT.map((k) => w[k] || 0)));
-  const x = (i) => P + (i * (W - 2 * P)) / Math.max(1, t.weeks.length - 1), y = (v) => H - P - (v / max) * (H - 2 * P);
-  // A polyline needs two points, so a series with one week of data would draw nothing: every point gets a dot.
-  const lines = PLOT.map((k, n) => {
-    const at = t.weeks.map((w, i) => (w[k] == null ? null : [x(i), y(w[k]), w[k]])).filter(Boolean);
-    const dots = at.map(([cx, cy, v]) => `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.5" fill="var(--c${n + 1})"><title>${LABEL[k] || k}: ${(+v).toFixed(2)}</title></circle>`).join('');
-    return (at.length > 1 ? `<polyline fill="none" stroke="var(--c${n + 1})" stroke-width="2" points="${at.map(([cx, cy]) => `${cx.toFixed(1)},${cy.toFixed(1)}`).join(' ')}"><title>${LABEL[k] || k}</title></polyline>` : '') + dots;
-  }).join('');
-  const t0 = t.weeks.length ? Date.parse(t.weeks[0].start) : 0, span = Math.max(1, t.weeks.length - 1) * 7 * DAY;
-  const marks = t.lessons.map((l) => { const mx = P + ((Date.parse(l.at) - t0) / span) * (W - 2 * P); return `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${P}" y2="${H - P}" stroke="var(--muted)" stroke-dasharray="3 3"><title>${esc(l.summary)}</title></line>`; }).join('');
-  const legend = PLOT.map((k, n) => `<span><i style="background:var(--c${n + 1})"></i>${LABEL[k] || k.replace(/_/g, ' ')}</span>`).join('');
+  const pts = t.points, n = pts.length, W = 220, H = 96, P = 18, unit = t.bucket === 'week' ? 'week' : 'day';
+  const md = (d) => d.slice(5).replace('-', '/'), fmt = (v) => String(+(+v).toFixed(2));
+  const x = (i) => (n > 1 ? P + (i * (W - 2 * P)) / (n - 1) : W / 2);
+  const landedTip = (p) => (p.landed.length ? `${p.landed.length} landed, ${unit} of ${p.start}:\n${p.landed.slice(0, 10).map((l) => `• ${l.slice(0, 140)}`).join('\n')}${p.landed.length > 10 ? `\n… ${p.landed.length - 10} more` : ''}` : `none landed, ${unit} of ${p.start}`);
+  const panel = (title, vals, color, bars, tipOf) => {
+    const max = Math.max(1e-9, ...vals.map((v) => v || 0)), y = (v) => H - P - (v / max) * (H - 2 * P - 8);
+    let g = `<line x1="${P}" x2="${W - P}" y1="${H - P}" y2="${H - P}" stroke="var(--grid)"/>`;
+    if (bars) g += vals.map((v, i) => `<rect x="${(x(i) - 6).toFixed(1)}" y="${y(v || 0).toFixed(1)}" width="12" height="${Math.max(v ? 1 : 0, H - P - y(v || 0)).toFixed(1)}" fill="${color}" opacity=".7"><title>${esc(tipOf(i))}</title></rect>`).join('');
+    else {
+      // A polyline needs two points, so a series with one point of data would draw nothing: every point gets a dot.
+      const at = vals.map((v, i) => (v == null ? null : [x(i), y(v), v, i])).filter(Boolean);
+      if (at.length > 1) g += `<polyline fill="none" stroke="${color}" stroke-width="2" points="${at.map(([cx, cy]) => `${cx.toFixed(1)},${cy.toFixed(1)}`).join(' ')}"/>`;
+      g += at.map(([cx, cy, v, i]) => `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3" fill="${color}"><title>${esc(title)}: ${fmt(v)} (${pts[i].sessions} sessions, ${pts[i].start})</title></circle>`).join('');
+    }
+    g += pts.map((p, i) => (p.landed.length ? `<line x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${H - P}" y2="${H - P + 5}" stroke="var(--fg)"/>` : '')).join('');
+    const last = [...vals].reverse().find((v) => v != null);
+    const ends = n ? `<text x="${P}" y="${H - 2}" class="ax">${md(pts[0].start)}</text>${n > 1 ? `<text x="${W - P}" y="${H - 2}" text-anchor="end" class="ax">${md(pts[n - 1].start)}</text>` : ''}` : '';
+    return `<div class="sm"><div class="smh"><span>${esc(title)}</span><b>${last == null ? '–' : fmt(last)}</b></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">${g}${ends}<text x="${P}" y="12" class="ax">max ${fmt(max === 1e-9 ? 0 : max)}</text></svg></div>`;
+  };
+  const name = (k) => LABEL[k] || k.replace(/_/g, ' ');
+  const panels = [
+    panel(`sessions / ${unit}`, pts.map((p) => p.sessions), 'var(--muted)', true, (i) => `${pts[i].sessions} sessions, ${unit} of ${pts[i].start}`),
+    panel(`lessons landed / ${unit}`, pts.map((p) => p.landed.length), 'var(--muted)', true, (i) => landedTip(pts[i])),
+    ...PLOT.map((k, j) => panel(`${name(k)} / session`, pts.map((p) => p[k]), `var(--c${j + 1})`, false)),
+  ].join('');
   const rows = t.lessons.map((l) => `<tr><td>${esc(l.at.slice(0, 10))}</td><td>${esc(l.summary)}</td><td>${esc(l.metric || '—')}${l.match ? ` <code>${esc(l.match)}</code>` : ''}</td><td>${l.before ?? '—'}</td><td>${l.after ?? '—'}</td><td>${esc(l.verdict || '—')}${l.by === 'revision' ? ' (by revision)' : ''}</td></tr>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Factory trend ${esc(t.layer)}</title>
-<style>:root{--bg:#fff;--fg:#1b1d22;--muted:#6b7280;--c1:#2563eb;--c2:#dc2626;--c3:#d97706;--c4:#7c3aed;--c5:#059669;--c6:#db2777}
-@media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e5e7eb;--muted:#9ca3af;--c1:#60a5fa;--c2:#f87171;--c3:#fbbf24;--c4:#a78bfa;--c5:#34d399;--c6:#f472b6}}
-body{background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif;margin:0;padding:24px 16px;max-width:760px}
-svg{width:100%;height:auto}.legend span{margin-right:12px;white-space:nowrap}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+<style>:root{--bg:#fff;--card:#f6f7f9;--grid:#e3e5ea;--fg:#1b1d22;--muted:#6b7280;--c1:#2563eb;--c2:#dc2626;--c3:#d97706;--c4:#7c3aed;--c5:#059669;--c6:#db2777}
+@media (prefers-color-scheme:dark){:root{--bg:#121417;--card:#1a1d22;--grid:#2c3038;--fg:#e5e7eb;--muted:#9ca3af;--c1:#60a5fa;--c2:#f87171;--c3:#fbbf24;--c4:#a78bfa;--c5:#34d399;--c6:#f472b6}}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif;margin:0 auto;padding:24px 16px;max-width:780px}
+svg{width:100%;height:auto;display:block}.ax{fill:var(--muted);font-size:11px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}.sm{background:var(--card);border-radius:8px;padding:6px 8px}.smh{display:flex;justify-content:space-between;font-size:12px}
 table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--muted);padding:4px 6px;text-align:left;vertical-align:top}</style></head><body>
-<h1>${esc(t.layer)} · ${esc(date)}</h1><p>${t.sessions} session(s) with a ${esc(t.layer)} skill active, per-session rates by week. Dashed lines: lessons landed. "Lessons seen again" counts, per session, the lessons the harness had already recorded in another session; a landed lesson that works should push it down. Corrections are a heuristic.</p>
-<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="weekly rates"><line x1="${P}" x2="${W - P}" y1="${H - P}" y2="${H - P}" stroke="var(--muted)"/>${marks}${lines}<text x="${P}" y="${P - 8}" fill="var(--muted)" font-size="11">max ${max.toFixed(2)} / session</text></svg>
-<p class="legend">${legend}</p><h2>Lessons and their signal</h2><p>Mean per session before and after each land: by the installed revision when the land recorded its commit, else 7 days either side. Flat means it didn't work, and triage reopens that cluster. Worse means it made things worse, and triage queues a fact to revert or rework it.</p>
+<h1>${esc(t.layer)} · ${esc(date)}</h1><p>${t.sessions} session(s) with a ${esc(t.layer)} skill active${n ? `, ${md(pts[0].start)} to ${md(pts[n - 1].start)}, a point per ${unit}` : ''}. Each panel has its own scale and shows the latest value at the top right; a tick under an axis marks a ${unit} lessons landed (hover the bar for the list). "Lessons seen again" counts, per session, the lessons the harness had already recorded in another session; a landed lesson that works should push it down. Corrections are a heuristic.</p>
+<div class="grid">${panels}</div><h2>Lessons and their signal</h2><p>Mean per session before and after each land: by the installed revision when the land recorded its commit, else 7 days either side. Flat means it didn't work, and triage reopens that cluster. Worse means it made things worse, and triage queues a fact to revert or rework it.</p>
 <table><tr><th>Landed</th><th>Lesson</th><th>fixedWhen</th><th>Before</th><th>After</th><th>Verdict</th></tr>${rows || '<tr><td colspan="6">No lessons landed in this window.</td></tr>'}</table></body></html>
 `;
 }

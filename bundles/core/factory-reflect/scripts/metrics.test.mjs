@@ -113,13 +113,14 @@ test('sightings: a lesson another session already recorded is a repeat; the same
   const rows = []; // two sessions in week 0, one lesson first seen then repeated
   for (const [i, id] of ['s1', 's2'].entries()) rows.push({ ...summarizeSession([], { session: id, harness: 'h', project: 'p' }), at: at(i), layers: ['core'] });
   const t = trend(rows, [], 'core', { days: 14, now: T0 + 14 * DAY, index: [e(0, 'a', 's1'), e(1, 'a', 's2')] });
-  assert.equal(t.weeks[0].sightings, 2); assert.equal(t.weeks[0].repeats, 0.5, 'one repeat over two sessions');
+  assert.equal(t.bucket, 'day');
+  assert.deepEqual(t.points.slice(0, 2).map((p) => [p.sightings, p.repeats]), [[1, 0], [1, 1]], 'day 1 repeats what day 0 recorded');
   assert.match(renderHtml(t, '2026-06-15'), /lessons seen again/);
-  const one = renderHtml({ ...t, weeks: [{ start: '2026-06-01', sessions: 2, tool_failures: 3, repeats: 1 }], lessons: [] }, 'd');
-  assert.match(one, /<circle[^>]*><title>tool_failures: 3\.00/, 'a lone week still draws a dot, since a one-point polyline is invisible');
+  const one = renderHtml({ ...t, points: [{ start: '2026-06-01', sessions: 2, tool_failures: 3, repeats: 1, landed: [] }], lessons: [] }, 'd');
+  assert.match(one, /<circle[^>]*><title>tool failures \/ session: 3 \(2 sessions, 2026-06-01\)/, 'a lone point still draws a dot, since a one-point polyline is invisible');
 });
 
-test('the report: weekly rates per layer, a before/after per landed lesson, the newest 12 kept', () => {
+test('the report: daily rates per layer, a panel per signal, a before/after per landed lesson, the newest 12 kept', () => {
   const s = sandbox();
   try {
     const base = summarizeSession([], { session: 'x', harness: 'h', project: 'p' });
@@ -134,8 +135,13 @@ test('the report: weekly rates per layer, a before/after per landed lesson, the 
     const t = trend(readRows(s.env), [JSON.parse(readFileSync(join(done, 'x.json'), 'utf8'))], 'core', { days: 28, now: T0 + 28 * DAY });
     assert.equal(t.sessions, 28);
     assert.deepEqual(t.lessons.map((l) => [l.before, l.after]), [[2, 0]]);
-    assert.equal(t.weeks[0].permission_denials, 2);
-    assert.equal(t.weeks[3].permission_denials, 0);
+    assert.equal(t.points.length, 29, 'a point per calendar day from the first session, today included');
+    assert.equal(t.points[13].permission_denials, 2);
+    assert.equal(t.points[14].permission_denials, 0);
+    assert.equal(t.points[14].landed.length, 1, 'the land shows on its day');
+    const page = renderHtml(t, "d");
+    assert.equal((page.match(/class="sm"/g) || []).length, 8, 'sessions, lessons landed, and one panel per signal');
+    assert.match(page, /<title>1 landed, day of [^:]*:\n• land refuses &lt;outside&gt; home/, 'the landed bar lists the lesson, escaped');
     const reports = join(s.env.FACTORY_HOME, 'reports'); mkdirSync(reports, { recursive: true });
     for (let i = 1; i <= 13; i++) writeFileSync(join(reports, `2026-01-${String(i).padStart(2, '0')}-core.html`), 'x');
     const r = report({ days: 28 }, s.env, T0 + 28 * DAY);
@@ -219,4 +225,16 @@ test('the hook reads its JSON from stdin, writes the row, and exits 0 even on ba
     assert.equal(readRows(s.env).length, 1);
     assert.equal(capture({ transcript: tr, session: 'hook-1', cwd: repo }, s.env).rows, 1, 'a second capture replaces the row');
   } finally { s.done(); }
+});
+
+test('trend starts at the first day with data, and switches to weeks past six weeks', () => {
+  const row = (d) => ({ ...summarizeSession([], { session: `s${d}`, harness: 'h', project: 'p' }), at: new Date(T0 + d * DAY).toISOString(), layers: ['core'] });
+  const short = trend([row(80), row(85)], [], 'core', { days: 90, now: T0 + 90 * DAY });
+  assert.equal(short.bucket, 'day');
+  assert.equal(short.points[0].start, new Date(T0 + 80 * DAY).toISOString().slice(0, 10), 'no empty days before the first session');
+  assert.equal(short.points.length, 11, 'days 80 to 90, the last one partial');
+  const long = trend([row(0), row(85)], [], 'core', { days: 90, now: T0 + 90 * DAY });
+  assert.equal(long.bucket, 'week');
+  assert.equal(long.points.length, 13);
+  assert.deepEqual(trend([], [], 'core', { days: 90, now: T0 + 90 * DAY }).points, [], 'no data, no points');
 });
