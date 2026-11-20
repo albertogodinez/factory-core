@@ -142,10 +142,16 @@ test('the report: daily rates per layer, a panel per signal, a before/after per 
     const page = renderHtml(t, "d");
     assert.equal((page.match(/class="sm"/g) || []).length, 8, 'sessions, lessons landed, and one panel per signal');
     assert.match(page, /data-tip="\d\d\/\d\d · 1 landed\n• land refuses &lt;outside&gt; home/, 'the landed bar lists the lesson, escaped');
-    assert.match(page, /data-tip="0 \(-2\) · 1 sessions · \d\d\/\d\d\nLanded \d\d\/\d\d: 1\n• land refuses &lt;outside&gt; home"/, 'a dot names the change since the point before and what landed then');
+    assert.match(page, /data-tip="0 \(-2\) · 1 sessions · \d\d\/\d\d\nLanded \d\d\/\d\d \(1\):\n• land refuses &lt;outside&gt; home"/, 'a dot names the change since the point before and what landed then');
     const reports = join(s.env.FACTORY_HOME, 'reports'); mkdirSync(reports, { recursive: true });
     for (let i = 1; i <= 13; i++) writeFileSync(join(reports, `2026-01-${String(i).padStart(2, '0')}-core.html`), 'x');
     const r = report({ days: 28 }, s.env, T0 + 28 * DAY);
+    const landDay = new Date(land).toISOString().slice(0, 10);
+    assert.deepEqual(r.untold, [{ layer: 'core', date: landDay, lessons: ['land refuses <outside> home'] }], 'a landing day with no TL;DR is listed');
+    writeFileSync(r.tldrFile, JSON.stringify({ core: { [landDay]: 'Lesson land stops writing outside its home' } }));
+    const r2 = report({ days: 28 }, s.env, T0 + 28 * DAY);
+    assert.deepEqual(r2.untold, [], 'once summarized, nothing is left to tell');
+    assert.match(readFileSync(r2.reports[0].file, 'utf8'), /\nLanded \d\d\/\d\d \(1\):\nLesson land stops writing outside its home"/, 'the tooltip shows the TL;DR, not the lesson list');
     const html = readFileSync(r.reports[0].file, 'utf8');
     assert.match(html, /land refuses &lt;outside&gt; home/, 'escaped');
     assert.doesNotMatch(html, /dropped/, 'only landed lessons are markers');

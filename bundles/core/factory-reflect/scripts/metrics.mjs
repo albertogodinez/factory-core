@@ -268,7 +268,8 @@ export function sightings(index, layer) {
 // A lesson whose land recorded its commit splits the 14 days either side by revision: a session ran
 // the lesson when its revs[layer] contains that commit (`contains(rev, commit)`, git ancestry).
 // Without a commit, or with no session carrying revs, it splits by the land's date.
-export function trend(rows, landed, layer, { days = 90, now = Date.now(), contains, index = [] } = {}) {
+// `tldr` maps a landing date (YYYY-MM-DD) to a one-line summary of what landed that day, written by triage.
+export function trend(rows, landed, layer, { days = 90, now = Date.now(), contains, index = [], tldr = {} } = {}) {
   const from = now - days * DAY, mine = rows.filter((r) => Date.parse(r.at) >= from && (r.layers || []).includes(layer));
   const points = [], seen = sightings(index, layer).filter((x) => x.at >= from);
   // An empty window before the first session would squeeze every point to the right edge.
@@ -282,7 +283,8 @@ export function trend(rows, landed, layer, { days = 90, now = Date.now(), contai
     const sw = seen.filter((x) => x.at >= s && x.at < s + step);
     points.push({ start: new Date(s).toISOString().slice(0, 10), sessions: w.length, ...rate,
       sightings: sw.length, repeats: w.length ? sw.filter((x) => x.repeat).length / w.length : null, // lesson sightings that were repeats, per session
-      landed: landedIn(s, s + step).map((c) => c.summary) });
+      landed: landedIn(s, s + step).map((c) => c.summary),
+      tldr: [...new Set(landedIn(s, s + step).map((c) => tldr[c.done.at.slice(0, 10)]).filter(Boolean))].join('; ') || null });
   }
   const lessons = landed.filter((c) => c.scope === layer && Date.parse(c.done?.at) >= from).map((c) => {
     const t = Date.parse(c.done.at), f = c.fixedWhen;
@@ -315,9 +317,10 @@ export function renderHtml(t, date) {
   // (a change lands, then shows in the sessions after it). The table below has the full text.
   const short = (l) => { const one = l.split(/(?<=[.;])\s/)[0].replace(/[.;]$/, ''); return one.length > 60 ? `${one.slice(0, 57)}…` : one; };
   const list = (ls) => ls.slice(0, 3).map((l) => `\n• ${short(l)}`).join('') + (ls.length > 3 ? `\n+${ls.length - 3} more` : '');
-  const cause = (i) => { const near = [pts[i - 1], pts[i]].filter((p) => p?.landed.length), ls = near.flatMap((p) => p.landed);
-    return ls.length ? `\nLanded ${near.map((p) => md(p.start)).join('–')}: ${ls.length}${list(ls)}` : ''; };
-  const landedTip = (p) => `${md(p.start)} · ${p.landed.length} landed${list(p.landed)}`;
+  // The triage-written TL;DR when there is one, else the first few lessons.
+  const what = (p) => p.tldr ? `\n${p.tldr}` : list(p.landed);
+  const cause = (i) => [pts[i - 1], pts[i]].filter((p) => p?.landed.length).map((p) => `\nLanded ${md(p.start)} (${p.landed.length}):${what(p)}`).join('');
+  const landedTip = (p) => `${md(p.start)} · ${p.landed.length} landed${what(p)}`;
   const panel = (title, vals, color, bars, tipOf) => {
     const max = Math.max(1e-9, ...vals.map((v) => v || 0)), y = (v) => H - P - (v / max) * (H - 2 * P - 8);
     let g = `<line x1="${P}" x2="${W - P}" y1="${H - P}" y2="${H - P}" stroke="var(--grid)"/>`;
@@ -382,22 +385,32 @@ function ancestry(repo) {
   };
 }
 
+const TLDR_FILE = 'tldr.json';
 // Writes one report per layer and keeps the newest 12 per layer. `worse` lists the lessons whose
-// signal rose after they landed, for triage to queue a revert or rework.
+// signal rose after they landed, for triage to queue a revert or rework. `untold` lists each landing
+// date in the charts with no TL;DR in `tldrFile` ({ <layer>: { <date>: "<summary>" } }), with its
+// lessons, for triage to summarize; the tooltips show the TL;DR.
 export function report({ days = 90, out } = {}, env = process.env, now = Date.now()) {
   const h = home(env), dir = out || join(h, 'reports'), date = new Date(now).toISOString().slice(0, 10);
   mkdirSync(dir, { recursive: true });
-  const rows = readRows(env), landed = landedCandidates(h), written = [], index = readIndex(h);
+  const rows = readRows(env), landed = landedCandidates(h), written = [], index = readIndex(h), untold = [];
+  let tldr = {}; try { tldr = JSON.parse(readFileSync(join(dir, TLDR_FILE), 'utf8')); } catch {}
   let sources = {}; try { sources = JSON.parse(readFileSync(join(h, 'installs.json'), 'utf8')).sources || {}; } catch {}
   for (const layer of ['core', 'org']) {
-    const t = trend(rows, landed, layer, { days, now, index, contains: ancestry(sourceRepo(layer, sources)) });
+    const t = trend(rows, landed, layer, { days, now, index, tldr: tldr[layer] || {}, contains: ancestry(sourceRepo(layer, sources)) });
+    const byDay = {}, first = t.points[0]?.start;
+    for (const c of landed) {
+      const day = c.scope === layer && c.done?.at?.slice(0, 10);
+      if (day && first && day >= first && !tldr[layer]?.[day]) (byDay[day] ||= []).push(c.summary);
+    }
+    for (const [day, lessons] of Object.entries(byDay).sort()) untold.push({ layer, date: day, lessons });
     const f = join(dir, `${date}-${layer}.html`);
     writeFileSync(f, renderHtml(t, date));
     written.push({ layer, file: f, sessions: t.sessions, lessons: t.lessons });
     const mine = readdirSync(dir).filter((n) => n.endsWith(`-${layer}.html`)).sort();
     for (const n of mine.slice(0, Math.max(0, mine.length - REPORTS_KEPT))) rmSync(join(dir, n), { force: true });
   }
-  return { reports: written, worse: written.flatMap((w) => w.lessons.filter((l) => l.verdict === 'worse').map((l) => ({ layer: w.layer, ...l }))) };
+  return { reports: written, tldrFile: join(dir, TLDR_FILE), untold, worse: written.flatMap((w) => w.lessons.filter((l) => l.verdict === 'worse').map((l) => ({ layer: w.layer, ...l }))) };
 }
 
 // ---------- CLI ----------
