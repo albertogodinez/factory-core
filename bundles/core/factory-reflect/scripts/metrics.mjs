@@ -313,7 +313,7 @@ export function renderHtml(t, date) {
   const x = (i) => (n > 1 ? P + (i * (W - 2 * P)) / (n - 1) : W / 2);
   // Kept short: the value, its move, and up to 3 lessons that landed on this point or the one before it
   // (a change lands, then shows in the sessions after it). The table below has the full text.
-  const short = (l) => { const one = l.split(/(?<=[.;:])\s/)[0].replace(/[.;:]$/, ''); return one.length > 60 ? `${one.slice(0, 57)}…` : one; };
+  const short = (l) => { const one = l.split(/(?<=[.;])\s/)[0].replace(/[.;]$/, ''); return one.length > 60 ? `${one.slice(0, 57)}…` : one; };
   const list = (ls) => ls.slice(0, 3).map((l) => `\n• ${short(l)}`).join('') + (ls.length > 3 ? `\n+${ls.length - 3} more` : '');
   const cause = (i) => { const near = [pts[i - 1], pts[i]].filter((p) => p?.landed.length), ls = near.flatMap((p) => p.landed);
     return ls.length ? `\nLanded ${near.map((p) => md(p.start)).join('–')}: ${ls.length}${list(ls)}` : ''; };
