@@ -59,16 +59,14 @@ Personas come from `review.personas` (`adapters.personas`). With none configured
 
 Dispatch every reviewer directly from this skill, never through another review skill: that adds a second round of scope detection and forces sequential ordering.
 
-Send all selected reviewers in a single message of parallel `Agent` calls, with `run_in_background: false`. Never split the batch. Splitting is the largest avoidable cause of slow runs: a measured 8-reviewer run split 4+4 took about 6 minutes, against about 3.5 for one batch. If the message is too large, drop a conditional reviewer before splitting. `general` is never the one dropped.
+Prepare the selected reviewer prompts together. Start them in fresh contexts, up to the harness's concurrency limit, and fill freed slots from the remaining prompts before reconciling findings. On Claude Code, send one parallel batch of `Agent` calls with `run_in_background: false`. On Codex, use `spawn_agent` with `fork_turns: "none"`; each prompt needs its own artifact paths. Keep `general` in every round.
 
 `references/dispatch.md` has the prompt checklist, which files each reviewer gets, the dependency-context note, hook outputs, and the cross-vendor `general`. Read it before you build prompts.
 
 Before sending, confirm:
 
-1. No reviewer was dispatched earlier in this run. If one was, the batch is already split; stop.
-2. Every `dispatch` persona is in the message, and nothing `skipped` or `gap` is. A skipped persona's absence is correct, not a split.
-3. `run_in_background` is `false`.
-4. If the second-opinion preflight said `ready`, its background Bash call is in the same message. If it said `fallback`, so is the fallback Agent.
+1. Every `dispatch` persona has a prompt and a scheduled slot. Record `skipped` and `gap` from the dispatch plan.
+2. Start a ready second opinion alongside the panel. Schedule a fallback reviewer in the panel when preflight calls for one.
 
 ### What each reviewer is
 
@@ -80,7 +78,7 @@ Before sending, confirm:
 
 Wait for all reviewers. If one has not returned after 10 minutes, proceed without it and record it as a coverage gap.
 
-**Prove sweep coverage first.** Save each reviewer's JSON to `$RUN/reviewers/<persona>.json` (the cross-vendor `general` as `general-<model>.json`). Then run `node .agents/skills/factory-review/scripts/check-sweep-coverage.mjs --hits $RUN/sweep-hits.tsv --reviewers $RUN/reviewers --dispatched <comma-separated personas>`. Every hit needs a `sweep_dispositions` entry from a dispatched owner. A pack may also require the note to name something specific. Exit 1 lists unreviewed or unproven hits: send each owning persona its rows once with SendMessage, overwrite its file with the new return, and check again. Rows still open go in the Coverage table and the verdict. Exit 2 means a return does not match `schemas/reviewer-output.schema.json`: ask that persona again. A clean result with unanswered hits is the failure this step catches.
+**Prove sweep coverage first.** Give each reviewer its output path under `$RUN/reviewers/` (the cross-vendor `general` uses `general-<model>.json`). If the child lacks write access, save its JSON return verbatim there. The reviewer owns its sweep dispositions. Then run `node .agents/skills/factory-review/scripts/check-sweep-coverage.mjs --hits $RUN/sweep-hits.tsv --reviewers $RUN/reviewers --dispatched <comma-separated personas>`. Every hit needs a `sweep_dispositions` entry from a dispatched owner. A pack may also require the note to name something specific. Exit 1 lists unreviewed or unproven hits: send each owning persona its rows once with SendMessage, have it replace its output or save the replacement verbatim, and check again. Rows still open go in the Coverage table and the verdict. Exit 2 means a return does not match `schemas/reviewer-output.schema.json`: ask that persona again. A clean result with unanswered hits is the failure this step catches.
 
 Then merge:
 
