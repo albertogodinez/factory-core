@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // guide.mjs: a guided review for the plannotator-review gate, written before the gate opens.
 //
-//   guide.mjs prep --worktree <dir> --base <trunk> [--pr <url>] [--out <dir>]
+//   guide.mjs prep --worktree <dir> --base <trunk> [--pr <url>] [--out <dir>] [--context <file>]
 //       writes <out>/<head>.patch (git diff <merge-base>), <head>.prompt.md (the brief for the
-//       subagent that writes the guide) and names <head>.guide.json, where the guide goes
+//       subagent that writes the guide) and names <head>.guide.json, where the guide goes; --context
+//       adds what the reviewer needs that the diff can't show (triage's counts and reasons per commit)
 //   guide.mjs import --worktree <dir> --guide <file> --patch <file> [--pr <url>]
 //       checks the guide covers the patch, then `plannotator guide import`, so the review lists it
 //       under Guides; with --pr it's saved against that PR, and the gate reviews the PR itself
@@ -64,7 +65,7 @@ function brief() {
   };
 }
 
-export function prep({ worktree, base, pr, out, briefFn = brief }) {
+export function prep({ worktree, base, pr, out, context, briefFn = brief }) {
   if (!worktree || !base) throw new GuideError('usage', '--worktree and --base are required');
   const wt = resolve(worktree);
   const head = git(wt, 'rev-parse', 'HEAD').trim();
@@ -72,6 +73,8 @@ export function prep({ worktree, base, pr, out, briefFn = brief }) {
   const patch = git(wt, 'diff', mergeBase);
   if (!patch.trim()) throw new GuideError('empty-diff', `no changes between ${base} and HEAD in ${wt}`);
   const files = patchFiles(patch);
+  let extra = null;
+  if (context) { try { extra = readFileSync(resolve(context), 'utf8').trim(); } catch (e) { throw new GuideError('usage', `--context ${context}: ${e.message}`); } }
   let managed;
   let dir;
   if (out) {
@@ -100,6 +103,7 @@ export function prep({ worktree, base, pr, out, briefFn = brief }) {
     `- Changed files (authoritative, ${files.length}):\n${files.map((f) => `  - ${f}`).join('\n')}`,
     pr ? `- PR: ${pr} (read its title and body for the intent).` : '- No PR: infer the intent from the commits below.',
     `- Commits:\n\n\`\`\`\n${log}\n\`\`\``,
+    ...(extra ? ['\n## Reviewer context\n', 'What the reviewer needs beside the diff. Carry it into the guide: the parts about the whole branch go in `intent`, and each commit\'s part leads the overview of the section for that commit. Keep its numbers exactly.\n', extra] : []),
     '\n## Output\n',
     `Write only the guide JSON to \`${guideFile}\`, matching this schema, then stop:\n\n\`\`\`json\n${JSON.stringify(b.output_schema)}\n\`\`\``,
     `\nRules:\n${(b.rules || []).map((r) => `- ${r}`).join('\n')}`,

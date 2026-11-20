@@ -61,6 +61,11 @@ test('prep writes the merge-base patch, a brief naming every file, and the revie
     const onPr = prep({ worktree: r.dir, base: 'main', out, pr: 'https://github.com/o/r/pull/7', briefFn: BRIEF });
     assert.equal(onPr.review, 'plannotator review https://github.com/o/r/pull/7 --gate --json', 'on a PR the gate reviews the PR, so comments stay there');
     assert.match(readFileSync(onPr.prompt, 'utf8'), /PR: https:\/\/github\.com\/o\/r\/pull\/7/);
+    assert.doesNotMatch(p, /## Reviewer context/);
+    writeFileSync(join(r.dir, 'ctx.md'), 'Seen 7 times across 3 sessions in 2 projects.');
+    const withCtx = readFileSync(prep({ worktree: r.dir, base: 'main', out, context: join(r.dir, 'ctx.md'), briefFn: BRIEF }).prompt, 'utf8');
+    assert.match(withCtx, /## Reviewer context[\s\S]*Seen 7 times across 3 sessions in 2 projects\./, 'triage context reaches the guide brief');
+    assert.throws(() => prep({ worktree: r.dir, base: 'main', out, context: join(r.dir, 'missing.md'), briefFn: BRIEF }), { code: 'usage' });
     git(r.dir, 'switch', '-q', 'main');
     assert.throws(() => prep({ worktree: r.dir, base: 'main', out, briefFn: BRIEF }), { code: 'empty-diff' });
   } finally { r.done(); }
