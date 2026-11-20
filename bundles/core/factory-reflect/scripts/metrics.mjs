@@ -311,11 +311,13 @@ export function renderHtml(t, date) {
   const pts = t.points, n = pts.length, W = 220, H = 96, P = 18, unit = t.bucket === 'week' ? 'week' : 'day';
   const md = (d) => d.slice(5).replace('-', '/'), fmt = (v) => String(+(+v).toFixed(2));
   const x = (i) => (n > 1 ? P + (i * (W - 2 * P)) / (n - 1) : W / 2);
-  // What landed on a point and the one before it: a change lands, then shows in the sessions after it.
-  const short = (l) => { const one = l.split(/(?<=[.;])\s/)[0].replace(/[.;]$/, ""); return one.length > 110 ? `${one.slice(0, 107)}…` : one; };
-  const list = (ls) => ls.slice(0, 5).map((l) => `\n• ${short(l)}`).join('') + (ls.length > 5 ? `\n… ${ls.length - 5} more` : '');
-  const cause = (i) => [[pts[i], `that ${unit}`], [pts[i - 1], `the ${unit} before`]].filter(([p]) => p?.landed.length).map(([p, when]) => `\n\nLanded ${when} (${p.landed.length}):${list(p.landed)}`).join('') || `\n\nNothing landed that ${unit} or the ${unit} before.`;
-  const landedTip = (p) => (p.landed.length ? `${p.landed.length} landed, ${unit} of ${p.start}:\n${p.landed.slice(0, 10).map((l) => `• ${l.slice(0, 140)}`).join('\n')}${p.landed.length > 10 ? `\n… ${p.landed.length - 10} more` : ''}` : `none landed, ${unit} of ${p.start}`);
+  // Kept short: the value, its move, and up to 3 lessons that landed on this point or the one before it
+  // (a change lands, then shows in the sessions after it). The table below has the full text.
+  const short = (l) => { const one = l.split(/(?<=[.;:])\s/)[0].replace(/[.;:]$/, ''); return one.length > 60 ? `${one.slice(0, 57)}…` : one; };
+  const list = (ls) => ls.slice(0, 3).map((l) => `\n• ${short(l)}`).join('') + (ls.length > 3 ? `\n+${ls.length - 3} more` : '');
+  const cause = (i) => { const near = [pts[i - 1], pts[i]].filter((p) => p?.landed.length), ls = near.flatMap((p) => p.landed);
+    return ls.length ? `\nLanded ${near.map((p) => md(p.start)).join('–')}: ${ls.length}${list(ls)}` : ''; };
+  const landedTip = (p) => `${md(p.start)} · ${p.landed.length} landed${list(p.landed)}`;
   const panel = (title, vals, color, bars, tipOf) => {
     const max = Math.max(1e-9, ...vals.map((v) => v || 0)), y = (v) => H - P - (v / max) * (H - 2 * P - 8);
     let g = `<line x1="${P}" x2="${W - P}" y1="${H - P}" y2="${H - P}" stroke="var(--grid)"/>`;
@@ -326,8 +328,8 @@ export function renderHtml(t, date) {
       if (at.length > 1) g += `<polyline fill="none" stroke="${color}" stroke-width="2" points="${at.map(([cx, cy]) => `${cx.toFixed(1)},${cy.toFixed(1)}`).join(' ')}"/>`;
       // A wide transparent ring makes a 3px dot easy to hover; the page's script shows data-tip.
       g += at.map(([cx, cy, v, i], j) => {
-        const prev = at[j - 1], move = prev ? ` (${v > prev[2] ? '+' : ''}${fmt(v - prev[2])} since ${md(pts[prev[3]].start)})` : '';
-        const tip = `${title}: ${fmt(v)}${move}\n${pts[i].sessions} sessions, ${unit} of ${pts[i].start}${cause(i)}`;
+        const prev = at[j - 1], move = prev ? ` (${v > prev[2] ? '+' : ''}${fmt(v - prev[2])})` : '';
+        const tip = `${fmt(v)}${move} · ${pts[i].sessions} sessions · ${md(pts[i].start)}${cause(i)}`;
         return `<g class="dot" data-tip="${esc(tip)}" tabindex="0"><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="9" fill="transparent"/><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3" fill="${color}"/></g>`;
       }).join('');
     }
@@ -338,7 +340,7 @@ export function renderHtml(t, date) {
   };
   const name = (k) => LABEL[k] || k.replace(/_/g, ' ');
   const panels = [
-    panel(`sessions / ${unit}`, pts.map((p) => p.sessions), 'var(--muted)', true, (i) => `${pts[i].sessions} sessions, ${unit} of ${pts[i].start}`),
+    panel(`sessions / ${unit}`, pts.map((p) => p.sessions), 'var(--muted)', true, (i) => `${md(pts[i].start)} · ${pts[i].sessions} sessions`),
     panel(`lessons landed / ${unit}`, pts.map((p) => p.landed.length), 'var(--muted)', true, (i) => landedTip(pts[i])),
     ...PLOT.map((k, j) => panel(`${name(k)} / session`, pts.map((p) => p[k]), `var(--c${j + 1})`, false)),
   ].join('');
