@@ -101,6 +101,8 @@ Record the run, with the size of the largest cluster: `node <lessons.mjs> cadenc
 
 Write the trend report: `node <lessons.mjs> report`. It writes one HTML file per layer under `~/.agents/factory/reports/`, from the counted metrics every session's end captures. It shows weekly per-session rates, a marker for each landed lesson, and each lesson's `fixedWhen` signal for the 7 days before and after. Each lesson carries a `verdict`, split by the revision each session had installed when its land recorded `--commit`, else by date. **flat**: it didn't work, so queue a `pattern` candidate that says so, and the next triage reopens that cluster. **worse** (listed in the report's `worse`): it made things worse, so queue a `fact` candidate to revert or rework it, with the commit as evidence (`{"commit":"<sha>"}`).
 
+Then open each report's `file` for the user (`open` on macOS, `xdg-open` on Linux, `start` on Windows), in a scheduled run too. The trend chart is how the user sees whether the setup is working; a path in the summary alone goes unread.
+
 End with a short summary here: the repo, the clusters with their member counts, what landed and what was dropped, the candidates still queued, and the report's path.
 
 In a scheduled run, also write that summary to `~/.agents/factory/reports/triage-<slug>.md`, then end the session, so idle triage sessions don't pile up. When `HC_TERMINAL_ID` is set (the hc launcher started this session), run `hc kill "$HC_TERMINAL_ID"` as the last command. A dismissed gate ends the same way: the status hook names the branch at the next session start.
