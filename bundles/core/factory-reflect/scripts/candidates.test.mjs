@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, realpathSync, writeFileSync, mkdirSync, existsSync
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, liveTags, afterLaunch, sourceRepo, repoOwners, triagePrompt, pickLauncher, pickAgent } from './candidates.mjs';
+import { laneOf, checkEvidence, writeCandidate, queue, markDone, launchFor, liveTags, afterLaunch, sourceRepo, repoOwners, triagePrompt, pickLauncher, pickAgent, noMcpArgs } from './candidates.mjs';
 
 const LESSONS = join(dirname(fileURLToPath(import.meta.url)), 'lessons.mjs');
 const T0 = Date.parse('2026-11-11T12:00:00Z');
@@ -157,6 +157,19 @@ test('the agent: machine config picks claude or codex, {agent} fills the argv, a
     assert.deepEqual(launchFor({ launcher: 'launch-x', skillsDir: skills, repo: '/r', prompt: 'p', agent: codex }).argv, ['tool', '--cwd', '/r', 'codex', 'p']);
     assert.deepEqual(launchFor({ launcher: 'launch-x', skillsDir: skills, repo: '/r', prompt: 'p' }).argv, ['tool', '--cwd', '/r', 'claude', 'p'], 'claude by default');
     assert.equal(launchFor({ skillsDir: skills, repo: '/r', prompt: 'p', agent: codex }).command, 'cd /r && codex', 'a configured agent is named in the printed command');
+    assert.deepEqual(launchFor({ launcher: 'launch-x', skillsDir: skills, repo: '/r', prompt: 'p', agentArgs: ['--a', 'b'] }).argv, ['tool', '--cwd', '/r', 'claude', '--a', 'b', 'p'], 'agentArgs follow the agent');
+  } finally { s.done(); }
+});
+
+test('noMcpArgs: claude gets an empty strict config, codex turns off each server its config.toml defines', () => {
+  const s = sandbox();
+  try {
+    assert.deepEqual(noMcpArgs(pickAgent({})), ['--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}']);
+    writeFileSync(join(s.dir, 'config.toml'), 'model = "x"\n[mcp_servers.figma]\nurl = "u"\n[mcp_servers.perf-dog.env]\nA = "1"\n[mcp_servers.perf-dog]\ncommand = "c"\n[mcp_servers."a.b"]\ncommand = "c"\n');
+    const codex = pickAgent({ adapters: { agentCLI: 'codex' } });
+    assert.deepEqual(noMcpArgs(codex, { codexHome: s.dir }), ['-c', 'mcp_servers.figma.enabled=false', '-c', 'mcp_servers.perf-dog.enabled=false', '-c', 'mcp_servers."a.b".enabled=false'], 'a sub-table is not a server');
+    assert.deepEqual(noMcpArgs(codex, { codexHome: join(s.dir, 'none') }), [], 'no config: nothing to turn off');
+    assert.deepEqual(noMcpArgs(pickAgent({ adapters: { agentCLI: 'pi' } })), [], 'an unknown agent: no arguments');
 
     const repo = join(s.dir, 'src'), md = join(repo, '.agents', 'skills', 'factory-triage', 'SKILL.md');
     assert.equal(triagePrompt(repo, '/h/c.json', {}, codex), 'Use the factory-triage skill for /h/c.json.', 'no SKILL.md anywhere: name the skill');

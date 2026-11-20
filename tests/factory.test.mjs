@@ -573,10 +573,13 @@ test('triage --due: launches a session per due scope, waits on a recent launch, 
   write(join(h, 'config.json'), { adapters: { sessionLauncher: 'launch-x', agentCLI: 'codex' } });
   r = await triageDueRun({ home: h, now, dryRun: true, spawn });
   assert.equal(r.scopes[0].action, 'would launch'); assert.equal(launched.length, 0, 'dry run launches nothing');
-  r = await triageDueRun({ home: h, now, spawn });
+  const codexHome = join(t.root, 'codex-home'), oldCodex = process.env.CODEX_HOME; mkdirSync(codexHome);
+  writeFileSync(join(codexHome, 'config.toml'), '[mcp_servers.figma]\nurl = "u"\n');
+  process.env.CODEX_HOME = codexHome;
+  try { r = await triageDueRun({ home: h, now, spawn }); } finally { if (oldCodex === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = oldCodex; }
   assert.equal(r.scopes[0].action, 'launched');
-  assert.deepEqual(launched[0].slice(0, 4), ['tool', '--cwd', src, 'codex'], 'no session: the machine agent');
-  assert.match(launched[0][4], /--scheduled/);
+  assert.deepEqual(launched[0].slice(0, 6), ['tool', '--cwd', src, 'codex', '-c', 'mcp_servers.figma.enabled=false'], 'no session: the machine agent, started with no MCP servers');
+  assert.match(launched[0][6], /--scheduled/);
   r = await triageDueRun({ home: h, now: now + 2 * 36e5, spawn });
   assert.match(r.scopes[0].reason, /waiting on that session/); assert.equal(launched.length, 1);
   const night = new Date(now); night.setHours(23);

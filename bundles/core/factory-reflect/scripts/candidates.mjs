@@ -146,6 +146,21 @@ export const AGENT_CLIS = {
 };
 const BY_PATH = 'Read {skillPath} and follow it{forTarget}.';
 
+// The arguments that start an agent with no MCP servers, for a session that needs none (scheduled
+// triage): every server's tool list costs context on every turn, and a session can't load one later,
+// so a run that needs an outside system uses its CLI instead. Claude: an empty strict config, which
+// drops the claude.ai connectors too. Codex merges -c tables instead of replacing them, so each server
+// config.toml defines is turned off by name; a plugin's server isn't in config.toml, and naming one
+// breaks the config, so those stay. Any other agent: none.
+export function noMcpArgs(agent = {}, { codexHome = process.env.CODEX_HOME || join(process.env.HOME || '', '.codex') } = {}) {
+  if (agent.bin === 'claude') return ['--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}'];
+  if (agent.bin !== 'codex') return [];
+  let toml = ''; try { toml = readFileSync(join(codexHome, 'config.toml'), 'utf8'); } catch {}
+  const names = new Set();
+  for (const m of toml.matchAll(/^\s*\[mcp_servers\.("[^"]+"|[A-Za-z0-9_-]+)\]\s*$/gm)) names.add(m[1]);
+  return [...names].flatMap((n) => ['-c', `mcp_servers.${n}.enabled=false`]);
+}
+
 // The agent a session runs in, from the marker each one leaves in its commands' environment.
 export function sessionAgent(env = process.env) {
   if (env.CLAUDECODE) return 'claude';
@@ -206,7 +221,8 @@ function readLauncher(launcher, skillsDirs) {
 // An element that is exactly `{name}` expands to the file's `"name"` array with `{what}` replaced by the few
 // words the caller gave on what the session is doing ("fix page-view reset") and `{role}` by its role
 // ("worker"), or to nothing when the caller gave no words. How a terminal app shows them is the launcher's.
-export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo, prompt, agent = AGENT_CLIS.claude, place = placeFor, tag, title, role, what }) {
+// An element that is exactly `{agent}` expands to the agent CLI followed by `agentArgs` (noMcpArgs, say).
+export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo, prompt, agent = AGENT_CLIS.claude, place = placeFor, tag, title, role, what, agentArgs = [] }) {
   const manual = { via: 'print', command: `cd ${sh(repo)} && ${agent.configured ? agent.bin : '<your agent CLI>'}`, prompt };
   if (!launcher) return manual;
   const { spec, f, files } = readLauncher(launcher, skillsDirs);
@@ -216,7 +232,7 @@ export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo,
   const placed = wantsPlace ? place(dirname(f), spec.place, repo) : [];
   const tagged = tag && Array.isArray(spec.tag) ? spec.tag.map((a) => String(a).replaceAll('{tag}', tag)) : [];
   const named = what && Array.isArray(spec.name) ? spec.name.map((a) => String(a).replaceAll('{what}', what).replaceAll('{role}', role || '')) : [];
-  const argv = spec.argv.flatMap((a) => (a === '{place}' ? placed : a === '{tag}' ? tagged : a === '{name}' ? named : [String(a).replaceAll('{repo}', repo).replaceAll('{agent}', agent.bin).replaceAll('{prompt}', prompt)]));
+  const argv = spec.argv.flatMap((a) => (a === '{place}' ? placed : a === '{tag}' ? tagged : a === '{name}' ? named : a === '{agent}' ? [agent.bin, ...agentArgs] : [String(a).replaceAll('{repo}', repo).replaceAll('{agent}', agent.bin).replaceAll('{prompt}', prompt)]));
   // A caller that runs the argv itself (a handoff) gets the command that names the tab, to run on the argv's stdout.
   const after = title && spec.after ? [process.execPath, join(dirname(f), spec.after), '--title', title] : null;
   return { via: launcher, argv, command: argv.map(sh).join(' '), prompt, ...(wantsPlace ? { placed: placed.length > 0 } : {}),

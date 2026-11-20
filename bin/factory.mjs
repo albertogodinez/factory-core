@@ -1307,7 +1307,9 @@ export async function triageDueRun({ home = toolkitHome(), now = Date.now(), dry
     if (age < (live ? MIN_GAP_HOURS : RELAUNCH_HOURS) * 36e5) { scopes.push({ ...row, action: 'none', reason: `launched ${new Date(last).toISOString()}; ${live ? 'too soon to open another' : 'waiting on that session'}` }); continue; }
     const agent = c.pickAgent(machine, { repoAdapters, env: {} }); // no session: the repo's, else the machine's
     const prompt = c.triagePrompt(repo, '--scheduled', sources, agent);
-    const launch = c.launchFor({ launcher, skillsDirs, repo, prompt, agent, tag });
+    // Triage reads files and runs scripts and CLIs: it starts with no MCP servers, which saves their
+    // tool lists on every turn of the session and of the guide subagent it starts.
+    const launch = c.launchFor({ launcher, skillsDirs, repo, prompt, agent, tag, agentArgs: c.noMcpArgs(agent) });
     if (!launch.argv) { scopes.push({ ...row, action: 'due', reason: launch.note || 'no sessionLauncher: the status hook in the source repo names it', command: launch.command, prompt }); continue; }
     let note = launch.placed === false ? 'not shown in a terminal app: the launcher found nowhere to place it' : null;
     if (!dryRun) {
