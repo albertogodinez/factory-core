@@ -117,7 +117,7 @@ test('sightings: a lesson another session already recorded is a repeat; the same
   assert.deepEqual(t.points.slice(0, 2).map((p) => [p.sightings, p.repeats]), [[1, 0], [1, 1]], 'day 1 repeats what day 0 recorded');
   assert.match(renderHtml(t, '2026-06-15'), /lessons seen again/);
   const one = renderHtml({ ...t, points: [{ start: '2026-06-01', sessions: 2, tool_failures: 3, repeats: 1, landed: [] }], lessons: [] }, 'd');
-  assert.match(one, /<circle[^>]*><title>tool failures \/ session: 3 \(2 sessions, 2026-06-01\)/, 'a lone point still draws a dot, since a one-point polyline is invisible');
+  assert.match(one, /data-tip="tool failures \/ session: 3\n2 sessions, day of 2026-06-01\n\nNothing landed/, 'a lone point still draws a dot, since a one-point polyline is invisible');
 });
 
 test('the report: daily rates per layer, a panel per signal, a before/after per landed lesson, the newest 12 kept', () => {
@@ -141,7 +141,8 @@ test('the report: daily rates per layer, a panel per signal, a before/after per 
     assert.equal(t.points[14].landed.length, 1, 'the land shows on its day');
     const page = renderHtml(t, "d");
     assert.equal((page.match(/class="sm"/g) || []).length, 8, 'sessions, lessons landed, and one panel per signal');
-    assert.match(page, /<title>1 landed, day of [^:]*:\n• land refuses &lt;outside&gt; home/, 'the landed bar lists the lesson, escaped');
+    assert.match(page, /data-tip="1 landed, day of [^:]*:\n• land refuses &lt;outside&gt; home/, 'the landed bar lists the lesson, escaped');
+    assert.match(page, /data-tip="permission denials \/ session: 0 \(-2 since [^)]*\)\n1 sessions, day of [^\n]*\n\nLanded that day \(1\):\n• land refuses &lt;outside&gt; home/, 'a dot names the change since the point before and what landed then');
     const reports = join(s.env.FACTORY_HOME, 'reports'); mkdirSync(reports, { recursive: true });
     for (let i = 1; i <= 13; i++) writeFileSync(join(reports, `2026-01-${String(i).padStart(2, '0')}-core.html`), 'x');
     const r = report({ days: 28 }, s.env, T0 + 28 * DAY);

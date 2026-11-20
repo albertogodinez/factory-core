@@ -311,16 +311,25 @@ export function renderHtml(t, date) {
   const pts = t.points, n = pts.length, W = 220, H = 96, P = 18, unit = t.bucket === 'week' ? 'week' : 'day';
   const md = (d) => d.slice(5).replace('-', '/'), fmt = (v) => String(+(+v).toFixed(2));
   const x = (i) => (n > 1 ? P + (i * (W - 2 * P)) / (n - 1) : W / 2);
+  // What landed on a point and the one before it: a change lands, then shows in the sessions after it.
+  const short = (l) => { const one = l.split(/(?<=[.;])\s/)[0].replace(/[.;]$/, ""); return one.length > 110 ? `${one.slice(0, 107)}…` : one; };
+  const list = (ls) => ls.slice(0, 5).map((l) => `\n• ${short(l)}`).join('') + (ls.length > 5 ? `\n… ${ls.length - 5} more` : '');
+  const cause = (i) => [[pts[i], `that ${unit}`], [pts[i - 1], `the ${unit} before`]].filter(([p]) => p?.landed.length).map(([p, when]) => `\n\nLanded ${when} (${p.landed.length}):${list(p.landed)}`).join('') || `\n\nNothing landed that ${unit} or the ${unit} before.`;
   const landedTip = (p) => (p.landed.length ? `${p.landed.length} landed, ${unit} of ${p.start}:\n${p.landed.slice(0, 10).map((l) => `• ${l.slice(0, 140)}`).join('\n')}${p.landed.length > 10 ? `\n… ${p.landed.length - 10} more` : ''}` : `none landed, ${unit} of ${p.start}`);
   const panel = (title, vals, color, bars, tipOf) => {
     const max = Math.max(1e-9, ...vals.map((v) => v || 0)), y = (v) => H - P - (v / max) * (H - 2 * P - 8);
     let g = `<line x1="${P}" x2="${W - P}" y1="${H - P}" y2="${H - P}" stroke="var(--grid)"/>`;
-    if (bars) g += vals.map((v, i) => `<rect x="${(x(i) - 6).toFixed(1)}" y="${y(v || 0).toFixed(1)}" width="12" height="${Math.max(v ? 1 : 0, H - P - y(v || 0)).toFixed(1)}" fill="${color}" opacity=".7"><title>${esc(tipOf(i))}</title></rect>`).join('');
+    if (bars) g += vals.map((v, i) => `<rect x="${(x(i) - 6).toFixed(1)}" y="${y(v || 0).toFixed(1)}" width="12" height="${Math.max(v ? 1 : 0, H - P - y(v || 0)).toFixed(1)}" fill="${color}" opacity=".7" class="dot" data-tip="${esc(tipOf(i))}" tabindex="0"/>`).join('');
     else {
       // A polyline needs two points, so a series with one point of data would draw nothing: every point gets a dot.
       const at = vals.map((v, i) => (v == null ? null : [x(i), y(v), v, i])).filter(Boolean);
       if (at.length > 1) g += `<polyline fill="none" stroke="${color}" stroke-width="2" points="${at.map(([cx, cy]) => `${cx.toFixed(1)},${cy.toFixed(1)}`).join(' ')}"/>`;
-      g += at.map(([cx, cy, v, i]) => `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3" fill="${color}"><title>${esc(title)}: ${fmt(v)} (${pts[i].sessions} sessions, ${pts[i].start})</title></circle>`).join('');
+      // A wide transparent ring makes a 3px dot easy to hover; the page's script shows data-tip.
+      g += at.map(([cx, cy, v, i], j) => {
+        const prev = at[j - 1], move = prev ? ` (${v > prev[2] ? '+' : ''}${fmt(v - prev[2])} since ${md(pts[prev[3]].start)})` : '';
+        const tip = `${title}: ${fmt(v)}${move}\n${pts[i].sessions} sessions, ${unit} of ${pts[i].start}${cause(i)}`;
+        return `<g class="dot" data-tip="${esc(tip)}" tabindex="0"><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="9" fill="transparent"/><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3" fill="${color}"/></g>`;
+      }).join('');
     }
     g += pts.map((p, i) => (p.landed.length ? `<line x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${H - P}" y2="${H - P + 5}" stroke="var(--fg)"/>` : '')).join('');
     const last = [...vals].reverse().find((v) => v != null);
@@ -338,10 +347,10 @@ export function renderHtml(t, date) {
 <style>:root{--bg:#fff;--card:#f6f7f9;--grid:#e3e5ea;--fg:#1b1d22;--muted:#6b7280;--c1:#2563eb;--c2:#dc2626;--c3:#d97706;--c4:#7c3aed;--c5:#059669;--c6:#db2777}
 @media (prefers-color-scheme:dark){:root{--bg:#121417;--card:#1a1d22;--grid:#2c3038;--fg:#e5e7eb;--muted:#9ca3af;--c1:#60a5fa;--c2:#f87171;--c3:#fbbf24;--c4:#a78bfa;--c5:#34d399;--c6:#f472b6}}
 body{background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif;margin:0 auto;padding:24px 16px;max-width:780px}
-svg{width:100%;height:auto;display:block}.ax{fill:var(--muted);font-size:11px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}.sm{background:var(--card);border-radius:8px;padding:6px 8px}.smh{display:flex;justify-content:space-between;font-size:12px}
+svg{width:100%;height:auto;display:block}.ax{fill:var(--muted);font-size:11px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}.sm{background:var(--card);border-radius:8px;padding:6px 8px}.smh{display:flex;justify-content:space-between;font-size:12px}.dot{cursor:default;outline:none}.dot:hover circle:last-child,.dot:focus circle:last-child{r:5}#tip{position:fixed;z-index:9;pointer-events:none;max-width:340px;background:var(--fg);color:var(--bg);border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.4;white-space:pre-line;display:none;box-shadow:0 4px 14px rgba(0,0,0,.3)}
 table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--muted);padding:4px 6px;text-align:left;vertical-align:top}</style></head><body>
 <h1>${esc(t.layer)} · ${esc(date)}</h1><p>${t.sessions} session(s) with a ${esc(t.layer)} skill active${n ? `, ${md(pts[0].start)} to ${md(pts[n - 1].start)}, a point per ${unit}` : ''}. Each panel has its own scale and shows the latest value at the top right; a tick under an axis marks a ${unit} lessons landed (hover the bar for the list). "Lessons seen again" counts, per session, the lessons the harness had already recorded in another session; a landed lesson that works should push it down. Corrections are a heuristic.</p>
-<div class="grid">${panels}</div><h2>Lessons and their signal</h2><p>Mean per session before and after each land: by the installed revision when the land recorded its commit, else 7 days either side. Flat means it didn't work, and triage reopens that cluster. Worse means it made things worse, and triage queues a fact to revert or rework it.</p>
+<div class="grid">${panels}</div><div id="tip" role="tooltip"></div><script>(()=>{const t=document.getElementById('tip');const show=(e,el)=>{t.textContent=el.dataset.tip;t.style.display='block';const r=el.getBoundingClientRect(),w=t.offsetWidth,h=t.offsetHeight;let x=(e&&e.clientX||r.left)+14,y=(e&&e.clientY||r.top)+14;if(x+w>innerWidth-8)x=Math.max(8,x-w-28);if(y+h>innerHeight-8)y=Math.max(8,y-h-28);t.style.left=x+'px';t.style.top=y+'px';};document.querySelectorAll('[data-tip]').forEach((el)=>{el.addEventListener('mousemove',(e)=>show(e,el));el.addEventListener('focus',()=>show(null,el));el.addEventListener('mouseleave',()=>t.style.display='none');el.addEventListener('blur',()=>t.style.display='none');});})();</script><h2>Lessons and their signal</h2><p>Mean per session before and after each land: by the installed revision when the land recorded its commit, else 7 days either side. Flat means it didn't work, and triage reopens that cluster. Worse means it made things worse, and triage queues a fact to revert or rework it.</p>
 <table><tr><th>Landed</th><th>Lesson</th><th>fixedWhen</th><th>Before</th><th>After</th><th>Verdict</th></tr>${rows || '<tr><td colspan="6">No lessons landed in this window.</td></tr>'}</table></body></html>
 `;
 }
