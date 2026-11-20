@@ -167,6 +167,14 @@ test('a stacked PR records its base and the status line names the parent', () =>
   } finally { f.dispose(); }
 });
 
+test('deploy hands over the PR\'s base through its notes', () => {
+  const f = fixture(); try {
+    start(f.file, 'deploy');
+    end(f.file, 'deploy', { phase: 'deploy', outcome: 'pass', handoff: { pr: 12, base: 'feat/PROJ-0-parent', ci: 'pending' } });
+    assert.equal(load(f.file).base, 'feat/PROJ-0-parent');
+  } finally { f.dispose(); }
+});
+
 test('set parses JSON values and the result must still be valid', () => {
   const f = fixture(); try {
     set(f.file, ['pr=42', 'ci=green']);
