@@ -3,9 +3,12 @@
 // terminal carries a herdr.space label, and a terminal launched without one runs where nobody sees
 // it. This picks the space of a live terminal working in the repo, else the space with the most
 // terminals, and prints the hc run arguments that put the new terminal there (a JSON array; empty
-// when no terminal is in any space, so Herdr isn't open). node: imports only.
+// when no terminal is in any space, so Herdr isn't open). It also labels a fresh herdr.tab id: Herdr
+// makes an id it doesn't know into a new tab in that space, so the session gets a tab of its own
+// instead of joining whatever tab Herdr picks. node: imports only.
 //   node place.mjs --repo <path>
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -35,9 +38,12 @@ export function liveTerminals(get = hcJson) {
   });
 }
 
-export function placeArgs(repo, terminals = liveTerminals()) {
+// A tab id Herdr has never seen, in the form it uses itself: tb + 32 hex.
+export const freshTab = () => `tb${randomBytes(16).toString('hex')}`;
+
+export function placeArgs(repo, terminals = liveTerminals(), tab = freshTab) {
   const { space } = pickSpace(repo, terminals);
-  return space ? ['--label', `herdr.space=${space}`] : [];
+  return space ? ['--label', `herdr.space=${space}`, '--label', `herdr.tab=${tab()}`] : [];
 }
 
 const self = fileURLToPath(import.meta.url);

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pickSpace, placeArgs, liveTerminals } from './place.mjs';
+import { pickSpace, placeArgs, liveTerminals, freshTab } from './place.mjs';
 
 test('pickSpace: the space of a terminal in the repo, else the busiest, else none', () => {
   const ts = [
@@ -11,8 +11,15 @@ test('pickSpace: the space of a terminal in the repo, else the busiest, else non
   assert.deepEqual(pickSpace('/r/core', ts), { space: 'sp-core', why: 'repo' }, 'a worktree of the repo counts');
   assert.deepEqual(pickSpace('/r/cor', ts), { space: 'sp-a', why: 'busiest' }, 'a name prefix is not the repo');
   assert.equal(pickSpace('/r/core', [{ cwd: '/r/core', space: null }]).space, null, 'Herdr closed: nowhere');
-  assert.deepEqual(placeArgs('/r/core', ts), ['--label', 'herdr.space=sp-core']);
-  assert.deepEqual(placeArgs('/r/core', []), []);
+  assert.deepEqual(placeArgs('/r/core', ts, () => 'tbX'), ['--label', 'herdr.space=sp-core', '--label', 'herdr.tab=tbX']);
+  assert.deepEqual(placeArgs('/r/core', []), [], 'Herdr closed: no space and no tab');
+});
+
+test('placeArgs gives each launch a tab id Herdr has never seen', () => {
+  assert.match(freshTab(), /^tb[0-9a-f]{32}$/);
+  assert.notEqual(freshTab(), freshTab());
+  const tabs = [1, 2].map(() => placeArgs('/r', [{ cwd: '/r', space: 'sp' }]).find((a) => a.startsWith('herdr.tab=')));
+  assert.notEqual(tabs[0], tabs[1], 'two launches in one space get two tabs');
 });
 
 test('liveTerminals reads each placed terminal\'s labels through hc get', () => {
