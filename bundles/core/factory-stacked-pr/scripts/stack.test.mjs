@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { claim, who, peers, event, since, guard, isStale, StackError } from './stack.mjs';
 
@@ -81,4 +81,22 @@ test('the CLI exits 1 on a refused guard and 2 on a bad command', () => {
     assert.equal(cli('nope').status, 2);
     assert.deepEqual(JSON.parse(cli('peers', '--branch', 'p').stdout).children, []);
   } finally { dispose(); }
+});
+
+test('sessions reclaiming a released branch at once: only one wins', async () => {
+  const script = join(dirname(fileURLToPath(import.meta.url)), 'stack.mjs');
+  // Each child loads stack.mjs, waits for a shared start time, then claims: the claims overlap.
+  const child = `const { claim } = await import(${JSON.stringify(script)}); const [d, owner, t] = process.argv.slice(1);
+    while (Date.now() < Number(t)) {} try { claim(d, { branch: 'p', owner }); process.exit(0); } catch { process.exit(1); }`;
+  for (let round = 0; round < 5; round++) {
+    const { d, dispose } = ledger(); try {
+      claim(d, { branch: 'p', owner: 'old', at: T0 });
+      event(d, { branch: 'p', owner: 'old', kind: 'released', at: T1 });
+      const t = String(Date.now() + 600);
+      const codes = await Promise.all(Array.from({ length: 12 }, (_, i) => new Promise((res) => {
+        spawn(process.execPath, ['--input-type=module', '-e', child, d, `s${i}`, t]).on('exit', res);
+      })));
+      assert.equal(codes.filter((c) => c === 0).length, 1, `round ${round}, exit codes: ${codes}`);
+    } finally { dispose(); }
+  }
 });

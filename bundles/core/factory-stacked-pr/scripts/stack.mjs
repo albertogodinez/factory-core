@@ -13,7 +13,7 @@
 //
 // The ledger is <dirname(stateRoot)>/stack, beside decisions/ and dev-slots/, so every worktree of a
 // repo shares it. --dir or FACTORY_STACK_DIR overrides that. Prints JSON.
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, appendFileSync, openSync, closeSync, readdirSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, appendFileSync, openSync, closeSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -48,6 +48,24 @@ function write(file, rec) {
   return rec;
 }
 
+// Claim updates read, decide, then write, so two sessions reclaiming a released branch could both win.
+// A per-branch lock file (created exclusively) makes each update see the one before it. A lock left by a
+// crashed process is cleared after LOCK_STALE_MS.
+const LOCK_STALE_MS = 10000;
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+function locked(file, fn) {
+  const lock = `${file}.lock`;
+  for (let i = 0; ; i++) {
+    try { closeSync(openSync(lock, 'wx')); break; } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      try { if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) { rmSync(lock, { force: true }); continue; } } catch {}
+      if (i >= 400) fail(`${file} is locked by another claim; try again`);
+      pause(25);
+    }
+  }
+  try { return fn(); } finally { rmSync(lock, { force: true }); }
+}
+
 // A claim nobody has touched in STALE_HOURS is orphaned: its owner may be gone. Taking it over needs a reason.
 export const isStale = (c, at = now(), hours = STALE_HOURS) => !!c && !c.released && Date.parse(at) - Date.parse(c.heartbeat || c.claimed) > hours * 3600e3;
 
@@ -64,11 +82,13 @@ export function claim(dir, { branch, owner, base, pr, state, worktree, takeover 
   const file = claimFile(dir, branch);
   const fields = Object.fromEntries(Object.entries({ base, pr: pr == null ? undefined : Number(pr), state, worktree }).filter(([, v]) => v !== undefined));
   const fresh = { branch, owner, ...fields, claimed: at, heartbeat: at };
-  try { closeSync(openSync(file, 'wx')); return { ...write(file, fresh), created: true }; } catch (e) { if (e.code !== 'EEXIST') throw e; }
-  const old = readJson(file) || {};
-  if (old.owner === owner || old.released) return write(file, old.released ? fresh : { ...old, ...fields, heartbeat: at });
-  if (!takeover) fail(`${branch} is owned by ${old.owner} (last seen ${old.heartbeat}${isStale(old, at) ? ', stale' : ''}); ask the user, then claim with --takeover --why`);
-  return write(file, { ...fresh, took_over: { from: old.owner, why, at } });
+  return locked(file, () => {
+    const old = readJson(file);
+    if (!old) return { ...write(file, fresh), created: true };
+    if (old.owner === owner || old.released) return write(file, old.released ? fresh : { ...old, ...fields, heartbeat: at });
+    if (!takeover) fail(`${branch} is owned by ${old.owner} (last seen ${old.heartbeat}${isStale(old, at) ? ', stale' : ''}); ask the user, then claim with --takeover --why`);
+    return write(file, { ...fresh, took_over: { from: old.owner, why, at } });
+  });
 }
 
 export function peers(dir, branch, at = now()) {
@@ -83,13 +103,16 @@ export function peers(dir, branch, at = now()) {
 
 export function event(dir, { branch, owner, kind, head, method, commit, at = now() }) {
   if (!branch || !owner || !KINDS.includes(kind)) fail(`event needs --branch, --owner and one of ${KINDS.join('|')}`);
-  const c = readJson(claimFile(dir, branch));
-  if (c && c.owner !== owner && !c.released) fail(`${branch} is owned by ${c.owner}; only its owner records its events`);
-  const rec = Object.fromEntries(Object.entries({ at, branch, kind, by: owner, head, method, commit }).filter(([, v]) => v !== undefined));
-  mkdirSync(dir, { recursive: true });
-  appendFileSync(eventsFile(dir), JSON.stringify(rec) + '\n');
-  if (c) write(claimFile(dir, branch), { ...c, heartbeat: at, ...(head ? { head } : {}), ...(kind === 'merged' || kind === 'released' ? { released: at } : {}) });
-  return rec;
+  mkdirSync(join(dir, 'branches'), { recursive: true });
+  const file = claimFile(dir, branch);
+  return locked(file, () => {
+    const c = readJson(file);
+    if (c && c.owner !== owner && !c.released) fail(`${branch} is owned by ${c.owner}; only its owner records its events`);
+    const rec = Object.fromEntries(Object.entries({ at, branch, kind, by: owner, head, method, commit }).filter(([, v]) => v !== undefined));
+    appendFileSync(eventsFile(dir), JSON.stringify(rec) + '\n');
+    if (c) write(file, { ...c, heartbeat: at, ...(head ? { head } : {}), ...(kind === 'merged' || kind === 'released' ? { released: at } : {}) });
+    return rec;
+  });
 }
 
 export function since(dir, branch, seen) {
