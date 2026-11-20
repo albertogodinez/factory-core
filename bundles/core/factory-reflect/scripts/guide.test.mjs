@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { mkdtempSync, mkdirSync, existsSync, rmSync, realpathSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync, rmSync, realpathSync, writeFileSync, readFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { patchFiles, checkCoverage, prep, importGuide } from './guide.mjs';
@@ -121,4 +121,27 @@ test('successful guide import remains successful when cleanup is locked', () => 
     const result = importGuide({ worktree: r.dir, guide: p.guide, patch: p.patch, run: () => ({ status: 0, stdout: 'saved' }) });
     assert.equal(result.imported, true); assert.match(result.cleanup.error, /locked/); assert.ok(existsSync(p.patch));
   } finally { r.done(); }
+});
+
+
+test('prep uses the bundled guide brief when the messaging service is unavailable', () => {
+  const r = repo();
+  const oldPath = process.env.PATH;
+  try {
+    const bin = join(r.dir, 'bin');
+    mkdirSync(bin);
+    const marker = join(r.dir, 'unexpected-call');
+    const cli = join(bin, 'plannotator');
+    writeFileSync(cli, `#!/bin/sh\necho called > "${marker}"\nexit 41\n`);
+    chmodSync(cli, 0o755);
+    process.env.PATH = `${bin}:${oldPath}`;
+    const result = prep({ worktree: r.dir, base: 'main', out: join(r.dir, '.out') });
+    const prompt = readFileSync(result.prompt, 'utf8');
+    assert.match(prompt, /Guided review/);
+    assert.match(prompt, /"sections"/);
+    assert.ok(!existsSync(marker), 'preparing a review must not launch a messaging service');
+  } finally {
+    process.env.PATH = oldPath;
+    r.done();
+  }
 });

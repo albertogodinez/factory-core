@@ -8,8 +8,8 @@
 //       checks the guide covers the patch, then `plannotator guide import`, so the review lists it
 //       under Guides; with --pr it's saved against that PR, and the gate reviews the PR itself
 //
-// The guide's method and schema come from Plannotator (`plannotator inbox call get_guide_brief`),
-// so they follow its version. Prints JSON. node: imports only; plannotator runs locally.
+// The authoring brief and guide schema are bundled with the skill.
+// Prints JSON. node: imports only; plannotator runs locally for guide import.
 import { writeFileSync, readFileSync, mkdirSync, mkdtempSync, existsSync, realpathSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -57,9 +57,11 @@ export function checkCoverage(guide, files) {
 }
 
 function brief() {
-  const r = spawnSync('plannotator', ['inbox', 'call', 'get_guide_brief'], { encoding: 'utf8' });
-  if (r.status !== 0) throw new GuideError('no-plannotator', `plannotator inbox call get_guide_brief failed: ${(r.stderr || r.error?.message || '').trim()}`);
-  return JSON.parse(r.stdout);
+  return {
+    methodology: readFileSync(new URL('../references/guided-review.md', import.meta.url), 'utf8'),
+    output_schema: JSON.parse(readFileSync(new URL('../schemas/guided-review.schema.json', import.meta.url), 'utf8')),
+    rules: ['Every patch file belongs to exactly one section or unplacedFiles.', 'Copy file paths from the patch exactly.'],
+  };
 }
 
 export function prep({ worktree, base, pr, out, briefFn = brief }) {
