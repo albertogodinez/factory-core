@@ -51,6 +51,7 @@
         "branch": { "type": "string" },
         "pr": { "type": "integer" },
         "base": { "type": "string", "description": "The branch the PR targets: trunk, or the parent's branch when stacked. Deploy sets it." },
+        "feature_entry": { "type": "string", "minLength": 1, "description": "The feature map entry the phases read and extend: the map's own file when this repo owns the map, else the ticket's draft under <stateRoot>/feature-map/. Intake sets it." },
         "head_sha": { "type": "string" },
         "reviewed_range": { "type": "string" },
         "test_cmd": { "type": "string" },

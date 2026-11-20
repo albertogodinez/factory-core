@@ -175,6 +175,18 @@ test('deploy hands over the PR\'s base through its notes', () => {
   } finally { f.dispose(); }
 });
 
+test('intake hands over the feature map entry, and every later prompt names it', () => {
+  const f = fixture(); try {
+    assert.doesNotMatch(phasePrompt(load(f.file), 'work', f.file, 1).prompt, /Feature map entry/);
+    start(f.file, 'intake');
+    const entry = '/state/feature-map/app/features/compare.md';
+    end(f.file, 'intake', { phase: 'intake', outcome: 'pass', handoff: { plan: 'plans/p.md', feature_entry: entry } });
+    const s = load(f.file);
+    assert.equal(s.feature_entry, entry);
+    assert.match(phasePrompt(s, 'work', f.file, 2, 'fix F1').prompt, /Phase run: 2\. Feature map entry: \/state\/feature-map\/app\/features\/compare\.md\. Task: fix F1$/);
+  } finally { f.dispose(); }
+});
+
 test('set parses JSON values and the result must still be valid', () => {
   const f = fixture(); try {
     set(f.file, ['pr=42', 'ci=green']);

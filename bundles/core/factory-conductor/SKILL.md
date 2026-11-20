@@ -14,8 +14,8 @@ Why: one long session carries everything forward, so context only ever grows. Pl
 
 | Phase | Job | Uses | Hands over |
 |---|---|---|---|
-| intake | Ticket to plan | tracker adapter, `factory-plan-create`, `factory-feature-map` (read, seed, replay) | `plan` |
-| work | Build and prove it | `factory-dev-slot`, a browser subagent, `principle-prove-it-works` | `head_sha`, fixed findings |
+| intake | Ticket to plan | tracker adapter, `factory-plan-create`, `factory-feature-map` (read, seed, replay) | `plan`, `feature_entry` |
+| work | Build and prove it | `factory-dev-slot`, a browser subagent driven by `feature_entry`, `principle-prove-it-works` | `head_sha`, fixed findings; driving steps added to `feature_entry` |
 | review | One fresh review of one commit range | `factory-review` (its "Rounds" section) | `reviewed_range`, `findings` |
 | deploy | Open the PR | `factory-pr-create`, `factory-feature-map` (update, commit now) | `pr`, `ci` |
 | ci-monitor | Watch CI and comments until merged | `factory-pr-ci-monitor` (its "Under the conductor" section) | `ci`, `findings` |

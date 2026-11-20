@@ -1,6 +1,6 @@
 # Phase: work
 
-Build what the plan says, in the ticket's worktree, and prove it works. Read the state file first: `plan`, `worktree`, `branch`, `test_cmd`, and `findings` with `status: open`.
+Build what the plan says, in the ticket's worktree, and prove it works. Read the state file first: `plan`, `worktree`, `branch`, `test_cmd`, `feature_entry`, and `findings` with `status: open`.
 
 A `Task:` in your prompt narrows the run, such as fixing named findings. Then do only that, and keep the diff to it.
 
@@ -10,8 +10,9 @@ Finding `stack-resync` means the parent branch moved: merge `origin/<base>` into
 1. Read the plan. Don't re-research what it already cites.
 2. Implement it. Commit in small steps on the ticket's branch. Before each push run `stack.mjs guard --branch <branch> --owner <slug>` (`factory-stacked-pr`) and stop on exit 1; after it, `stack.mjs event ... pushed --head <sha>`.
 3. Run `test_cmd` and the project's lint and build.
-4. Validate in the running app when the change has a UI or behaviour you can see. Start the server with `factory-dev-slot`. Hand the browser work (driving the feature, recording, screenshots) to a subagent: give it the feature map entry's driving steps and ask for pass or fail and an artifact path, not the images. Never read screenshots into this session.
-5. Apply `principle-prove-it-works` before you call it done.
+4. Validate in the running app when the change has a UI or behaviour you can see. Start the server with `factory-dev-slot`. Hand the browser work (driving the feature, recording, screenshots) to a subagent. Give it the `feature_entry` path and tell it to follow its `Driving it with` and `Gotchas` sections. Ask for pass or fail, an artifact path, and every driving step it had to work out (a selector, an input trick, a wait, a step that only works in one order). Ask for no images. Never read screenshots into this session.
+5. Before you end, add what the subagent had to work out to `feature_entry`: a step under `Driving it with`, a trap under `Gotchas`. Edit only that file. The next run starts from it instead of finding the same things again.
+6. Apply `principle-prove-it-works` before you call it done.
 
 Handoff: `head_sha`, `test_cmd` if you changed it, and each finding you fixed (`status: fixed`).
 

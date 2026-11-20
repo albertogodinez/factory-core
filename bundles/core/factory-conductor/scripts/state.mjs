@@ -83,7 +83,7 @@ export function init({ worktree, ticket, plan = null, recipe = null, testCmd, st
   const state = {
     // The slug tags this ticket's sessions. stateRoot's basename alone ("main") repeats across repos.
     version: 1, slug: `${basename(root)}-${createHash('sha1').update(file).digest('hex').slice(0, 8)}`, ticket: ticket || null, plan, repo: ctx.project?.root ? mainCheckout(worktree) : null, worktree,
-    branch: git(['branch', '--show-current']), trunk: ctx.project?.trunk || null, base: null, recipe,
+    branch: git(['branch', '--show-current']), trunk: ctx.project?.trunk || null, base: null, recipe, feature_entry: null,
     pr: null, head_sha: git(['rev-parse', 'HEAD']), reviewed_range: null,
     test_cmd: testCmd ?? ctx.project?.commands?.test ?? null, ci: null,
     decisions: null, phase: null, blocked: null, findings: [], phases: {},
@@ -145,7 +145,8 @@ export function phasePrompt(state, phase, file, n, task) {
   const own = join(SKILL, 'references', 'phases', `${phase}.md`);
   const path = recipe && existsSync(recipe) ? recipe : own;
   if (!existsSync(path)) fail(`no prompt for phase ${phase} (looked in ${[recipe, own].filter(Boolean).join(', ')})`);
-  return { path, prompt: `Read ${path} and follow it. State file: ${file}. Phase run: ${n}.${task ? ` Task: ${task}` : ''}` };
+  const entry = state.feature_entry ? ` Feature map entry: ${state.feature_entry}.` : '';
+  return { path, prompt: `Read ${path} and follow it. State file: ${file}. Phase run: ${n}.${entry}${task ? ` Task: ${task}` : ''}` };
 }
 
 // The repo's adapters, raw so a `sessionLauncher: null` survives. A linked worktree without its own
