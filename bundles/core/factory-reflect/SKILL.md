@@ -72,6 +72,8 @@ Pick the highest row that works. Mechanical beats judgement. Judgement goes to r
 
 **Installed copies are never edited in place.** A skill listed in `.agents/factory-metadata/skills-lock.json` came from a bundle. An edit to that copy blocks `factory update`, and it never reaches other repos. Such a lesson has scope `core` or `org`: record it (§6) and change the skill at its source. A skill missing from the lock is the repo's own, so edit it here. In a linked worktree (`factory link`), `.agents/skills/<name>` is a link to the main checkout's installed copy, so an edit there is an in-place edit too.
 
+**A user-level skill** (one under `~/.claude/skills` or `~/.agents/skills` with no lock entry, a plugin's, or a tool's own docs) has no factory scope, but its lesson isn't dropped. First look for a bundle skill that drives the same tool (a launcher adapter owns where a session lands in its terminal app): the lesson is that skill's, scope `core` or `org`. Otherwise, when the skill's source is a repo the user owns, queue it as a `repo` candidate for that repo. Else write the upstream issue for its author in the report (§7) and queue nothing. Never edit a third-party install.
+
 **A review miss** (a bot or human finding that `factory-review` didn't raise on a PR) is evidence, not a lesson to encode. Record one line per miss and queue no candidate:
 
 ```bash

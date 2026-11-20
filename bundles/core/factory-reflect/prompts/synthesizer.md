@@ -36,7 +36,9 @@ Apply every criterion to every finding:
 - **Already covered**: read the target before accepting. If it already says this clearly, reject
   as `already-covered`; if it says it weakly or buries it, accept a wording or placement change.
 - **Right home**: repo-local knowledge goes to that repo (its tests, lint, or `AGENTS.md` /
-  `CLAUDE.md` pointer), never to a free-standing lessons document.
+  `CLAUDE.md` pointer), never to a free-standing lessons document. A lesson about a user-level skill
+  or tool (not installed from a bundle) isn't `wrong-home`: accept it and name its home from
+  factory-reflect's "A user-level skill" rule.
 - **Scope**: `repo` when only this repo needs it; `core` when it's true in any repo or changes a
   skill installed from the core bundle; `org` when it's specific to the company (its internal
   tools, hosts, trackers) or changes a skill from an org bundle. `.agents/factory-metadata/skills-lock.json`
