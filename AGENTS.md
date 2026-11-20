@@ -18,7 +18,7 @@ factory-core holds the `core` skill bundle and the `factory` CLI that installs b
 
 ## Checks
 
-- `npm test` runs every test. The pre-commit hook runs the same suite, plus the resolver guardrails when `bundles/core/factory-context/` changes.
+- `npm test` runs every test. The pre-commit hook runs only the tests the staged change needs (`tests/select.mjs`: the changed skills' tests, the tests of skills whose scripts name them, and the repo-wide checks; shared code such as `bin/`, `tests/` or `factory-context` runs everything), plus the resolver guardrails when `bundles/core/factory-context/` changes. The pre-push hook runs the whole suite. A new cross-skill dependency that isn't a path in a script (`/<skill>/` or a quoted `'<skill>'`) is invisible to the selector: name it in a script, or add the skill to `SHARED_SKILLS`.
 - Let the hook run on every commit. If it fails, fix the cause or the check; never pass `--no-verify`.
 - Run `npm run prepare` once per clone so `core.hooksPath` points at `.githooks`.
 

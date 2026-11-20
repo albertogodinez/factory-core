@@ -1,0 +1,4 @@
+#!/bin/sh
+set -e
+# The whole suite before anything leaves the machine: pre-commit runs only the tests a change needs.
+env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE node tests/run.mjs

@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
-# Unit tests and the context and internal-data checks run on every commit.
-node tests/run.mjs
+# The tests the staged change needs (tests/select.mjs), with the internal-data and context checks
+# always; shared code runs them all. pre-push runs the whole suite.
+node tests/run.mjs --staged
 # Resolver guardrails (timing, spawns, output size) run when the resolver changes.
 if git diff --cached --name-only | grep -q '^bundles/core/factory-context/'; then
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE node --test --test-reporter=dot tests/guardrails/resolver.guard.mjs
