@@ -59,6 +59,7 @@ test('a phase run hands over only through its notes', () => {
 
 test('later rounds merge findings by id and number their tabs', () => {
   const f = fixture(); try {
+    set(f.file, ['automation.review=true']);
     start(f.file, 'review'); end(f.file, 'review', { phase: 'review', outcome: 'pass', handoff: { findings: [{ id: 'F1', summary: 'a', status: 'open' }, { id: 'F2', summary: 'b', status: 'open' }] } });
     const r2 = start(f.file, 'review');
     assert.equal(r2.title, 'PROJ-1 · review 2');
@@ -72,6 +73,7 @@ test('a run is named only by the words the conductor gives (--what); without the
   assert.equal(describe(''), null);
   assert.equal(describe(undefined), null);
   const f = fixture(); try {
+    set(f.file, ['automation.ci_monitor=true']);
     const r = start(f.file, 'ci-monitor', undefined, { what: 'CI on #1029' });
     assert.deepEqual([r.role, r.what, r.title], ['monitor', 'CI on #1029', 'CI on #1029']);
     assert.equal(load(f.file).phases['ci-monitor'].runs[0].what, 'CI on #1029');
@@ -96,6 +98,7 @@ test('invalid notes, a blocked phase without a question, and wrong-phase notes a
 
 test('kill records the reason as friction, so reflect sees the failed run', () => {
   const f = fixture(); try {
+    set(f.file, ['automation.ci_monitor=true']);
     start(f.file, 'ci-monitor');
     assert.throws(() => kill(f.file, 'ci-monitor'), /needs --why/);
     kill(f.file, 'ci-monitor', 'looped on the same red check');
@@ -107,6 +110,7 @@ test('kill records the reason as friction, so reflect sees the failed run', () =
 
 test('digest totals metrics per phase', () => {
   const f = fixture(); try {
+    set(f.file, ['automation.review=true']);
     for (const [t, p] of [[10, 50000], [5, 90000]]) { start(f.file, 'review'); end(f.file, 'review', { phase: 'review', outcome: 'pass', metrics: { turns: t, peak_ctx: p, rounds: 1 } }); }
     const d = digest(f.file).phases.review;
     assert.deepEqual([d.runs, d.turns, d.peak_ctx, d.rounds], [2, 15, 90000, 2]);
@@ -129,6 +133,7 @@ function sessionLog(root, id, startedAt, model = 'claude-haiku-5-5') {
 
 test('end measures the run from its session log, over the phase\'s own count', () => {
   const f = fixture(); try {
+    set(f.file, ['automation.ci_monitor=true']);
     const r = start(f.file, 'ci-monitor', '2026-01-01T00:00:00.000Z');
     const env = sessionLog(f.root, 'SID', '2026-01-01T00:00:01.000Z');
     end(f.file, 'ci-monitor', { phase: 'ci-monitor', outcome: 'pass', metrics: { turns: 99, peak_ctx: 0, user_interventions: 1 } }, '2026-01-01T00:05:00.000Z', { env });
@@ -216,6 +221,30 @@ test('with no launcher a phase runs as a subagent, with the prompt to give it', 
   } finally { f.dispose(); }
 });
 
+test('existing tickets default to work and deploy with review and monitoring independently opt-in', () => {
+  const f = fixture(); try {
+    const legacy = load(f.file);
+    delete legacy.automation;
+    writeFileSync(f.file, JSON.stringify(legacy));
+    start(f.file, 'work');
+    end(f.file, 'work', { phase: 'work', outcome: 'pass' });
+    assert.match(status(load(f.file)), /review=off ci-monitor=off/);
+    assert.throws(() => launch(f.file, 'review', { env: f.env }), /review is opt-in/);
+    start(f.file, 'deploy');
+    end(f.file, 'deploy', { phase: 'deploy', outcome: 'pass', handoff: { pr: 42, ci: 'pending' } });
+    assert.throws(() => launch(f.file, 'ci-monitor', { env: f.env }), /ci-monitor is opt-in/);
+    assert.deepEqual(Object.keys(load(f.file).phases), ['work', 'deploy']);
+    assert.equal(load(f.file).pr, 42);
+
+    set(f.file, ['automation.ci_monitor=true']);
+    assert.equal(launch(f.file, 'ci-monitor', { env: f.env }).phase, 'ci-monitor');
+    end(f.file, 'ci-monitor', { phase: 'ci-monitor', outcome: 'pass' });
+    assert.throws(() => start(f.file, 'review'), /review is opt-in/);
+    set(f.file, ['automation.ci_monitor=false', 'automation.review=true']);
+    assert.equal(launch(f.file, 'review', { env: f.env }).phase, 'review');
+  } finally { f.dispose(); }
+});
+
 test('with a launcher, the session is tagged and titled for the phase', () => {
   const f = fixture(); try {
     const lp = join(f.root, 'launchers', 'fake-launcher');
@@ -229,6 +258,7 @@ test('with a launcher, the session is tagged and titled for the phase', () => {
     assert.match(r.command, new RegExp(`--cwd ${f.worktree.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     assert.match(r.after, /--title 'PROJ-1 · work'/);
     end(f.file, 'work', { phase: 'work', outcome: 'pass' });
+    set(f.file, ['automation.review=true']);
     writeFileSync(join(lp, 'launcher.json'), JSON.stringify({ argv: ['term', '{name}', '{prompt}'], name: ['--label', 'role={role}', '--label', 'what={what}'] }));
     assert.ok(!launch(f.file, 'review', { task: 'a long task the conductor wrote', env: f.env }).command.includes('--label'), 'no --what: no name labels');
     end(f.file, 'review', { phase: 'review', outcome: 'pass' });
@@ -246,10 +276,13 @@ test('a linked worktree without its own project.json keeps the main checkout\'s 
     writeFileSync(join(f.env.FACTORY_HOME, 'installs.json'), JSON.stringify({ sources: { core: join(f.root, 'core') } }));
     const main = makeRepo(join(f.root, 'proj'));
     mkdirSync(join(main, '.agents', 'factory-metadata'), { recursive: true });
-    writeFileSync(join(main, '.agents', 'factory-metadata', 'project.json'), JSON.stringify({ version: 1, adapters: { sessionLauncher: null } }));
+    writeFileSync(join(main, '.agents', 'factory-metadata', 'project.json'), JSON.stringify({
+      version: 1, adapters: { sessionLauncher: null, conductor: { review: true } },
+    }));
     const wt = join(f.root, 'proj-wt');
     git(main, 'worktree', 'add', '-q', '-b', 'feat', wt);
-    const r = init({ worktree: wt, ticket: 'PROJ-9', stateRoot: join(f.root, 'state', 'wt') });
+    const r = init({ worktree: wt, ticket: 'PROJ-9' });
+    assert.deepEqual(r.state.automation, { review: true, ci_monitor: false });
     assert.equal(launch(r.file, 'work', { env: f.env }).via, 'subagent');
   } finally { f.dispose(); }
 });

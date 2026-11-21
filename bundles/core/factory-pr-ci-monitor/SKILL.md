@@ -1,6 +1,6 @@
 ---
 name: factory-pr-ci-monitor
-description: Watch a GitHub PR's CI checks until they finish, and triage review comments from AI reviewers (validate each finding, fix the valid ones, reply in-thread). Use after opening a PR or when asked to "monitor this PR", "watch CI", "address the bot comments", "I left comments", "respond to my comments", "wait for checks then mark ready", or when given a PR number or URL with a monitoring request.
+description: Watch a GitHub PR's CI and triage review comments when the user asks or an authorized workflow explicitly enables monitoring. Use for requests to watch CI, handle bot or human feedback, or wait for checks before marking a PR ready.
 user_invocable: true
 ---
 

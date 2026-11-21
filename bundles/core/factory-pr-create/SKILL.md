@@ -195,7 +195,7 @@ If this prints nothing or exits 1, **no tracker is configured: say "no tracker c
    ```
    `link` adds a link to the PR and reads it back; report it as done only on `ok` or `exists`. A comment is not a link. `review` moves the ticket to its review state by target status, never backward, and skips with a reason when it can't (already in review, no such transition). Report a `skipped` result as skipped, not as done. A failed command (`status: error`, exit 1) is reported with its `detail`; the PR itself is already open, so don't retry in a loop.
 4. **Comment and timeline (optional).** With the tracker's own tools (its adapter's SKILL.md says which), add a comment with the PR URL, the stack position, and the acceptance criteria as a checklist with what proved each one; call out actuals that differ from the ticket's estimate and anything deliberately not built. If the ticket names a timeline or tracking page with a row for this work, mark it "In review: PR #N" with the same marker its neighbouring rows use; don't tick its Done box, because that happens when the ticket closes.
-5. **Bot review threads:** triage per `factory-pr-ci-monitor`. Reply in-thread only when you acted on the finding, and name the commit.
+5. **Bot threads:** outside conductor deploys, triage with `factory-pr-ci-monitor`. Reply in-thread only when you acted, naming the commit.
 
 ## 6. Report back
 

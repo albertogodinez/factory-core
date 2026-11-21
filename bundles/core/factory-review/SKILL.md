@@ -1,6 +1,6 @@
 ---
 name: factory-review
-description: Run a semantic code review by dispatching the project's rule-based reviewer personas plus a language-agnostic general reviewer in one parallel batch, merging their findings into one report, and optionally posting the ones you pick to the PR. Use before opening a PR, or to review a branch or someone else's PR. Persona packs add company and product conventions.
+description: Run a semantic code review when the user asks for one or an authorized workflow explicitly enables it. Dispatch the project's rule-based personas and a general reviewer, merge their findings, and optionally post the ones the user picks to the PR.
 user_invocable: true
 ---
 

@@ -85,6 +85,10 @@ export function init({ worktree, ticket, plan = null, recipe = null, testCmd, st
     version: 1, slug: `${basename(root)}-${createHash('sha1').update(file).digest('hex').slice(0, 8)}`, ticket: ticket || null, plan, repo: ctx.project?.root ? mainCheckout(worktree) : null, worktree,
     branch: git(['branch', '--show-current']), trunk: ctx.project?.trunk || null, base: null, recipe, feature_entry: null,
     pr: null, head_sha: git(['rev-parse', 'HEAD']), reviewed_range: null,
+    automation: {
+      review: ctx.adapters?.conductor?.review === true,
+      ci_monitor: ctx.adapters?.conductor?.ci_monitor === true,
+    },
     test_cmd: testCmd ?? ctx.project?.commands?.test ?? null, ci: null,
     decisions: null, phase: null, blocked: null, findings: [], phases: {},
   };
@@ -125,6 +129,10 @@ export function start(file, phase, at = now(), { what } = {}) {
   if (!phase) fail('start needs a phase');
   const state = load(file);
   if (state.phase && state.phase !== phase) fail(`${state.phase} is still running; end or kill it before starting ${phase}`);
+  const optIn = phase === 'ci-monitor' ? 'ci_monitor' : phase;
+  if (['review', 'ci-monitor'].includes(phase) && state.automation?.[optIn] !== true) {
+    fail(`${phase} is opt-in; enable automation.${optIn}=true for this ticket when requested`);
+  }
   const runs = (state.phases[phase] ??= { runs: [] }).runs;
   const open = runs.find((r) => !r.ended);
   if (open) fail(`${phase} run ${open.n} is still open; end or kill it first`);
@@ -241,6 +249,7 @@ export function kill(file, phase, why, at) {
 export function status(state) {
   const open = state.findings.filter((f) => f.status === 'open').length;
   const parts = [label(state), `phase=${state.phase ?? '-'}`];
+  parts.push(`review=${state.automation?.review ? 'on' : 'off'}`, `ci-monitor=${state.automation?.ci_monitor ? 'on' : 'off'}`);
   if (state.pr) parts.push(`pr=${state.pr}`);
   if (state.base && state.base !== state.trunk) parts.push(`stacked-on=${state.base}`);
   if (state.head_sha) parts.push(`head=${state.head_sha.slice(0, 8)}`);
