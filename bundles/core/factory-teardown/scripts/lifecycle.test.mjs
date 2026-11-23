@@ -166,10 +166,12 @@ test('launched process group stops descendants before releasing its inputs', { s
   try {
     if (!processIdentity(process.pid)) { t.skip('process identity unavailable in sandbox'); return; }
     const r = await run(f), raw = await file(f, r, 'input', 'intermediate');
-    const app = `const {spawn}=require('node:child_process'); const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'}); console.log(c.pid); setInterval(()=>{},1000);`;
+    const app = `const {spawn}=require('node:child_process'); const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'}); console.log('descendant:'+c.pid); setInterval(()=>{},1000);`;
     server = await launchProcess({ ...f, run: r.id, command: [process.execPath, '-e', app], cwd: f.root });
-    for (let i = 0; i < 200 && !readFileSync(server.log, 'utf8').trim(); i++) await new Promise(r => setTimeout(r, 50));
-    const descendant = Number(readFileSync(server.log, 'utf8').trim().split('\n')[0]); assert.ok(descendant > 1);
+    let match;
+    for (let i = 0; i < 200 && !(match = readFileSync(server.log, 'utf8').match(/^descendant:(\d+)$/m)); i++) await new Promise(r => setTimeout(r, 50));
+    assert.ok(match, `expected descendant PID in log; got: ${readFileSync(server.log, 'utf8')}`);
+    const descendant = Number(match[1]); assert.ok(descendant > 1);
     const stopped = await stopResources({ ...f, run: r.id, apply: true });
     assert.ok(!stopped.actions.some(a => a.status === 'failed'), JSON.stringify(stopped)); assert.ok(existsSync(raw));
     assert.equal(processIdentity(descendant), null);
