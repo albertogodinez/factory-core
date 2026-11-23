@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { git, makeRepo } from '../../../../tests/fixtures/make.mjs';
-import { init, load, set, start, end, kill, status, digest, launch, describe, phasePrompt, main, StateError } from './state.mjs';
+import { init, load, set, start, end, kill, status, digest, launch, live, waitForRun, describe, phasePrompt, main, StateError } from './state.mjs';
 
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'factory-conductor-test-'));
@@ -291,7 +291,54 @@ test('the CLI reports a refused command as an error, not a crash', () => {
   const f = fixture(); try {
     assert.throws(() => main(['end', '--state', f.file, 'work']), /needs --notes/);
     assert.throws(() => main(['bogus']), /unknown command/);
+    assert.throws(() => main(['context', '--window']), /positive token count/);
     assert.match(main(['status', '--state', f.file]), /^PROJ-1 phase=-/);
+  } finally { f.dispose(); }
+});
+
+test('wait returns only the named run handoff, even after a retry starts', async () => {
+  const f = fixture(); try {
+    const first = start(f.file, 'work');
+    const pending = waitForRun(f.file, 'work', first.n, { seconds: 2 });
+    const ended = end(f.file, 'work', { phase: 'work', outcome: 'blocked', question: 'Which base?' });
+    const second = start(f.file, 'work');
+    assert.deepEqual(await pending, { phase: 'work', n: first.n, outcome: 'blocked', notes: ended.notes });
+    assert.deepEqual(await waitForRun(f.file, 'work', second.n, { seconds: 1 }), {
+      phase: 'work', n: second.n, outcome: 'waiting',
+    });
+  } finally { f.dispose(); }
+});
+
+test('launch timings are opt-in and exact liveness works with both launcher protocols', () => {
+  const f = fixture(); try {
+    const lp = join(f.worktree, '.agents', 'skills', 'fake-launcher');
+    mkdirSync(lp, { recursive: true });
+    const spec = {
+      argv: [process.execPath, '-e', 'console.log("terminal")'],
+      after: 'after.mjs',
+      live: 'live.mjs',
+      liveExact: true,
+    };
+    const configure = () => writeFileSync(join(lp, 'launcher.json'), JSON.stringify(spec));
+    configure();
+    writeFileSync(join(lp, 'after.mjs'), 'process.stdin.resume()');
+    writeFileSync(join(f.env.FACTORY_HOME, 'config.json'), JSON.stringify({ adapters: { sessionLauncher: 'fake-launcher' } }));
+    const plain = launch(f.file, 'work', { env: f.env });
+    assert.equal(plain.timing_ms, undefined);
+    end(f.file, 'work', { phase: 'work', outcome: 'pass' });
+    const r = launch(f.file, 'work', { run: true, timing: true, env: f.env });
+    assert.equal(r.opened, true);
+    assert.deepEqual(Object.keys(r.timing_ms), ['prepare', 'process_start', 'tab_registration']);
+    assert.ok(Object.values(r.timing_ms).every((v) => Number.isInteger(v) && v >= 0));
+    writeFileSync(join(lp, 'live.mjs'),
+      'if (process.argv[2] === "--tag") console.log(JSON.stringify([process.argv[3]]))');
+    assert.throws(() => live(f.file, f.env, 'other:work:1'), /for this ticket/);
+    assert.deepEqual(live(f.file, f.env, r.tag), [r.tag]);
+    delete spec.liveExact;
+    configure();
+    writeFileSync(join(lp, 'live.mjs'),
+      `if (process.argv.length === 2) console.log(JSON.stringify(${JSON.stringify([plain.tag, r.tag])}))`);
+    assert.deepEqual(live(f.file, f.env, r.tag), [r.tag]);
   } finally { f.dispose(); }
 });
 

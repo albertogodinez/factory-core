@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findSession, readClaude, readCodex, measure, OWN_SESSION_SLACK_MS } from './usage.mjs';
+import { contextBudget, findSession, readClaude, readCodex, measure, OWN_SESSION_SLACK_MS } from './usage.mjs';
 
 const T0 = Date.parse('2026-03-01T10:00:00.000Z');
 const at = (s) => new Date(T0 + s * 1000).toISOString();
@@ -84,6 +84,30 @@ test('codex: one turn per model call, cached input split out of input, model fro
     const { first, metrics: m } = readCodex(f);
     assert.equal(first, T0);
     assert.deepEqual(m, { turns: 2, peak_ctx: 1200, model: 'gpt-x', model_ms: 3000, tokens: { input: 300, cache_read: 1900, cache_write: 0, output: 100 } });
+  } finally { t.dispose(); }
+});
+
+test('context budget uses latest input with cache, resets on compaction, and scales for smaller windows', () => {
+  const t = tmp(); try {
+    const day = join(t.d, 'sessions', '2026', '03', '01');
+    mkdirSync(day, { recursive: true });
+    const file = join(day, 'rollout-T1.jsonl');
+    const env = { CODEX_THREAD_ID: 'T1', CODEX_HOME: t.d };
+    const token = (input) => ({ type: 'event_msg', payload: { type: 'token_count', info: {
+      model_context_window: 475000, last_token_usage: { input_tokens: input, cached_input_tokens: input - 10 },
+    } } });
+    const write = (...rows) => writeFileSync(file, jsonl(rows));
+    write(token(355000), { type: 'compacted' });
+    assert.deepEqual(contextBudget(env), { status: 'unknown' });
+    write(token(355000), token(260000));
+    assert.deepEqual(contextBudget(env), {
+      status: 'warning', input_tokens: 260000, window: 475000, warning: 250000, handoff: 300000, ceiling: 350000,
+    });
+    assert.equal(contextBudget(env, 258400).status, 'ceiling');
+    write(token(308000));
+    assert.equal(contextBudget(env).status, 'handoff');
+    claudeSession(t.d, 'S1', [asst(1, 'main', usage(15000, 200000, 45000, 1)), asst(2, 'child', usage(1, 1, 1, 1), undefined, { isSidechain: true })]);
+    assert.equal(contextBudget({ CLAUDE_CODE_SESSION_ID: 'S1', CLAUDE_CONFIG_DIR: t.d }).input_tokens, 260000);
   } finally { t.dispose(); }
 });
 

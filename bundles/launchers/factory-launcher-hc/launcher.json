@@ -4,5 +4,6 @@
   "tag": ["--label", "factory.tag={tag}"],
   "name": ["--label", "agent.role={role}", "--label", "agent.what={what}"],
   "live": "live.mjs",
+  "liveExact": true,
   "after": "after.mjs"
 }

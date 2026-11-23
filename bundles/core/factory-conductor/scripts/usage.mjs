@@ -17,13 +17,11 @@ import { fileURLToPath } from 'node:url';
 export const OWN_SESSION_SLACK_MS = 10 * 60 * 1000;
 
 const ms = (t) => (t ? Date.parse(t) : NaN);
-function records(file) {
-  const out = [];
+function* records(file) {
   for (const l of readFileSync(file, 'utf8').split('\n')) {
     if (!l) continue;
-    try { out.push(JSON.parse(l)); } catch { /* a line still being written */ }
+    try { yield JSON.parse(l); } catch { /* a line still being written */ }
   }
-  return out;
 }
 const list = (dir) => { try { return readdirSync(dir); } catch { return []; } };
 const addTokens = (a, b) => { for (const k of Object.keys(b)) a[k] = (a[k] || 0) + b[k]; return a; };
@@ -134,6 +132,32 @@ export function readCodex(file, { since = -Infinity, until = Infinity } = {}) {
 }
 
 const READERS = { claude: readClaude, codex: readCodex };
+
+export function contextBudget(env = process.env, windowOverride) {
+  const session = findSession(env);
+  if (!session?.file) return { status: 'unknown' };
+  let input = null, window = null;
+  try {
+    for (const j of records(session.file)) {
+      if (j.type === 'compacted' || j.subtype === 'compact_boundary') input = null;
+      if (session.agent === 'codex' && j.type === 'event_msg' && j.payload?.type === 'token_count') {
+        const info = j.payload.info;
+        window = info?.model_context_window || window;
+        if (info?.last_token_usage?.input_tokens > 0) input = info.last_token_usage.input_tokens;
+      }
+      if (session.agent === 'claude' && j.type === 'assistant' && !j.isSidechain && j.message?.model !== '<synthetic>') {
+        const u = j.message?.usage;
+        if (u) input = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+      }
+    }
+  } catch { return { status: 'unknown' }; }
+  if (!(input > 0)) return { status: 'unknown' };
+  window = windowOverride ?? window;
+  const limit = (fixed, fraction) => window ? Math.min(fixed, Math.max(1, Math.floor(window * fraction))) : fixed;
+  const warning = limit(250_000, 0.55), handoff = limit(300_000, 0.65), ceiling = limit(350_000, 0.75);
+  const status = input >= ceiling ? 'ceiling' : input >= handoff ? 'handoff' : input >= warning ? 'warning' : 'ok';
+  return { status, input_tokens: input, window, warning, handoff, ceiling };
+}
 
 // The metrics of the run between since and until (epoch ms), or null when they can't be measured.
 export function measure(env, { since, until = Date.now() }) {

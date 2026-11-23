@@ -9,3 +9,13 @@ test('liveTags lists the factory.tag of each live terminal', () => {
   assert.deepEqual(liveTags(fake), ['triage:/r/a'], 'an untagged or finished terminal is not a live session');
   assert.throws(() => liveTags(() => null), /hc ls failed/, 'no answer is an error, so the caller falls back to the clock');
 });
+
+test('an exact tag uses one filtered listing and requires a live terminal', () => {
+  const tag = 'conductor:ticket:work:1';
+  const get = (state) => (args) => {
+    assert.deepEqual(args, ['ls', '--label', `factory.tag=${tag}`]);
+    return { terminals: [{ state }] };
+  };
+  assert.deepEqual(liveTags(get('live'), tag), [tag]);
+  assert.deepEqual(liveTags(get('exited'), tag), []);
+});

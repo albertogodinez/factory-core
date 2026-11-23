@@ -9,14 +9,16 @@
 //   set    --state <file> key=value ...           (value parsed as JSON when it parses)
 //   start  --state <file> <phase> [--what words]
 //                                                 (records a run; prints its n, tag, role, what and title)
-//   launch --state <file> <phase> [--task text] [--what words] [--run]
+//   launch --state <file> <phase> [--task text] [--what words] [--run] [--timing]
 //                                                 (start + the session to open it in; --run opens it)
 //                                                 --what: a few words naming the run ("fix page-view reset");
 //                                                 the session's name where the launcher shows it
 //   end    --state <file> <phase> --notes <file|->  (validates the notes, applies their handoff; measures the
 //                                                 run from its session log, see usage.mjs)
 //   kill   --state <file> <phase> --why <text>    (the conductor's notes for a phase it stopped)
-//   live   --state <file>                         (tags of this ticket's phase sessions still open)
+//   wait   --state <file> <phase> --run-number <n> [--seconds <n>]
+//   live   --state <file> [--tag <tag>]           (tags of this ticket's phase sessions still open)
+//   context [--window <tokens>]                 (this session's latest measured input budget)
 //   status --state <file>
 //   digest --state <file>                         (every run's notes and metrics, for factory-reflect)
 //
@@ -28,9 +30,10 @@ import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 import { validate } from '../../factory-context/scripts/validate.mjs';
 import { launchFor, afterLaunch, liveTags, pickLauncher, pickAgent } from '../../factory-reflect/scripts/candidates.mjs';
-import { measure } from './usage.mjs';
+import { contextBudget, measure } from './usage.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL = dirname(HERE);
@@ -180,26 +183,56 @@ function launcherSetup(state, env) {
 
 // Start a phase run and say how to open it: in its own launcher session (a terminal tab named by --what,
 // such as "CI on #1029", else "<ticket> · <phase>") when the machine has a launcher, else as a subagent of the conductor.
-export function launch(file, phase, { task, what, run = false, env = process.env } = {}) {
+export function launch(file, phase, { task, what, run = false, timing = false, env = process.env } = {}) {
+  let started = performance.now();
+  const timing_ms = {};
+  const mark = (stage) => {
+    if (!timing) return;
+    const at = performance.now();
+    timing_ms[stage] = Math.round(at - started);
+    started = at;
+  };
   const r = start(file, phase, now(), { what });
   const state = load(file);
   const { path, prompt } = phasePrompt(state, phase, file, r.n, task);
   const { launcher, agent, skillsDirs } = launcherSetup(state, env);
   const l = launchFor({ launcher, skillsDirs, repo: state.worktree, prompt, agent, tag: r.tag, title: r.title, role: r.role, what: r.what });
-  if (l.via === 'print') return { ...r, via: 'subagent', prompt, promptFile: path, ...(l.note ? { note: l.note } : {}) };
-  const out = { ...r, via: l.via, prompt, promptFile: path, command: l.command };
+  mark('prepare');
+  const result = { ...r, via: l.via, prompt, promptFile: path, ...(timing ? { timing_ms } : {}) };
+  if (l.via === 'print') return { ...result, via: 'subagent', ...(l.note ? { note: l.note } : {}) };
+  const out = { ...result, command: l.command };
   if (!run) return { ...out, after: l.after?.command };
   const p = spawnSync(l.argv[0], l.argv.slice(1), { encoding: 'utf8', timeout: 60000 });
+  mark('process_start');
   if (p.status !== 0) return { ...out, opened: false, error: (p.stderr || p.error?.message || `exit ${p.status}`).trim().split('\n')[0] };
   const note = afterLaunch({ launcher, skillsDirs, output: p.stdout, title: r.title });
+  if (l.after) mark('tab_registration');
   return { ...out, opened: true, ...(note ? { note } : {}) };
 }
 
-export function live(file, env = process.env) {
+export function live(file, env = process.env, tag) {
   const state = load(file);
+  const prefix = `conductor:${state.slug}:`;
+  if (tag !== undefined && (typeof tag !== 'string' || !tag.startsWith(prefix) || tag === prefix)) {
+    fail('--tag needs a phase run tag for this ticket');
+  }
   const { launcher, skillsDirs } = launcherSetup(state, env);
-  const tags = liveTags({ launcher, skillsDirs });
-  return tags === null ? null : tags.filter((t) => t.startsWith(`conductor:${state.slug}:`));
+  const tags = liveTags({ launcher, skillsDirs, tag });
+  return tags === null ? null : tags.filter((t) => t.startsWith(prefix));
+}
+
+export async function waitForRun(file, phase, n, { seconds = 300 } = {}) {
+  if (!Number.isSafeInteger(n) || n < 1) fail('wait needs a positive --run-number');
+  if (!Number.isSafeInteger(seconds) || seconds < 1 || seconds > 600) fail('--seconds must be 1–600');
+  const deadline = performance.now() + seconds * 1000;
+  for (;;) {
+    const run = load(file).phases[phase]?.runs.find((r) => r.n === n);
+    if (!run) fail(`no ${phase} run ${n}`);
+    if (run.ended) return { phase, n, outcome: run.outcome, notes: run.notes };
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) return { phase, n, outcome: 'waiting' };
+    await delay(Math.min(1000, remaining));
+  }
 }
 
 function mergeFindings(old = [], next = []) {
@@ -317,14 +350,24 @@ export function main(argv, env = process.env) {
     case 'show': { const s = load(need()); return o.field ? o.field.split('.').reduce((v, k) => v?.[k], s) ?? null : s; }
     case 'set': return { status: status(set(need(), o._)) };
     case 'start': return start(need(), o._[0], now(), { what: o.what });
-    case 'launch': return launch(need(), o._[0], { task: o.task, what: o.what, run: !!o.run, env });
+    case 'launch': return launch(need(), o._[0], { task: o.task, what: o.what, run: !!o.run, timing: !!o.timing, env });
+    case 'wait':
+      if (o['run-number'] === true || o.seconds === true) fail('wait options need numeric values');
+      return waitForRun(need(), o._[0], Number(o['run-number']), { seconds: Number(o.seconds ?? 300) });
     case 'end': {
       if (!o.notes) fail('end needs --notes <file|->');
       const notes = JSON.parse(o.notes === '-' ? readFileSync(0, 'utf8') : readFileSync(o.notes, 'utf8'));
       return end(need(), o._[0], notes, now(), { env });
     }
     case 'kill': return kill(need(), o._[0], o.why);
-    case 'live': return live(need(), env);
+    case 'live': return live(need(), env, o.tag);
+    case 'context': {
+      const window = o.window === undefined ? undefined : Number(o.window);
+      if (o.window === true || (window !== undefined && (!Number.isSafeInteger(window) || window < 1))) {
+        fail('--window needs a positive token count');
+      }
+      return contextBudget(env, window);
+    }
     case 'status': return status(load(need()));
     case 'digest': return digest(need());
     default: fail(`unknown command "${cmd ?? ''}"; see the header of state.mjs`);
@@ -333,7 +376,7 @@ export function main(argv, env = process.env) {
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
-    const out = main(process.argv.slice(2));
+    const out = await main(process.argv.slice(2));
     console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 2));
   } catch (e) {
     if (!(e instanceof StateError)) throw e;

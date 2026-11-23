@@ -241,11 +241,16 @@ export function launchFor({ launcher, skillsDir, skillsDirs = [skillsDir], repo,
 
 // The tags of sessions the launcher started that are still open: the JSON array its `"live"` script
 // prints. null when the launcher can't say (no script, or it failed), so the caller falls back to time.
-export function liveTags({ launcher, skillsDirs }) {
+export function liveTags({ launcher, skillsDirs, tag }) {
   const { spec, f } = launcher ? readLauncher(launcher, skillsDirs) : {};
   if (!spec?.live) return null;
-  const r = spawnSync(process.execPath, [join(dirname(f), spec.live)], { encoding: 'utf8', timeout: 15000 });
-  try { const a = JSON.parse(r.stdout); return Array.isArray(a) ? a.map(String) : null; } catch { return null; }
+  const args = tag && spec.liveExact === true ? ['--tag', tag] : [];
+  const r = spawnSync(process.execPath, [join(dirname(f), spec.live), ...args], { encoding: 'utf8', timeout: 15000 });
+  if (r.status !== 0) return null;
+  try {
+    const a = JSON.parse(r.stdout);
+    return Array.isArray(a) ? a.map(String).filter((t) => !tag || t === tag) : null;
+  } catch { return null; }
 }
 
 // After a launch, the file's `"after"` script gets the launch's stdout (hc prints the new terminal's
