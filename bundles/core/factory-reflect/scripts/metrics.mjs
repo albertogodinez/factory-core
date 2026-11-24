@@ -243,6 +243,10 @@ export function capture({ transcript, session, cwd, harness }, env = process.env
   const evs = events(lines);
   const h = harness || (/\.codex\//.test(transcript) ? 'codex' : 'claude-code');
   const row = summarizeSession(evs, { session: session || basename(transcript).replace(/\.jsonl$/, ''), harness: h, project: basename(resolve(cwd || '.')), layerOf: layerMap(cwd), revs: { ...lockRevs(cwd), ...harnessRevs(env, h) } });
+  // Reports measure every session in a repo with a layer installed, not only sessions that invoked
+  // a skill explicitly. Keep `skills` limited to actual invocations for skill-specific rates.
+  const installedLayers = Object.values(lockSkills(cwd) || {}).map((skill) => layerOfBundle(skill?.bundle)).filter(Boolean);
+  row.layers = [...new Set([...row.layers, ...installedLayers])].sort();
   return { ...store(row, env, now), session: row.session };
 }
 
