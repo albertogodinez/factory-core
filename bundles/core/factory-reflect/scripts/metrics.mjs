@@ -83,6 +83,7 @@ const INTERRUPT = /^\[Request interrupted by user/;
 const REJECT = /The user doesn't want to proceed with this tool use|tool use was rejected/i;
 const REDIRECT = /^\s*(no\b|nope|stop\b|don'?t\b|wait\b|actually\b|instead\b|that'?s (wrong|not)|wrong\b|undo\b|revert\b)/i;
 const SKILL_CMD = /<command-name>\/?([\w:-]+)<\/command-name>/;
+const CODEX_SKILL_CMD = /\$([a-z][a-z0-9-]*)\b/g;
 
 const bump = (m, k, n = 1) => { if (k) m[k] = (m[k] || 0) + n; };
 
@@ -111,6 +112,9 @@ export function summarizeSession(evs, { session, harness, project, layerOf = () 
       const text = e.text || '';
       const m = SKILL_CMD.exec(text);
       if (m) skills.add(clip(m[1]));
+      for (const codexSkill of text.matchAll(CODEX_SKILL_CMD)) {
+        if (layerOf(codexSkill[1])) skills.add(clip(codexSkill[1]));
+      }
       if (INTERRUPT.test(text)) interrupts++;
       else if (prevKind === 'result' && REDIRECT.test(text)) redirects++;
       if (!/^<|^\[Request/.test(text.trim()) && text.trim()) turns++;
@@ -188,7 +192,20 @@ function lockSkills(cwd) {
   for (;;) {
     const lock = join(dir, '.agents', 'factory-metadata', 'skills-lock.json');
     if (existsSync(lock)) { try { return JSON.parse(readFileSync(lock, 'utf8')).skills || {}; } catch { return null; } }
-    if (existsSync(join(dir, '.git')) || dirname(dir) === dir) return null;
+    if (existsSync(join(dir, '.git'))) {
+      // A worktree can lack the local-only install copied into the main checkout. Resolve the
+      // shared git directory to find that checkout's lock, without crossing into a superproject.
+      const git = spawnSync('git', ['-C', dir, 'rev-parse', '--git-common-dir'], { encoding: 'utf8' });
+      if (git.status === 0) {
+        const common = resolve(dir, git.stdout.trim());
+        if (basename(common) === '.git') {
+          const mainLock = join(dirname(common), '.agents', 'factory-metadata', 'skills-lock.json');
+          if (existsSync(mainLock)) { try { return JSON.parse(readFileSync(mainLock, 'utf8')).skills || {}; } catch { return null; } }
+        }
+      }
+      return null;
+    }
+    if (dirname(dir) === dir) return null;
     dir = dirname(dir);
   }
 }
